@@ -1,0 +1,242 @@
+#!/bin/sh
+# os-commit [TICKET-ID]
+# ─────────────────────────────────────────────────────────────
+# Detects changed files, generates a conventional commit message,
+# stages only relevant files, commits, pushes and opens a PR.
+# ALWAYS works on a feature branch — never commits to develop/main.
+# ─────────────────────────────────────────────────────────────
+set -e
+
+TICKET_ID="${1:-}"
+CLI_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+
+. "$CLI_DIR/lib/colors.sh"
+. "$CLI_DIR/lib/config.sh"
+
+os_load_config
+os_load_env
+
+cd "$OS_REPO_ROOT"
+
+# ── Detect current branch ────────────────────────────────────
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+os_info "Current branch: $CURRENT_BRANCH"
+
+# Try to extract ticket ID from branch name if not provided
+if [ -z "$TICKET_ID" ]; then
+  TICKET_ID=$(echo "$CURRENT_BRANCH" \
+    | grep -oE '[A-Z]+-[0-9]+' | head -1 || true)
+fi
+
+# ── Guard: never commit directly to protected branches ────────
+PROTECTED="main master develop"
+IS_PROTECTED=false
+for protected in $PROTECTED; do
+  if [ "$CURRENT_BRANCH" = "$protected" ]; then
+    IS_PROTECTED=true
+    break
+  fi
+done
+
+if [ "$IS_PROTECTED" = "true" ]; then
+  os_warn "You are on a protected branch: $CURRENT_BRANCH"
+  os_warn "OpenSpec never commits directly to $CURRENT_BRANCH."
+  os_divider
+
+  # Build feature branch name
+  if [ -n "$TICKET_ID" ]; then
+    FEATURE_BRANCH="feature/${TICKET_ID}-$(date +%Y%m%d)"
+  else
+    os_info "No ticket ID found. Enter branch name suffix:"
+    printf "feature/": read -r SUFFIX
+    FEATURE_BRANCH="feature/${SUFFIX}"
+  fi
+
+  os_step "Creating branch $FEATURE_BRANCH from $CURRENT_BRANCH..."
+  git pull origin "$CURRENT_BRANCH" --quiet
+  git checkout -b "$FEATURE_BRANCH"
+  os_success "Switched to: $FEATURE_BRANCH"
+  CURRENT_BRANCH="$FEATURE_BRANCH"
+fi
+
+# ── Check for changes ────────────────────────────────────────
+CHANGED_FILES=$(git status --porcelain | grep -v '^??' | awk '{print $2}')
+UNTRACKED=$(git status --porcelain | grep '^??' | awk '{print $2}')
+
+if [ -z "$CHANGED_FILES" ] && [ -z "$UNTRACKED" ]; then
+  os_warn "No changes detected. Nothing to commit."
+  exit 0
+fi
+
+os_divider
+os_label "  Changed files:"
+git status --short
+os_divider
+
+# ── Stage relevant changes ───────────────────────────────────
+os_step "Staging changes (excluding secrets and build artifacts)..."
+
+git add -u
+
+for f in $UNTRACKED; do
+  case "$f" in
+    .env|*.env|*.secret|build/|dist/|target/|node_modules/|__pycache__/)
+      os_warn "Skipping: $f"
+      ;;
+    *)
+      git add "$f"
+      ;;
+  esac
+done
+
+STAGED=$(git diff --cached --name-only)
+if [ -z "$STAGED" ]; then
+  os_warn "Nothing staged after filtering. Aborting."
+  exit 1
+fi
+
+os_info "Staged files:"
+echo "$STAGED" | sed 's/^/  /'
+
+# ── Determine scope ──────────────────────────────────────────
+SCOPE=$(echo "$STAGED" \
+  | grep -oE 'src/[^/]+/[^/]+/[^/]+' \
+  | awk -F'/' '{print $4}' \
+  | sort | uniq -c | sort -rn \
+  | head -1 | awk '{print $2}' \
+  | tr '[:upper:]' '[:lower:]' \
+  | sed 's/controller//;s/service//;s/handler//')
+
+[ -z "$SCOPE" ] && SCOPE="app"
+
+# ── Build commit message ─────────────────────────────────────
+os_step "Building commit message..."
+
+case "$CURRENT_BRANCH" in
+  feature/*)  COMMIT_TYPE="feat" ;;
+  fix/*)      COMMIT_TYPE="fix" ;;
+  test/*)     COMMIT_TYPE="test" ;;
+  docs/*)     COMMIT_TYPE="docs" ;;
+  chore/*)    COMMIT_TYPE="chore" ;;
+  refactor/*) COMMIT_TYPE="refactor" ;;
+  *)          COMMIT_TYPE="feat" ;;
+esac
+
+FILE_COUNT=$(echo "$STAGED" | wc -l | tr -d ' ')
+
+if [ -n "$TICKET_ID" ]; then
+  SUBJECT="${COMMIT_TYPE}(${SCOPE}): implement $TICKET_ID"
+  BODY="- Implements $TICKET_ID: changes across $FILE_COUNT file(s)
+- Stack: $OS_ACTIVE_STACK
+- Branch: $CURRENT_BRANCH"
+else
+  SUBJECT="${COMMIT_TYPE}(${SCOPE}): apply changes from $CURRENT_BRANCH"
+  BODY="- Changes across $FILE_COUNT file(s)
+- Stack: $OS_ACTIVE_STACK"
+fi
+
+os_divider
+os_label "  Proposed commit message:"
+os_divider
+echo "  $SUBJECT"
+echo ""
+echo "$BODY" | sed 's/^/  /'
+os_divider
+
+# ── Confirm ──────────────────────────────────────────────────
+printf "%b" "${COLOR_WARN}Proceed with this commit? [y/N]: ${RESET}"
+read -r confirm
+case "$confirm" in
+  y|Y|yes|YES) ;;
+  *)
+    os_warn "Aborted. Your changes are still staged."
+    exit 0
+    ;;
+esac
+
+# ── Commit ───────────────────────────────────────────────────
+git commit -m "$SUBJECT" -m "$BODY"
+os_success "Committed: $SUBJECT"
+
+# ── Push ─────────────────────────────────────────────────────
+os_step "Pushing branch $CURRENT_BRANCH..."
+git push -u origin "$CURRENT_BRANCH"
+os_success "Branch pushed."
+
+# ── Open PR targeting develop ────────────────────────────────
+if ! command -v gh > /dev/null 2>&1; then
+  os_warn "GitHub CLI (gh) not found — skipping PR creation."
+  exit 0
+fi
+
+os_step "Creating Pull Request → develop..."
+
+if [ -n "$TICKET_ID" ]; then
+  PR_TITLE="[$TICKET_ID] $SUBJECT"
+  PR_BODY="## Summary
+Implements $TICKET_ID on stack: $OS_ACTIVE_STACK ($OS_STACK_LABEL)
+
+## Changes
+$(echo "$STAGED" | sed 's/^/- /')
+
+## Checklist
+- [ ] Tests pass (\`$OS_TEST_CMD\`)
+- [ ] Coverage >= 90% (\`$OS_COVERAGE_CMD\`)
+- [ ] Documentation updated
+- [ ] Endpoints manually tested"
+else
+  PR_TITLE="$SUBJECT"
+  PR_BODY="## Summary
+Stack: $OS_ACTIVE_STACK ($OS_STACK_LABEL)
+Branch: $CURRENT_BRANCH
+
+## Changes
+$(echo "$STAGED" | sed 's/^/- /')"
+fi
+
+PR_URL=$(gh pr create \
+  --title "$PR_TITLE" \
+  --body "$PR_BODY" \
+  --head "$CURRENT_BRANCH" \
+  --base "develop" 2>&1)
+
+os_divider
+os_success "Pull Request created → develop"
+os_info    "$PR_URL"
+os_divider
+
+# ── Save commit record ────────────────────────────────────────
+if [ -n "$TICKET_ID" ]; then
+  CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes"
+  mkdir -p "$CHANGES_DIR"
+  COMMIT_FILE="$CHANGES_DIR/${TICKET_ID}_commit.md"
+  PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$' || echo "?")
+
+  cat > "$COMMIT_FILE" << RECORD_EOF
+# Commit Record: $TICKET_ID
+
+## Branch
+$CURRENT_BRANCH
+
+## Commit
+- **Message**: $SUBJECT
+- **Files changed**: $FILE_COUNT file(s)
+- **Stack**: $OS_ACTIVE_STACK ($OS_STACK_LABEL)
+
+## Changed Files
+$(echo "$STAGED" | sed 's/^/- /')
+
+## Pull Request
+- **URL**: $PR_URL
+- **Base branch**: develop
+- **Status**: Open
+
+## Next Steps
+- [ ] \`os-review $PR_NUMBER\` — generate code review
+- [ ] \`os-review-apply $PR_NUMBER\` — publish to GitHub
+- [ ] \`os-transition $TICKET_ID "In Review"\` — update Jira
+RECORD_EOF
+
+  os_info "Commit record: ai-specs/changes/${TICKET_ID}_commit.md"
+  os_divider
+fi

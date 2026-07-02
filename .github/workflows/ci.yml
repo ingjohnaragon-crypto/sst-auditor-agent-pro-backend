@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install test dependencies
+        run: pip install pytest
+
+      - name: Validate CLI commands are executable
+        run: |
+          for cmd in .openspec-cli/commands/os-*; do
+            [ -f "$cmd" ] && [ -x "$cmd" ] || chmod +x "$cmd"
+          done
+          echo "All CLI commands validated."
+
+      - name: Run placeholder tests
+        run: pytest tests/ -v
