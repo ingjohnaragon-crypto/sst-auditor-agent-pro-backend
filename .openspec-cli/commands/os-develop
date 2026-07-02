@@ -48,6 +48,10 @@ AGENT_CONTENT="";    [ -f "$OS_AGENT_PATH" ]     && AGENT_CONTENT=$(cat "$OS_AGE
 STANDARDS_CONTENT="";[ -f "$OS_STANDARDS_PATH" ] && STANDARDS_CONTENT=$(cat "$OS_STANDARDS_PATH")
 BASE_STANDARDS="";   BASE_FILE="$OS_REPO_ROOT/ai-specs/specs/base-standards.mdc"
                      [ -f "$BASE_FILE" ] && BASE_STANDARDS=$(cat "$BASE_FILE")
+DOC_STANDARDS="";    DOC_FILE="$OS_REPO_ROOT/ai-specs/specs/documentation-standards.mdc"
+                     [ -f "$DOC_FILE" ] && DOC_STANDARDS=$(cat "$DOC_FILE")
+UPDATE_DOCS_TASK="";  UPDATE_DOCS_FILE="$OS_REPO_ROOT/ai-specs/.commands/update-docs.md"
+                     [ -f "$UPDATE_DOCS_FILE" ] && UPDATE_DOCS_TASK=$(cat "$UPDATE_DOCS_FILE")
 
 PLAN_FILE="$OS_REPO_ROOT/ai-specs/changes/${TICKET_ID}_backend.md"
 PLAN_SECTION=""
@@ -101,6 +105,12 @@ $PLAN_SECTION
 ---
 ## Base Standards
 $BASE_STANDARDS
+
+---
+## Documentation Standards
+$DOC_STANDARDS
+
+Documentation update task: $UPDATE_DOCS_TASK
 
 ---
 ## Stack Agent (your role)
