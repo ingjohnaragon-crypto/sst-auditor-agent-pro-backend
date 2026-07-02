@@ -160,41 +160,15 @@ fi
 os_divider
 
 # ── Deliver and capture output ────────────────────────────────
-if [ "${OS_AGENT_DELIVERY:-clipboard}" = "cli" ]; then
-  os_step "Sending review prompt to $OS_AGENT_LABEL..."
-  ${OS_AGENT_COMMAND} ${OS_AGENT_ARGS} < "$PROMPT_FILE" > "$OUTPUT_FILE" 2>/dev/null
-  cp "$OUTPUT_FILE" "$REVIEW_ARCHIVE"
-  os_success "Review saved!"
-  os_info "Working : .openspec-cli/.review-output.md"
-  os_info "Archive : $REVIEW_ARCHIVE"
-  os_divider
-  os_info "Preview (first 15 lines):"
-  head -15 "$OUTPUT_FILE"
-  os_divider
-  os_info "Next step: os-review-apply $PR_NUMBER"
-else
-  printf '%s' "$PROMPT" | clip 2>/dev/null || true
-  os_success "Prompt copied to clipboard!"
-  os_info "1. Paste in $OS_AGENT_LABEL"
-  os_info "2. Copy the review output"
-  os_info "3. Press Enter here when ready..."
-  read -r _dummy
-  os_step "Paste the review (CTRL+Z + Enter to finish on Windows):"
-  OUTPUT=""
-  while IFS= read -r line 2>/dev/null; do
-    OUTPUT="${OUTPUT}${line}
-"
-  done
-  printf '%s' "$OUTPUT" > "$OUTPUT_FILE"
-  cp "$OUTPUT_FILE" "$REVIEW_ARCHIVE"
-  os_success "Review saved!"
-  os_info "Working : .openspec-cli/.review-output.md"
-  os_info "Archive : $REVIEW_ARCHIVE"
-  os_divider
-  os_info "Preview (first 15 lines):"
-  head -15 "$OUTPUT_FILE"
-  os_divider
-  os_info "Next step: os-review-apply $PR_NUMBER"
-fi
+os_deliver_prompt_capture "$PROMPT_FILE" "$OUTPUT_FILE"
+cp "$OUTPUT_FILE" "$REVIEW_ARCHIVE"
+os_success "Review saved!"
+os_info "Working : .openspec-cli/.review-output.md"
+os_info "Archive : $REVIEW_ARCHIVE"
+os_divider
+os_info "Preview (first 15 lines):"
+head -15 "$OUTPUT_FILE"
+os_divider
+os_info "Next step: os-review-apply $PR_NUMBER"
 
 os_divider

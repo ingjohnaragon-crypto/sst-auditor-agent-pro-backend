@@ -133,22 +133,12 @@ os_divider
 
 # ── Deliver prompt ────────────────────────────────────────────
 # os-develop is different: the AI writes code directly into files.
-# For CLI agents: send the prompt and let the agent work autonomously.
-# For clipboard: copy and paste in the IDE.
+os_deliver_prompt_autonomous "$PROMPT_FILE"
+
 if [ "${OS_AGENT_DELIVERY:-clipboard}" = "cli" ]; then
-  os_step "Sending implementation prompt to $OS_AGENT_LABEL..."
-  os_info "The agent will implement the ticket autonomously."
-  os_info "Check the created/modified files when it finishes."
-  ${OS_AGENT_COMMAND} ${OS_AGENT_ARGS} < "$PROMPT_FILE"
   os_divider
   os_success "Implementation complete — review the changes:"
   git status --short
-else
-  printf '%s' "$PROMPT" | clip 2>/dev/null || true
-  os_success "Prompt copied to clipboard!"
-  os_info "1. Paste in $OS_AGENT_LABEL (VS Code / Cursor)"
-  os_info "2. The AI implements step by step"
-  os_info "3. Review changes, then run:"
 fi
 
 os_divider

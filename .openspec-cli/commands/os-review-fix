@@ -189,17 +189,10 @@ printf '%s' "$FIX_PROMPT" > "$FIX_PROMPT_FILE"
 
 # ── Deliver fix prompt to agent ───────────────────────────────
 os_divider
+os_deliver_prompt_autonomous "$FIX_PROMPT_FILE" "Press Enter when done..."
+
 if [ "${OS_AGENT_DELIVERY:-clipboard}" = "cli" ]; then
-  os_step "Sending fix prompt to $OS_AGENT_LABEL..."
-  ${OS_AGENT_COMMAND} ${OS_AGENT_ARGS} < "$FIX_PROMPT_FILE"
   os_success "Agent completed fixes."
-else
-  printf '%s' "$FIX_PROMPT" | clip 2>/dev/null || true
-  os_success "Fix prompt copied to clipboard!"
-  os_info "1. Paste in $OS_AGENT_LABEL"
-  os_info "2. Let it fix all issues"
-  os_info "3. Press Enter when done..."
-  read -r _dummy
 fi
 
 # ── Run tests ─────────────────────────────────────────────────
