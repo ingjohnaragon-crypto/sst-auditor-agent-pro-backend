@@ -53,14 +53,6 @@ if ! command -v gh > /dev/null 2>&1; then
   warn "Install from: https://cli.github.com"
 fi
 
-# Check contracts_api (optional — needed for os-vault-test)
-if "$PYTHON_CMD" -c "from contracts_api import SmartContractDescriptor" > /dev/null 2>&1; then
-  success "Found: contracts_api SDK (Vault testing enabled)"
-else
-  warn "contracts_api not installed — os-vault-test will not work"
-  warn "To install: cd contracts_sdk/contracts_sdk && $PYTHON_CMD -m pip install ."
-fi
-
 # ── Create directories ────────────────────────────────────────
 mkdir -p "$BIN_DIR" "$LIB_DIR"
 success "Install dir: $INSTALL_DIR"
@@ -114,11 +106,6 @@ JIRA_BASE_URL=https://your-org.atlassian.net
 JIRA_EMAIL=your@email.com
 JIRA_TOKEN=your_jira_api_token
 JIRA_PROJECT_KEY=KAN
-
-# ── Vault Core API (optional — needed for os-vault-* commands) ─
-VAULT_BASE_URL=https://your-vault-instance.thought-machine.net
-VAULT_TOKEN=your_vault_api_token
-VAULT_DEFAULT_DENOMINATION=GBP
 ENV_EOF
 success "Updated .env.example"
 
@@ -143,17 +130,10 @@ info "  os-tickets        [status]               List project tickets"
 info "  os-create-ticket  [--hu] [summary] [type] Create ticket (--hu = AI user story)"
 info "  os-transition     <TICKET> [status]      Move ticket to new status"
 divider
-label "  Vault Smart Contracts:"
-info "  os-vault-test     [file] [--coverage]    Run tests with contracts_api SDK"
-info "  os-vault-simulate <contract.py> ...      Simulate against Vault sandbox"
-info "  os-vault-deploy   <contract.py> ...      Deploy to Vault as ProductVersion"
-info "  os-vault-account  <product_ver> <cust>   Create test account"
-info "  os-vault-balances <account_id>           Check live balances"
-divider
 label "  Setup:"
 info "  1. cp .env.example .env && edit .env"
 info "  2. gh auth login"
-info "  3. os-stack --list && os-stack vault-smart-contracts"
+info "  3. os-stack --list && os-stack python-fastapi"
 info "  4. os-agent --list && os-agent claude-code"
 info "  5. os-tickets"
 divider

@@ -52,11 +52,11 @@ fi
 if [ "$GENERATE_HU" = "true" ]; then
   os_step "Generating user story with AI..."
 
-  PROMPT="Generate a complete Jira user story for a Vault Smart Contract project.
+  PROMPT="Generate a complete Jira user story for a software development project.
 
 Title: $SUMMARY
-Stack: vault-smart-contracts (Thought Machine Vault, API 4.0)
-Project context: OpenSpec — spec-driven development framework for Vault Smart Contracts
+Stack: $OS_ACTIVE_STACK
+Project context: OpenSpec — spec-driven development framework
 
 Write ONLY the user story content using this format:
 
@@ -67,17 +67,17 @@ As a [role], I want [capability], so that [benefit].
 - [ ] Criterion 1
 - [ ] Criterion 2
 - [ ] Criterion 3
-- [ ] os-vault-test passes (all tests green)
-- [ ] os-vault-test --coverage passes (>= 90%)
-- [ ] Contract respects Vault Python sandbox restrictions
+- [ ] All tests pass
+- [ ] Code coverage >= 90%
+- [ ] Code follows project standards
 
 ## Technical Notes
-- Vault hooks involved: list the relevant hooks
-- contracts_api types needed: list the types
-- Files: contracts/<name>.py + tests/test_<name>.py
+- Layers involved: list the relevant layers or modules
+- Key components: list the main types, classes or endpoints
+- Files: src/<module>/<name>.ext + tests/test_<name>.ext
 
 ## Definition of Done
-- [ ] os-vault-test 100% green
+- [ ] Tests 100% green
 - [ ] Coverage >= 90%
 - [ ] PR reviewed and approved
 - [ ] Jira ticket moved to Done"
