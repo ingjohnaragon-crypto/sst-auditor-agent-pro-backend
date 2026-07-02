@@ -70,8 +70,10 @@ os-agent claude-code                   # activar agente
 ```bash
 os-tickets                             # ver todos los tickets del proyecto
 os-tickets "Por hacer"                 # filtrar por estado
+os-tickets --project OTRO              # ver tickets de otro proyecto Jira
 os-create-ticket --hu                  # crear ticket con HU generada por IA
 os-create-ticket "titulo" Task         # crear ticket rápido
+os-create-ticket --project OTRO "titulo" Task  # crear en otro proyecto
 os-transition KAN-XX --list            # ver transiciones disponibles
 os-transition KAN-XX "En curso"        # mover ticket de estado
 ```

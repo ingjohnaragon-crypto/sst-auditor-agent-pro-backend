@@ -110,6 +110,7 @@ from Jira — title, description, status, assignee. No copy-pasting context.
 | `os-tickets [status]` | List all project tickets, optionally filtered by status |
 | `os-create-ticket --hu` | Create a ticket with an AI-generated user story |
 | `os-create-ticket "<title>" <type>` | Create a ticket quickly (Task, Bug, Story…) |
+| `--project <KEY>` (either command) | Target a different Jira project than `JIRA_PROJECT_KEY` in `.env` |
 | `os-enrich <TICKET-ID>` | Enrich a ticket with technical detail |
 | `os-enrich-apply <TICKET-ID>` | Upload enriched content to Jira |
 | `os-transition <TICKET-ID> [--list\|<state>]` | List transitions or move ticket to a state |

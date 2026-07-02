@@ -75,3 +75,7 @@ venv/
 .openspec-cli/.*.applied
 .openspec-cli/.last-prompt.md
 .openspec-cli/.pr-diff.patch
+.openspec-cli/.enriched-content.md
+.openspec-cli/.review-output.md
+.openspec-cli/.last-simulation.json
+.openspec-cli/.fix-prompt.md

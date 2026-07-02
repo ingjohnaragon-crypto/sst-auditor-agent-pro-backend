@@ -1,26 +1,20 @@
 #!/bin/sh
 # .openspec-cli/install.sh
-# ─────────────────────────────────────────────────────────────
-# Installs the OpenSpec CLI globally by symlinking commands
-# into ~/.openspec/bin and adding it to PATH.
-#
-# Usage (from repo root):
-#   chmod +x .openspec-cli/install.sh
-#   ./.openspec-cli/install.sh
-# ─────────────────────────────────────────────────────────────
+# Installs the OpenSpec CLI into ~/.openspec
+# Usage: sh .openspec-cli/install.sh
 set -e
 
 REPO_CLI_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="$HOME/.openspec"
 BIN_DIR="$INSTALL_DIR/bin"
+LIB_DIR="$INSTALL_DIR/lib"
 
-# ── Colors (inline — no sourcing needed at install time) ──────
 GREEN='\033[0;32m'; CYAN='\033[0;36m'
 YELLOW='\033[0;33m'; RED='\033[0;31m'; RESET='\033[0m'; BOLD='\033[1m'
-info()    { printf "${CYAN}ℹ  %s${RESET}\n" "$*"; }
-success() { printf "${GREEN}✔  %s${RESET}\n" "$*"; }
-warn()    { printf "${YELLOW}⚠  %s${RESET}\n" "$*"; }
-error()   { printf "${RED}✖  %s${RESET}\n" "$*" >&2; }
+info()    { printf "${CYAN}i  %s${RESET}\n" "$*"; }
+success() { printf "${GREEN}ok %s${RESET}\n" "$*"; }
+warn()    { printf "${YELLOW}!  %s${RESET}\n" "$*"; }
+error()   { printf "${RED}x  %s${RESET}\n" "$*" >&2; }
 label()   { printf "${BOLD}%s${RESET}\n" "$*"; }
 divider() { printf "${CYAN}%s${RESET}\n" "────────────────────────────────────────────"; }
 
@@ -29,101 +23,149 @@ label "  OpenSpec CLI — Installer"
 divider
 
 # ── Check dependencies ────────────────────────────────────────
-MISSING=0
-for dep in python3 curl git; do
+for dep in curl git; do
   if ! command -v "$dep" > /dev/null 2>&1; then
-    error "Missing required dependency: $dep"
-    MISSING=1
+    error "Missing: $dep"; exit 1
+  else
+    success "Found: $dep"
   fi
 done
 
+# Check Python (py, python3 or python)
+PYTHON_CMD=""
+for cmd in py python3 python; do
+  if command -v "$cmd" > /dev/null 2>&1; then
+    ver=$("$cmd" -c "import sys; print(sys.version_info.major)" 2>/dev/null || echo "")
+    if [ "$ver" = "3" ]; then PYTHON_CMD="$cmd"; break; fi
+  fi
+done
+
+if [ -z "$PYTHON_CMD" ]; then
+  error "Python 3 not found (tried: py, python3, python)"
+  error "Install from: https://www.python.org/downloads/"
+  exit 1
+else
+  success "Found Python 3: $PYTHON_CMD"
+fi
+
 if ! command -v gh > /dev/null 2>&1; then
-  warn "GitHub CLI (gh) not found — os-commit PR creation will be skipped."
+  warn "GitHub CLI (gh) not found — os-commit PR creation will be skipped"
   warn "Install from: https://cli.github.com"
 fi
 
-if [ "$MISSING" = "1" ]; then
-  error "Install missing dependencies and re-run."
-  exit 1
-fi
+# ── Create directories ────────────────────────────────────────
+mkdir -p "$BIN_DIR" "$LIB_DIR"
+success "Install dir: $INSTALL_DIR"
 
-# ── Create install directory ──────────────────────────────────
-mkdir -p "$BIN_DIR"
+# ── Copy lib files ────────────────────────────────────────────
+for lib_file in "$REPO_CLI_DIR/lib/"*.sh "$REPO_CLI_DIR/lib/"*.py; do
+  [ -f "$lib_file" ] || continue
+  lib_name=$(basename "$lib_file")
+  sed 's/\r//' "$lib_file" > "$LIB_DIR/$lib_name"
+  chmod +x "$LIB_DIR/$lib_name" 2>/dev/null || true
+  success "Installed lib: $lib_name"
+done
 
-# ── Symlink commands ──────────────────────────────────────────
-for cmd_file in "$REPO_CLI_DIR/commands"/os-*; do
+# ── Copy commands ─────────────────────────────────────────────
+for cmd_file in "$REPO_CLI_DIR/commands/"os-*; do
+  [ -f "$cmd_file" ] || continue
   cmd_name=$(basename "$cmd_file")
   target="$BIN_DIR/$cmd_name"
-
-  if [ -L "$target" ]; then
-    rm "$target"
-  fi
-
-  ln -sf "$cmd_file" "$target"
-  chmod +x "$cmd_file"
-  success "Linked: $cmd_name -> $target"
+  sed 's/\r//' "$cmd_file" > "$target"
+  chmod +x "$target"
+  success "Installed command: $cmd_name"
 done
+
+# ── Placeholders ──────────────────────────────────────────────
+touch "$REPO_CLI_DIR/.last-prompt.md"
+touch "$REPO_CLI_DIR/.enriched-content.md"
+touch "$REPO_CLI_DIR/.review-output.md"
+touch "$REPO_CLI_DIR/.last-simulation.json"
 
 # ── Add to PATH ───────────────────────────────────────────────
 PATH_LINE="export PATH=\"\$HOME/.openspec/bin:\$PATH\""
-PATH_ADDED=0
-
 for shell_rc in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile"; do
   if [ -f "$shell_rc" ]; then
     if ! grep -q ".openspec/bin" "$shell_rc" 2>/dev/null; then
-      echo "" >> "$shell_rc"
-      echo "# OpenSpec CLI" >> "$shell_rc"
-      echo "$PATH_LINE" >> "$shell_rc"
+      printf "\n# OpenSpec CLI\n%s\n" "$PATH_LINE" >> "$shell_rc"
       success "Added to PATH in $shell_rc"
-      PATH_ADDED=1
     else
-      info "PATH already configured in $shell_rc"
-      PATH_ADDED=1
+      info "PATH already in $shell_rc"
     fi
   fi
 done
 
-if [ "$PATH_ADDED" = "0" ]; then
-  warn "Could not find .zshrc or .bashrc — add this line manually:"
-  warn "  $PATH_LINE"
-fi
-
-# ── Create .env.example if not present ───────────────────────
-ENV_EXAMPLE="$REPO_CLI_DIR/../.env.example"
+# ── Create .env.example (only if missing — don't clobber user edits) ──
+ENV_EXAMPLE="$(dirname "$REPO_CLI_DIR")/.env.example"
 if [ ! -f "$ENV_EXAMPLE" ]; then
   cat > "$ENV_EXAMPLE" << 'ENV_EOF'
 # OpenSpec CLI — environment variables
-# Copy this file to .env (in your project root) and fill in the values.
-# NEVER commit .env to version control.
+# ─────────────────────────────────────────────────────────────
+# Copy this file to .env in your project root and fill in the values.
+# Make sure .env is in your .gitignore — NEVER commit secrets.
+#
+# Usage:
+#   cp .env.example .env
+#   # edit .env with your values
+# ─────────────────────────────────────────────────────────────
 
-# Jira Cloud
+# ── Jira Cloud ────────────────────────────────────────────────
+# Your Jira instance URL (no trailing slash)
 JIRA_BASE_URL=https://your-org.atlassian.net
+
+# The email address associated with your Jira account
 JIRA_EMAIL=your@email.com
+
+# Jira API token — generate at:
+# https://id.atlassian.com/manage-profile/security/api-tokens
 JIRA_TOKEN=your_jira_api_token
 
-# GitHub (optional — gh CLI handles auth separately via: gh auth login)
+# Default Jira project key for os-tickets / os-create-ticket.
+# If you work across multiple projects, override it per command instead of
+# editing this file: os-tickets --project OTHER / os-create-ticket --project OTHER ...
+JIRA_PROJECT_KEY=KAN
+
+# ── GitHub (optional) ─────────────────────────────────────────
+# The GitHub CLI (gh) handles auth separately.
+# Run: gh auth login
+# Only set this if you need a personal access token for scripting.
 # GITHUB_TOKEN=your_github_personal_access_token
 ENV_EOF
   success "Created .env.example"
+else
+  info "Found .env.example — leaving it untouched"
 fi
 
-# ── Done ──────────────────────────────────────────────────────
 divider
 success "OpenSpec CLI installed successfully!"
 divider
-info "Reload your shell or run:"
-info "  source ~/.zshrc   (zsh)"
-info "  source ~/.bashrc  (bash)"
+
+# ── Print installed commands ──────────────────────────────────
+label "  Core workflow:"
+info "  os-stack          [--list | <stack>]     Switch or list stacks"
+info "  os-agent          [--list | <agent>]     Switch or list AI agents"
+info "  os-language       [--list | <lang>]      Switch or list output language"
+info "  os-enrich         <TICKET>               Enrich Jira ticket technically"
+info "  os-enrich-apply   <TICKET>               Upload enrichment to Jira"
+info "  os-plan           <TICKET>               Generate implementation plan"
+info "  os-develop        <TICKET>               Create branch + implementation"
+info "  os-commit         [TICKET]               Commit + push + open PR"
+info "  os-review         <PR>                   Generate AI code review"
+info "  os-review-apply   <PR>                   Publish review to GitHub"
 divider
-label "  Available commands:"
-info "  os-plan    <TICKET-ID>   Generate implementation plan"
-info "  os-develop <TICKET-ID>   Prepare implementation prompt + create branch"
-info "  os-commit  [TICKET-ID]   Commit, push and open PR"
-info "  os-enrich  <TICKET-ID>   Enrich Jira ticket with technical detail"
+label "  Jira management:"
+info "  os-tickets        [status] [--project KEY] List project tickets"
+info "  os-create-ticket  [--hu] [--project KEY] [summary] [type] Create ticket"
+info "  os-transition     <TICKET> [status]      Move ticket to new status"
 divider
 label "  Setup:"
-info "  1. Copy .env.example to .env"
-info "  2. Fill in JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN"
-info "  3. Run: gh auth login  (for PR creation)"
-info "  4. Test: os-plan KAN-1"
+info "  1. cp .env.example .env && edit .env"
+info "  2. gh auth login"
+info "  3. os-stack --list && os-stack python-fastapi"
+info "  4. os-agent --list && os-agent claude-code"
+info "  5. os-tickets"
+divider
+label "  Reload shell:"
+info "  source ~/.bashrc   (bash / Git Bash)"
+info "  source ~/.zshrc    (zsh)"
 divider

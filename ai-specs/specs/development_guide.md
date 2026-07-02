@@ -1,447 +1,161 @@
-# Development Guide — Java / Spring Boot
+# Development Guide
 
-This guide provides step-by-step instructions for setting up the development environment and running tests for the COMPANY backend system.
+This guide covers setting up **OpenSpec Developer** itself — the CLI, the active
+stack, and the Jira → plan → implement workflow. It is stack-agnostic: this repo
+ships as a scaffold with no application source code of its own. Once you pick a
+stack (`os-stack <name>`) and start implementing tickets with `os-develop`, your
+application code follows that stack's conventions — see
+`ai-specs/specs/stacks/<stack>-standards.mdc` for the exact layout, build tool,
+and test framework.
 
 ## Repository layout
 
 | Path | Purpose |
 |------|---------|
-| `ai-specs/` | Specs, agent definitions, and slash-command workflows (Jira → plan → implement) |
-| `openspec/` | OpenSpec `config.yaml` (rules and context for spec-driven work) |
-| `src/` | Spring Boot source code (`main` and `test`) |
-| `.github/` | CI workflows |
+| `ai-specs/` | Specs, per-stack agent definitions/standards, and prompt templates (`.commands/`) |
+| `openspec/` | `config.yaml` — active stack, active agent, active language, tooling commands |
+| `.openspec-cli/` | The CLI itself (`commands/os-*`, shared `lib/`, `install.sh`) |
+| `.github/` | CI workflow — syntax/compile validation for the CLI scripts |
+| `tests/` | Placeholder tests for this framework's own CI, not your application's tests |
 
-**Quick start:** from the repo root, run `./gradlew build`.  
-Sections below that use `./mvnw` describe the **target** full backend (JPA, Flyway, JaCoCo, etc.) once the Gradle build is extended to match `ai-specs/specs/backend-standards.mdc`; substitute the equivalent `./gradlew` tasks when migrating.
+Application source code (`src/`, `app/`, etc.) doesn't exist yet in a fresh clone —
+it's created as you implement tickets, following the path conventions of whichever
+stack is active.
 
 ---
 
 ## 🛠️ Prerequisites
 
-Ensure you have the following installed:
+Required regardless of stack (the CLI itself depends on these):
 
-| Tool | Version       | Check |
-|---|---------------|---|
-| **Java (JDK)** | 17 or higher  | `java -version` |
-| **Gradle** | Via wrapper in repository root | `./gradlew -v` |
-| **Docker & Docker Compose** | Latest stable | `docker -version` |
-| **Git** | Latest stable | `git --version` |
+| Tool | Check |
+|---|---|
+| **Git** | `git --version` |
+| **Python 3** (`py`, `python3`, or `python`) | `python3 --version` |
+| **curl** | `curl --version` |
+| **GitHub CLI** (`gh`) — needed for `os-commit`/`os-review`/`os-review-apply` | `gh --version` |
 
-> **Recommended**: Use [SDKMAN](https://sdkman.io/) to manage Java versions:
-> ```bash
-> sdk install java 17.0.3-tem
-> ```
+Additional runtime for your **active stack**:
+
+| Stack | Runtime |
+|---|---|
+| `java-spring` | Java (JDK) 17+ |
+| `node-express` | Node.js LTS |
+| `python-fastapi` | Python 3.12 |
+| `go-gin` | Go |
+| `frontend-react` | Node.js LTS |
+| `frontend-angular` | Node.js LTS |
+
+Most stacks also expect Docker if your application needs a local database —
+follow the setup section of the active stack's standards file for specifics.
 
 ---
 
 ## 🚀 Setup Instructions
 
-### 1. Clone the Repository
+### 1. Clone the repository
 
 ```bash
 git clone git@github.com:your-org/your-repo.git
 cd your-repo
 ```
 
----
-
-### 2. Environment Configuration
-
-Spring Boot reads configuration from `src/main/resources/application.yml`.  
-**Never commit secrets** — use environment variables or a local `.env` file with a tool like [direnv](https://direnv.net/).
-
-**`src/main/resources/application.yml`** (committed, uses env var placeholders):
-```yaml
-spring:
-  datasource:
-    url: ${DATABASE_URL:jdbc:postgresql://localhost:5432/LTIdb}
-    username: ${DB_USER:LTIdbUser}
-    password: ${DB_PASSWORD:D1ymf8wyQEGthFR1E9xhCq}
-    driver-class-name: org.postgresql.Driver
-  jpa:
-    hibernate:
-      ddl-auto: validate        # Flyway manages schema — never use 'update' or 'create'
-    show-sql: false
-    properties:
-      hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-  flyway:
-    enabled: true
-    locations: classpath:db/migration
-
-server:
-  port: ${PORT:3000}
-
-logging:
-  level:
-    com.lti: INFO
-    org.hibernate.SQL: DEBUG   # Set to INFO in production
-```
-
-**`src/main/resources/application-test.yml`** (used automatically during tests):
-```yaml
-spring:
-  datasource:
-    url: jdbc:tc:postgresql:15:///LTIdb_test   # Testcontainers — spins up a real DB
-    driver-class-name: org.testcontainers.jdbc.ContainerDatabaseDriver
-  flyway:
-    enabled: true
-  jpa:
-    hibernate:
-      ddl-auto: validate
-```
-
-**Local `.env`** (git-ignored, used with direnv or export manually):
-```env
-DATABASE_URL=jdbc:postgresql://localhost:5432/LTIdb
-DB_USER=LTIdbUser
-DB_PASSWORD=D1ymf8wyQEGthFR1E9xhCq
-PORT=3000
-```
-
-Add `.env` to `.gitignore`:
-```
-.env
-*.env
-```
-
----
-
-### 3. Database Setup (PostgreSQL with Docker)
-
-Start the PostgreSQL database using Docker Compose:
+### 2. Install the OpenSpec CLI
 
 ```bash
-# From the project root
-docker-compose up -d postgres
-
-# Verify the container is running
-docker-compose ps
+sh .openspec-cli/install.sh
+source ~/.bashrc   # or ~/.zshrc
 ```
 
-**`docker-compose.yml`** (backend-relevant excerpt):
-```yaml
-services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: lti_postgres
-    environment:
-      POSTGRES_DB: LTIdb
-      POSTGRES_USER: LTIdbUser
-      POSTGRES_PASSWORD: D1ymf8wyQEGthFR1E9xhCq
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U LTIdbUser -d LTIdb"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+This installs every `os-*` command to `~/.openspec/bin` and adds it to your `PATH`.
+Re-run this after pulling changes to anything under `.openspec-cli/` — the CLI runs
+from the installed copy, not directly from the repo.
 
-volumes:
-  postgres_data:
+### 3. Configure environment variables
+
+```bash
+cp .env.example .env
 ```
 
-PostgreSQL will be available at:
-- **Host**: `localhost`
-- **Port**: `5432`
-- **Database**: `LTIdb`
-- **Username**: `LTIdbUser`
+Fill in `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_TOKEN`, and `JIRA_PROJECT_KEY`
+(a default project — override per command with `--project <KEY>` if you work
+across multiple Jira projects). **Never commit `.env`.**
+
+### 4. Choose your stack, agent, and language
+
+```bash
+os-stack --list && os-stack python-fastapi   # or java-spring, node-express, go-gin, frontend-react, frontend-angular
+os-agent --list && os-agent claude-code
+os-language --list && os-language en          # or es
+```
+
+### 5. Authenticate GitHub CLI
+
+```bash
+gh auth login
+```
+
+### 6. Verify everything works
+
+```bash
+os-tickets
+```
+
+This should list your Jira project's tickets. If it fails, check `.env` and that
+`os_load_config` resolves `openspec/config.yaml` correctly (run any `os-*` command —
+it prints the active stack/agent/language at the top).
 
 ---
 
-### 4. Backend Setup
+## Working on a ticket
 
 ```bash
-# Navigate to backend directory
-cd backend
-
-# Install dependencies and compile
-./mvnw clean install -DskipTests
-
-# Run Flyway migrations (applied automatically on startup, or manually):
-./mvnw flyway:migrate
-
-# (Optional) Seed the database with sample data
-./mvnw spring-boot:run -Dspring-boot.run.profiles=seed
-
-# Start the development server
-./mvnw spring-boot:run
+os-create-ticket --hu              # or os-tickets to pick an existing one
+os-enrich KAN-XX && os-enrich-apply KAN-XX
+os-plan KAN-XX
+os-develop KAN-XX
+os-commit KAN-XX
+os-review <PR-NUMBER> && os-review-apply <PR-NUMBER>
 ```
 
-The backend API will be available at `http://localhost:3000`  
-Swagger UI (API docs) will be available at `http://localhost:3000/swagger-ui.html`
-
-> **Hot reload during development**: Add [Spring Boot DevTools](https://docs.spring.io/spring-boot/docs/current/reference/html/using.html#using.devtools) to `pom.xml` for automatic restart on class changes:
-> ```xml
-> <dependency>
->     <groupId>org.springframework.boot</groupId>
->     <artifactId>spring-boot-devtools</artifactId>
->     <optional>true</optional>
-> </dependency>
-> ```
+See `README.md` for the full command reference and `CLAUDE.md` for the complete
+workflow description.
 
 ---
 
-### 5. Useful Development Scripts
+## 🧪 Testing & Coverage
+
+Every stack enforces a **90% coverage threshold**, checked via the stack's resolved
+`test_command` / `coverage_command` in `openspec/config.yaml`. Test framework,
+test types (unit/integration/controller-slice), and exact coverage tooling are
+stack-specific — see `ai-specs/specs/stacks/<stack>-standards.mdc` for the active
+stack's conventions before writing tests.
 
 ```bash
-# Start the application
-./mvnw spring-boot:run
-
-# Start with a specific profile (e.g., local, seed)
-./mvnw spring-boot:run -Dspring-boot.run.profiles=local
-
-# Compile without running tests
-./mvnw clean install -DskipTests
-
-# Run Flyway migrations manually
-./mvnw flyway:migrate
-
-# Check Flyway migration status
-./mvnw flyway:info
-
-# Repair Flyway checksum (use only if a migration was accidentally modified)
-./mvnw flyway:repair
-
-# Build a production JAR
-./mvnw clean package -DskipTests
-java -jar target/lti-backend-*.jar
+os-plan KAN-XX   # printed "Tooling Reference" section shows the resolved commands
 ```
 
 ---
 
-## 🧪 Testing
+## Database Migrations
 
-### Run All Tests
+Migration tooling is stack-specific (e.g. Flyway for `java-spring`, Alembic for
+`python-fastapi`) — see the active stack's standards file for the exact commands
+and file-naming convention. The rule that holds across every stack:
 
-```bash
-cd backend
-
-# Run all unit and integration tests
-./mvnw test
-
-# Run tests and generate JaCoCo coverage report
-./mvnw test jacoco:report
-
-# Run full verify phase (tests + coverage threshold check — fails if below 90%)
-./mvnw verify
-```
-
-Coverage report will be generated at:
-```
-target/site/jacoco/index.html
-```
-
----
-
-### Run Specific Tests
-
-```bash
-# Run a single test class
-./mvnw test -Dtest=CandidateServiceTest
-
-# Run a single test method
-./mvnw test -Dtest=CandidateServiceTest#shouldCreateCandidate_whenEmailIsUnique
-
-# Run all tests in a package
-./mvnw test -Dtest="com.lti.unit.*"
-
-# Run only integration tests
-./mvnw test -Dtest="com.lti.integration.*"
-```
-
----
-
-### Test Types
-
-#### Unit Tests (`src/test/java/com/lti/unit/`)
-- No Spring context — fast and isolated
-- Use `@ExtendWith(MockitoExtension.class)` with `@Mock` and `@InjectMocks`
-- Mock all external dependencies (repositories, services, mappers)
-
-```bash
-./mvnw test -Dtest="**/*Test"
-```
-
-#### Integration Tests (`src/test/java/com/lti/integration/`)
-- Uses `@SpringBootTest` with Testcontainers (real PostgreSQL in Docker)
-- Tests the full request/response cycle end-to-end
-- Requires Docker running locally
-
-```bash
-./mvnw test -Dtest="**/*IntegrationTest"
-```
-
-#### Controller (Slice) Tests
-- Uses `@WebMvcTest` — loads only the web layer, no full Spring context
-- Mocks the service layer with `@MockBean`
-
-```bash
-./mvnw test -Dtest="**/*ControllerTest"
-```
-
----
-
-### Coverage Requirements
-
-JaCoCo is configured to **fail the build** if coverage drops below 90% for:
-- Branches
-- Methods
-- Lines
-- Instructions
-
-To check thresholds without running the full build:
-
-```bash
-./mvnw jacoco:check
-```
-
-Coverage reports are stored in:
-```
-coverage/YYYYMMDD-backend-coverage/
-```
-
----
-
-## � Python / FastAPI Setup
-
-This repository also supports the Python FastAPI base application template used by KAN-6.
-
-### Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### Run the application
-
-```bash
-uvicorn main:app --reload
-```
-
-### Environment variables
-
-Create a local `.env` file based on `.env.example` and add the following values:
-
-```env
-DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/openspec
-APP_NAME=open-spec-base-app
-APP_VERSION=0.1.0
-ENVIRONMENT=development
-```
-
-### Run database migrations
-
-```bash
-alembic upgrade head
-```
-
-### Run tests
-
-```bash
-pytest
-```
-
-### Lint and type check
-
-```bash
-ruff check .
-mypy src
-```
-
-### Validate Vault sandbox restrictions (os-vault-lint)
-
-`os-vault-lint` scans `contracts/*.py` files using Python's `ast` module and reports
-any Vault sandbox violations before tests run. It uses only Python standard library —
-no additional packages required.
-
-```bash
-# Lint the entire contracts/ directory (default)
-python .openspec-cli/lib/vault_lint.py contracts/
-
-# Lint a single file
-python .openspec-cli/lib/vault_lint.py contracts/savings_product.py
-
-# Via the CLI wrapper (after install)
-os-vault-lint
-os-vault-lint contracts/savings_product.py
-```
-
-**Exit codes**: `0` = no violations, `1` = violations found or target not found.
-
-**Output format** (one line per violation):
-```
-contracts/foo.py:12 [FORBIDDEN_IMPORT] import 'os' is not allowed
-contracts/foo.py:34 [FORBIDDEN_CALL] call to 'eval' is not allowed in contracts
-contracts/foo.py:56 [EXCEPTION_CHAINING] 'raise ... from ...' is not allowed in contracts
-```
-
-**Rules enforced**:
-
-| Rule ID | Trigger |
-|---|---|
-| `FORBIDDEN_IMPORT` | `import` or `from ... import` of a banned stdlib module |
-| `UNKNOWN_IMPORT` | Any import not from `contracts_api` or `decimal` |
-| `FORBIDDEN_CALL` | Call to `eval`, `exec`, `open`, `print`, `getattr`, `setattr`, `hasattr`, `delattr`, `type`, `globals`, `locals`, `vars`, `dir`, `compile`, `__import__`, `input` |
-| `EXCEPTION_CHAINING` | `raise X from Y` syntax |
-| `MUTABLE_GLOBAL` | Module-level `list`, `dict`, or `set` literal not in the allowed contract metadata names |
-
-`os-vault-test` automatically runs `os-vault-lint` before executing pytest. To run
-lint tests with coverage:
-
-```bash
-pytest tests/test_vault_lint.py --cov=vault_lint --cov-fail-under=90
-```
-
----
-
-## �🗄️ Database Migrations (Flyway)
-
-Flyway migrations run **automatically** when the application starts. All scripts live under:
-
-```
-src/main/resources/db/migration/
-├── V1__create_candidates_table.sql
-├── V2__create_education_and_work_experience_tables.sql
-├── V3__create_resumes_table.sql
-├── V4__create_companies_and_employees_tables.sql
-├── V5__create_interview_flow_tables.sql
-├── V6__create_positions_table.sql
-└── V7__create_applications_and_interviews_tables.sql
-```
-
-**Rules:**
-- **Never modify** an already-applied migration — always create a new file
-- File naming: `V{sequential_number}__{descriptive_snake_case_name}.sql`
-- Test migrations locally before committing
-
----
-
-## 🔍 Verify Everything Is Running
-
-```bash
-# Check application health
-curl http://localhost:3000/actuator/health
-
-# Expected response:
-# {"status":"UP","components":{"db":{"status":"UP"},...}}
-
-# Check Swagger UI is accessible
-open http://localhost:3000/swagger-ui.html
-```
+- **Never modify an already-applied migration** — always create a new one.
+- Test migrations locally before committing.
 
 ---
 
 ## 🧹 Common Issues
 
-| Problem                                         | Solution                                                                                             |
-|-------------------------------------------------|------------------------------------------------------------------------------------------------------|
-| `Port 5432 already in use`                      | Stop local PostgreSQL: `sudo systemctl stop postgresql` or `brew services stop postgresql`           |
-| `Flyway migration failed`                       | Run `./mvnw flyway:info` to see which migration failed, fix and run `./mvnw flyway:repair` if needed |
-| `Unable to acquire JDBC Connection`             | Verify Docker is running: `docker-compose ps`                                                        |
-| `Tests fail with no Docker`                     | Integration tests require Docker for Testcontainers — ensure Docker Desktop is running               |
-| `Build fails on coverage`                       | Run `./mvnw test jacoco:report` and open `target/site/jacoco/index.html` to find uncovered code      |
-| `java: error: release version 17 not supported` | Check Java version: `java -version` — must be JDK 17+                                                |
+| Problem | Solution |
+|---|---|
+| `os-*: command not found` | Re-run `sh .openspec-cli/install.sh`, then reload your shell (`source ~/.bashrc` / `~/.zshrc`) |
+| A change to `.openspec-cli/` isn't taking effect | The CLI runs from `~/.openspec`, not the repo directly — re-run the installer |
+| `os-commit` / `os-review` fail with a `gh` error | Run `gh auth login` |
+| Wrong stack's commands showing up | `os-stack --list` to confirm the active stack, `os-stack <name>` to switch |
+| `os-tickets` / `os-enrich` fail with a Jira error | Check `JIRA_BASE_URL`, `JIRA_EMAIL`, `JIRA_TOKEN` in `.env`; confirm the token hasn't expired |
+| Working across multiple Jira projects | Use `--project <KEY>` on `os-tickets` / `os-create-ticket` instead of editing `.env` each time |
+| Build/test/coverage command fails | Confirm it matches what's actually available locally (e.g. `./gradlew`, `pytest`, `npm test`) — commands are resolved from `openspec/config.yaml`, not hardcoded in the CLI |
