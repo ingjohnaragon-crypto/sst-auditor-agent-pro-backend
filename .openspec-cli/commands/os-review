@@ -156,12 +156,23 @@ if [ -n "$TICKET_ID" ]; then
 else
   REVIEW_ARCHIVE="$CHANGES_DIR/pr-${PR_NUMBER}_review.md"
 fi
+rm -f "$REVIEW_ARCHIVE"
 
 os_divider
 
 # ── Deliver and capture output ────────────────────────────────
 os_deliver_prompt_capture "$PROMPT_FILE" "$OUTPUT_FILE"
-cp "$OUTPUT_FILE" "$REVIEW_ARCHIVE"
+if [ -s "$REVIEW_ARCHIVE" ]; then
+  # CLI agents with filesystem access (claude-code, aider) write the archive
+  # file themselves per review-pr.md's "Output format" instructions; stdout
+  # only carries the short "Final message format" confirmation, so the file
+  # on disk is authoritative — mirror it into the working file for preview.
+  cp "$REVIEW_ARCHIVE" "$OUTPUT_FILE"
+else
+  # Clipboard agents have no filesystem access — the captured/pasted text
+  # is the actual content.
+  cp "$OUTPUT_FILE" "$REVIEW_ARCHIVE"
+fi
 os_success "Review saved!"
 os_info "Working : .openspec-cli/.review-output.md"
 os_info "Archive : $REVIEW_ARCHIVE"
