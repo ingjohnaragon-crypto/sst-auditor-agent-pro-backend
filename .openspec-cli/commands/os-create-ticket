@@ -100,18 +100,15 @@ As a [role], I want [capability], so that [benefit].
 - [ ] Jira ticket moved to Done"
 
   # Save prompt and deliver to agent
-  echo "$PROMPT" > "${OS_REPO_ROOT}/.openspec-cli/.last-prompt.md"
+  PROMPT_FILE="${OS_REPO_ROOT}/.openspec-cli/.last-prompt.md"
+  OUTPUT_FILE="${OS_REPO_ROOT}/.openspec-cli/.last-ai-output.md"
+  echo "$PROMPT" > "$PROMPT_FILE"
 
-  if [ "${OS_AGENT_DELIVERY:-clipboard}" = "cli" ]; then
-    DESCRIPTION=$(echo "$PROMPT" | ${OS_AGENT_COMMAND} ${OS_AGENT_ARGS} 2>/dev/null || echo "")
-    if [ -z "$DESCRIPTION" ]; then
-      os_warn "AI did not return output. Paste description manually (CTRL+D to finish):"
-      DESCRIPTION=$(cat)
-    fi
-  else
-    echo "$PROMPT" | clip 2>/dev/null || true
-    os_info "Prompt copied to clipboard — paste in your AI agent."
-    os_info "Then paste the AI output here (CTRL+D when done):"
+  os_deliver_prompt_capture "$PROMPT_FILE" "$OUTPUT_FILE"
+  DESCRIPTION=$(cat "$OUTPUT_FILE" 2>/dev/null || echo "")
+
+  if [ -z "$DESCRIPTION" ]; then
+    os_warn "AI did not return output. Paste description manually (CTRL+D to finish):"
     DESCRIPTION=$(cat)
   fi
 else

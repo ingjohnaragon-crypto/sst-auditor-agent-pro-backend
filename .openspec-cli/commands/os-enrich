@@ -113,44 +113,15 @@ mkdir -p "$CHANGES_DIR"
 os_divider
 
 # ── Deliver and capture output ────────────────────────────────
-if [ "${OS_AGENT_DELIVERY:-clipboard}" = "cli" ]; then
-  # CLI agent — ejecuta y captura automáticamente
-  os_step "Sending prompt to $OS_AGENT_LABEL..."
-  ${OS_AGENT_COMMAND} ${OS_AGENT_ARGS} < "$PROMPT_FILE" > "$OUTPUT_FILE" 2>/dev/null
-  cp "$OUTPUT_FILE" "$ARCHIVE_FILE"
-  os_success "Enriched content saved!"
-  os_info "Working : .openspec-cli/.enriched-content.md"
-  os_info "Archive : ai-specs/changes/${TICKET_ID}_enriched.md"
-  os_divider
-  os_info "Preview (first 10 lines):"
-  head -10 "$OUTPUT_FILE"
-  os_divider
-  os_info "Next step: os-enrich-apply $TICKET_ID"
-else
-  # Clipboard agent — copia prompt y espera que el usuario pegue el output
-  printf '%s' "$PROMPT" | clip 2>/dev/null || true
-  os_success "Prompt copied to clipboard!"
-  os_divider
-  os_info "1. Paste in $OS_AGENT_LABEL"
-  os_info "2. Copy the AI output"
-  os_info "3. Press Enter here when ready..."
-  read -r _dummy
-  os_step "Paste the enriched content (CTRL+Z + Enter to finish on Windows):"
-  OUTPUT=""
-  while IFS= read -r line 2>/dev/null; do
-    OUTPUT="${OUTPUT}${line}
-"
-  done
-  printf '%s' "$OUTPUT" > "$OUTPUT_FILE"
-  cp "$OUTPUT_FILE" "$ARCHIVE_FILE"
-  os_success "Saved!"
-  os_info "Working : .openspec-cli/.enriched-content.md"
-  os_info "Archive : ai-specs/changes/${TICKET_ID}_enriched.md"
-  os_divider
-  os_info "Preview (first 10 lines):"
-  head -10 "$OUTPUT_FILE"
-  os_divider
-  os_info "Next step: os-enrich-apply $TICKET_ID"
-fi
+os_deliver_prompt_capture "$PROMPT_FILE" "$OUTPUT_FILE"
+cp "$OUTPUT_FILE" "$ARCHIVE_FILE"
+os_success "Enriched content saved!"
+os_info "Working : .openspec-cli/.enriched-content.md"
+os_info "Archive : ai-specs/changes/${TICKET_ID}_enriched.md"
+os_divider
+os_info "Preview (first 10 lines):"
+head -10 "$OUTPUT_FILE"
+os_divider
+os_info "Next step: os-enrich-apply $TICKET_ID"
 
 os_divider
