@@ -9,6 +9,7 @@ CLI_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 . "$CLI_DIR/lib/config.sh"
 . "$CLI_DIR/lib/jira.sh"
 . "$CLI_DIR/lib/agent.sh"
+. "$CLI_DIR/lib/language.sh"
 
 if [ -z "$TICKET_ID" ]; then
   os_error "Usage: os-develop <TICKET-ID>"
@@ -18,7 +19,9 @@ fi
 os_load_config
 os_load_env
 os_load_agent
+os_load_language
 os_print_config
+os_print_language
 os_require_jira_env
 os_jira_fetch_ticket "$TICKET_ID"
 os_jira_print_ticket
@@ -75,6 +78,10 @@ PROMPT=$(cat << PROMPT_EOF
 You are acting as the backend-developer agent for an openspec project.
 You are on branch: $BRANCH
 IMPLEMENT the following Jira ticket following the plan below.
+
+## Active Language
+$OS_LANGUAGE_LABEL
+$OS_LANGUAGE_DIRECTIVE
 
 ## Active Stack
 Stack: $OS_ACTIVE_STACK ($OS_STACK_LABEL)

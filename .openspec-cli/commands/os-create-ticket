@@ -13,6 +13,10 @@ OS_CLI_LIB="${SCRIPT_DIR}/../lib"
 source "${OS_CLI_LIB}/colors.sh"
 source "${OS_CLI_LIB}/config.sh"
 source "${OS_CLI_LIB}/jira.sh"
+source "${OS_CLI_LIB}/language.sh"
+
+os_load_config
+os_load_language
 
 GENERATE_HU=false
 QUICK_SUMMARY=""
@@ -53,6 +57,10 @@ if [ "$GENERATE_HU" = "true" ]; then
   os_step "Generating user story with AI..."
 
   PROMPT="Generate a complete Jira user story for a software development project.
+
+## Active Language
+$OS_LANGUAGE_LABEL
+$OS_LANGUAGE_DIRECTIVE
 
 Title: $SUMMARY
 Stack: $OS_ACTIVE_STACK

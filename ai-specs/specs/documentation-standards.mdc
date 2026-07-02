@@ -23,7 +23,7 @@ When updating documentation, I will:
    - For data model changes: Update data model definition section in data-model.md
    - For API changes: Update api-spec.yml
    - For changes in libraries, database migrations, or anything that changes the installation process, update *-standards.mdc
-3. Update each affected documentation file in English, maintaining consistency with existing documentation
+3. Update each affected documentation file in the project's configured language (`openspec/config.yaml` → `language`, default English), maintaining consistency with existing documentation
 4. Ensure all documentation is properly formatted and follows the established structure
 5. Verify that all changes are accurately reflected in the documentation
 6. Report which files were updated and what changes were made

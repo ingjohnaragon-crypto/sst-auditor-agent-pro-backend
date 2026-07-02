@@ -14,7 +14,8 @@ alwaysApply: true
 - **Pattern Detection**: Detect and highlight repeated code patterns.
 
 ## 2. Language Standards
-- **English Only**: All technical artifacts must always use English, including:
+- **Configured language**: All technical artifacts must consistently use the
+  project's active language, including:
     - Code (variables, functions, classes, comments, error messages, log messages)
     - Documentation (README, guides, API docs)
     - Jira tickets (titles, descriptions, comments)
@@ -22,6 +23,12 @@ alwaysApply: true
     - Configuration files and scripts
     - Git commit messages
     - Test names and descriptions
+    - Pull request titles and descriptions
+  The active language is set in `openspec/config.yaml` → `language` (default:
+  English) and can be switched with `os-language <code>` / listed with
+  `os-language --list`. When working through an `os-*` command, check the
+  `## Active Language` section of the current prompt for the concrete language
+  and directive in effect for this run.
 
 ## 3. Specific standards
 
