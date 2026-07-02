@@ -1,9 +1,10 @@
 #!/usr/bin/bash
 # os-create-ticket — Create a Jira ticket from the terminal
 # Usage:
-#   os-create-ticket                           # interactive
-#   os-create-ticket --hu                      # AI-generated user story
-#   os-create-ticket "Fix overdraft" Bug       # quick create
+#   os-create-ticket                              # interactive
+#   os-create-ticket --hu                         # AI-generated user story
+#   os-create-ticket "Fix overdraft" Bug          # quick create
+#   os-create-ticket --project OTHER "Title" Task # create in a different project
 
 set -euo pipefail
 
@@ -13,27 +14,35 @@ OS_CLI_LIB="${SCRIPT_DIR}/../lib"
 source "${OS_CLI_LIB}/colors.sh"
 source "${OS_CLI_LIB}/config.sh"
 source "${OS_CLI_LIB}/jira.sh"
+source "${OS_CLI_LIB}/agent.sh"
 source "${OS_CLI_LIB}/language.sh"
 
 os_load_config
+os_load_agent
 os_load_language
 
 GENERATE_HU=false
 QUICK_SUMMARY=""
 QUICK_TYPE=""
+PROJECT_KEY_OVERRIDE=""
 
-for arg in "$@"; do
-  case "$arg" in
+while [ $# -gt 0 ]; do
+  case "$1" in
     --hu) GENERATE_HU=true ;;
+    --project|-p)
+      shift
+      PROJECT_KEY_OVERRIDE="${1:-}"
+      ;;
     *)
-      if [ -z "$QUICK_SUMMARY" ]; then QUICK_SUMMARY="$arg"
-      elif [ -z "$QUICK_TYPE" ];   then QUICK_TYPE="$arg"
+      if [ -z "$QUICK_SUMMARY" ]; then QUICK_SUMMARY="$1"
+      elif [ -z "$QUICK_TYPE" ];   then QUICK_TYPE="$1"
       fi
       ;;
   esac
+  shift
 done
 
-PROJECT_KEY="${JIRA_PROJECT_KEY:-KAN}"
+PROJECT_KEY="${PROJECT_KEY_OVERRIDE:-${JIRA_PROJECT_KEY:-KAN}}"
 
 os_divider
 os_label "  OpenSpec — Create Jira Ticket"

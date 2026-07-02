@@ -152,5 +152,5 @@ else
 fi
 
 os_divider
-os_info "Next step: os-vault-test && os-commit $TICKET_ID"
+os_info "Next step: $OS_TEST_CMD && os-commit $TICKET_ID"
 os_divider
