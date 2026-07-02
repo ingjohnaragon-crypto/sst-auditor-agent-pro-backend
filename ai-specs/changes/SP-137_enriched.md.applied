@@ -1,0 +1,242 @@
+# Enriched Ticket: SP-137 — Diseñar estructura de paquetes y rutas FastAPI
+
+## Original Description
+Crear la distribución modular de rutas y controladores del API Python.
+
+## Enhanced Description
+Establecer el esqueleto arquitectónico inicial del backend de **SST Auditor Agent Pro**
+sobre FastAPI, aplicando el patrón de capas Domain-Driven Design descrito en el stack
+`python-fastapi` (`domain/`, `application/`, `presentation/`, `infrastructure/`). Este
+es un repositorio recién clonado sin código de aplicación (`src/` no existe aún), por lo
+que esta historia crea la base sobre la cual se implementarán todos los tickets de
+dominio posteriores (auditorías SG-SST, matriz de riesgos GTC 45, etc.).
+
+El resultado debe incluir:
+- La estructura de carpetas completa bajo `src/`, con un `__init__.py` en cada paquete.
+- Un punto de entrada de la aplicación (`src/main.py`) que instancia `FastAPI()`,
+  registra los manejadores de excepción globales y expone un router raíz.
+- Un router agregador en `src/presentation/routers/__init__.py` (o `router.py`) que
+  centraliza la inclusión de subrouters por dominio con sus respectivos prefijos y tags,
+  de modo que agregar un nuevo dominio (por ejemplo `audits`) sea tan simple como crear
+  su router y añadir una línea de `include_router`.
+- Un router de ejemplo/health-check (`src/presentation/routers/health_router.py`) que
+  sirva como prueba de vida de la estructura y como plantilla de referencia para futuros
+  routers de dominio.
+- Configuración tipada vía Pydantic Settings (`src/infrastructure/config/settings.py`)
+  para variables de entorno (nombre de la app, versión, prefijo de API).
+- Documentación técnica en el `README.md` (o `docs/architecture.md`) que explique el
+  propósito de cada capa y las reglas de dependencia entre ellas (dominio no depende de
+  FastAPI ni de SQLAlchemy; infraestructura implementa las interfaces del dominio).
+
+Esta historia **no** implementa lógica de negocio ni persistencia — únicamente el
+armazón estructural, el mecanismo de registro de rutas y su documentación. Los dominios
+funcionales (auditorías, riesgos, usuarios, etc.) se implementarán en tickets
+posteriores reutilizando esta estructura.
+
+## Acceptance Criteria
+- [ ] La estructura de carpetas `src/{domain,application,presentation,infrastructure}`
+      existe con sub-paquetes (`models`, `repositories`, `exceptions`, `services`, `dto`,
+      `mappers`, `routers`, `dependencies`, `exception_handlers`, `database`, `config`)
+      y cada uno contiene un `__init__.py`.
+- [ ] `src/main.py` crea la instancia de `FastAPI`, registra los exception handlers
+      globales (`DomainException`, `RequestValidationError`) y monta el router agregador.
+- [ ] Existe un router agregador que centraliza `include_router()` por dominio con
+      prefijo y tags; añadir un nuevo router de dominio requiere una sola línea de código
+      en ese archivo (sin tocar `main.py`).
+- [ ] El endpoint `GET /health` responde `200 OK` con un payload JSON de estado y sirve
+      como router de referencia para los siguientes dominios.
+- [ ] `src/infrastructure/config/settings.py` expone un `Settings` (Pydantic
+      `BaseSettings`) con `app_name`, `app_version`, `api_prefix`, cargado desde `.env`.
+- [ ] La aplicación arranca localmente (`uvicorn src.main:app --reload`) sin errores y
+      `/docs` (Swagger) carga correctamente.
+- [ ] El README técnico documenta la arquitectura de carpetas y la convención para
+      agregar un nuevo dominio (subtarea SP-166).
+- [ ] Cobertura de pruebas ≥ 90% sobre el código nuevo, verificada con `pytest --cov`.
+- [ ] `ruff check` y `mypy --strict` pasan sin errores sobre `src/`.
+
+## Fields & Endpoints
+
+No hay entidades de dominio ni persistencia en esta historia. Único endpoint expuesto
+como plantilla de referencia:
+
+| Método | Ruta | Descripción | Response |
+|---|---|---|---|
+| `GET` | `/health` | Verifica que la aplicación y el enrutador raíz están operativos | `200 OK` → `{"status": "ok", "app": "<app_name>", "version": "<app_version>"}` |
+
+Convención de prefijos para routers de dominio futuros (a seguir por SP-165):
+`API_PREFIX = "/api/v1"`, y cada router de dominio se monta como
+`app.include_router(<domain>_router, prefix=f"{settings.api_prefix}/<domain>", tags=["<Domain>"])`.
+
+## Files to Create or Modify
+
+| File | Layer | Action |
+|---|---|---|
+| `src/__init__.py` | — | Create |
+| `src/main.py` | — (composition root) | Create |
+| `src/domain/__init__.py` | Domain | Create |
+| `src/domain/models/__init__.py` | Domain | Create |
+| `src/domain/repositories/__init__.py` | Domain | Create |
+| `src/domain/exceptions/__init__.py` | Domain | Create |
+| `src/domain/exceptions/base.py` | Domain | Create — clase base `DomainException` |
+| `src/application/__init__.py` | Application | Create |
+| `src/application/services/__init__.py` | Application | Create |
+| `src/application/dto/__init__.py` | Application | Create |
+| `src/application/mappers/__init__.py` | Application | Create |
+| `src/presentation/__init__.py` | Presentation | Create |
+| `src/presentation/routers/__init__.py` | Presentation | Create — router agregador (`api_router`) |
+| `src/presentation/routers/health_router.py` | Presentation | Create — `GET /health` |
+| `src/presentation/dependencies/__init__.py` | Presentation | Create |
+| `src/presentation/exception_handlers/__init__.py` | Presentation | Create |
+| `src/presentation/exception_handlers/domain_handler.py` | Presentation | Create — handler `DomainException` → JSON |
+| `src/presentation/exception_handlers/validation_handler.py` | Presentation | Create — handler `RequestValidationError` → JSON |
+| `src/infrastructure/__init__.py` | Infrastructure | Create |
+| `src/infrastructure/config/__init__.py` | Infrastructure | Create |
+| `src/infrastructure/config/settings.py` | Infrastructure | Create — `Settings(BaseSettings)` |
+| `src/infrastructure/database/__init__.py` | Infrastructure | Create — placeholder, engine/sesión se implementa cuando exista el primer modelo persistente |
+| `src/infrastructure/repositories/__init__.py` | Infrastructure | Create |
+| `pyproject.toml` | — | Modify — configurar `pytest --cov` con umbral 90% y sección `[tool.ruff]` / `[tool.mypy]` |
+| `requirements.txt` | — | Modify — agregar `fastapi`, `uvicorn[standard]`, `pydantic-settings`, `httpx` |
+| `README.md` | Documentación | Modify — sección de arquitectura de carpetas (SP-166) |
+| `tests/presentation/test_health_router.py` | Test | Create |
+| `tests/infrastructure/test_settings.py` | Test | Create |
+
+## Unit Test Cases
+- **Happy path**: `GET /health` responde `200` con `status: "ok"` y los campos
+  `app`/`version` provenientes de `Settings`.
+- **Registro de routers**: el router agregador (`api_router`) incluye el router de
+  `health` bajo el prefijo esperado — verificado inspeccionando `app.routes`.
+- **Manejador de excepción de dominio**: una ruta de prueba que levanta una
+  `DomainException` personalizada devuelve `{"success": false, "code": ..., "message": ...}`
+  con el `http_status` configurado en la excepción.
+- **Manejador de validación**: un request con payload inválido a una ruta de prueba
+  devuelve `422` con `{"success": false, "code": "VALIDATION_ERROR", "details": [...]}`.
+- **Configuración**: `Settings()` carga valores por defecto y los sobrescribe
+  correctamente desde variables de entorno (`monkeypatch.setenv`).
+- **Edge case**: la aplicación arranca (`TestClient(app)`) sin lanzar excepciones aunque
+  no exista ningún router de dominio adicional registrado todavía.
+
+## Non-Functional Requirements
+- **Seguridad**: no exponer stack traces ni detalles internos en las respuestas de error;
+  los exception handlers globales son el único punto de salida para errores no controlados.
+- **Tipado**: todas las funciones y métodos nuevos deben incluir type hints completos;
+  `mypy --strict` sin errores.
+- **Calidad de código**: `ruff check` sin advertencias sobre `src/`.
+- **Cobertura**: ≥ 90% en el código nuevo, medido con `pytest --cov` (umbral configurado
+  en `pyproject.toml`).
+- **Desacoplamiento**: `domain/` y `application/` no deben importar FastAPI ni
+  SQLAlchemy — el linter/mypy debe poder verificarlo sin dependencias cruzadas.
+- **Documentación**: `/docs` (Swagger) y `/redoc` deben cargar sin errores al arrancar
+  la aplicación con `uvicorn`.
+- **Rendimiento**: el endpoint `/health` no debe depender de I/O externo (sin llamadas a
+  base de datos ni servicios externos), para uso como *liveness probe*.
+
+## Subtasks
+
+<!-- SUBTASK:SP-164 -->
+### Subtask: SP-164 — Definir estructura de paquetes (routers, services, models, schemas)
+
+#### Original Description
+Organizar el proyecto FastAPI siguiendo el patrón de capas: routers, services, models,
+schemas y core.
+
+#### Enhanced Description
+Crear bajo `src/` la estructura de paquetes en capas DDD definida en el stack
+`python-fastapi`, alineada a los nombres usados por el resto del proyecto
+(`domain`, `application`, `presentation`, `infrastructure`) en lugar de los nombres
+genéricos citados en la descripción original (`routers/services/models/schemas/core`),
+para mantener consistencia con `ai-specs/specs/stacks/python-fastapi-standards.mdc`:
+
+```
+src/
+├── domain/{models,repositories,exceptions}/
+├── application/{services,dto,mappers}/
+├── presentation/{routers,dependencies,exception_handlers}/
+└── infrastructure/{repositories,database,config}/
+```
+
+Cada paquete debe incluir un `__init__.py` (vacío o con docstring de una línea
+describiendo su responsabilidad). No se implementa lógica de negocio en esta subtarea —
+únicamente los paquetes vacíos y, cuando aplique, las clases base mínimas
+(`DomainException` en `domain/exceptions/base.py`) necesarias para que SP-165 pueda
+registrar los exception handlers.
+
+#### Acceptance Criteria
+- [ ] Los 4 paquetes de capa y sus 10 sub-paquetes existen bajo `src/`, cada uno con
+      `__init__.py`.
+- [ ] `domain/` y `application/` no tienen ningún `import` de `fastapi` ni de
+      `sqlalchemy` (verificable con `ruff` / búsqueda estática).
+- [ ] `src/domain/exceptions/base.py` define `DomainException` con atributos `code: str`,
+      `http_status: int` y `message: str`.
+- [ ] `python -c "import src.domain, src.application, src.presentation, src.infrastructure"`
+      no lanza `ImportError`.
+<!-- /SUBTASK:SP-164 -->
+
+<!-- SUBTASK:SP-165 -->
+### Subtask: SP-165 — Configurar enrutador principal e inclusión de subrouters
+
+#### Original Description
+Centralizar el registro de routers en el archivo principal de la aplicación con
+prefijos por dominio.
+
+#### Enhanced Description
+Implementar `src/main.py` como composition root de la aplicación FastAPI y un router
+agregador (`api_router`) en `src/presentation/routers/__init__.py` que centralice el
+`include_router()` de cada dominio, evitando que `main.py` conozca los routers
+individuales.
+
+Reglas concretas:
+- `src/presentation/routers/__init__.py` define `api_router = APIRouter()` e incluye
+  cada router de dominio con su propio `prefix` (p. ej. `/health`) y `tags`.
+- `src/main.py` crea `app = FastAPI(title=settings.app_name, version=settings.app_version)`,
+  registra los exception handlers globales (`DomainException`, `RequestValidationError`)
+  y monta el agregador con `app.include_router(api_router, prefix=settings.api_prefix)`.
+- Todos los prefijos de dominio se anidan bajo `settings.api_prefix` (`/api/v1`), de modo
+  que el `health` de referencia queda accesible en `/api/v1/health` (o `/health` sin
+  prefijo si se decide excluir el health-check del versionado — decisión a documentar en
+  el propio router).
+- Agregar un nuevo dominio en el futuro debe requerir únicamente: crear su router en
+  `presentation/routers/<domain>_router.py` y añadir una línea `api_router.include_router(...)`
+  en el agregador — sin modificar `main.py`.
+
+#### Acceptance Criteria
+- [ ] `src/main.py` no contiene llamadas directas a `include_router` de routers de
+      dominio individuales — solo monta `api_router`.
+- [ ] `GET /health` (o `/api/v1/health`, según la convención elegida y documentada)
+      responde `200` en un `TestClient(app)`.
+- [ ] Los exception handlers globales quedan registrados sobre `app` y cubiertos por test
+      (ver casos de prueba de manejo de excepción en la historia principal).
+- [ ] Añadir un router de dominio ficticio en un test demuestra que solo requiere tocar
+      el agregador, no `main.py`.
+<!-- /SUBTASK:SP-165 -->
+
+<!-- SUBTASK:SP-166 -->
+### Subtask: SP-166 — Documentar convención de paquetes en README técnico
+
+#### Original Description
+Describir la arquitectura de carpetas del backend para onboarding del equipo.
+
+#### Enhanced Description
+Añadir al `README.md` del repositorio (o a un `docs/architecture.md` referenciado desde
+el README) una sección "Arquitectura del Backend" que documente, para onboarding de
+nuevos desarrolladores:
+
+- El árbol de carpetas bajo `src/` con una línea de propósito por paquete (dominio,
+  aplicación, presentación, infraestructura y sus sub-paquetes).
+- Las reglas de dependencia entre capas (dominio no depende de FastAPI/SQLAlchemy;
+  infraestructura implementa las interfaces del dominio; presentación es la única capa
+  que conoce FastAPI).
+- El procedimiento paso a paso para agregar un nuevo dominio funcional: dónde crear el
+  modelo de dominio, la interfaz de repositorio, el servicio de aplicación, los DTOs, el
+  router y su registro en el agregador de `presentation/routers/__init__.py`.
+- Cómo levantar el servidor localmente (`uvicorn src.main:app --reload`) y dónde
+  consultar la documentación autogenerada (`/docs`, `/redoc`).
+
+#### Acceptance Criteria
+- [ ] El `README.md` incluye una sección "Arquitectura del Backend" con el árbol de
+      carpetas y la descripción de cada capa.
+- [ ] Incluye una guía paso a paso ("Cómo agregar un nuevo dominio") enlazando los
+      archivos concretos a crear/modificar (coincide con la tabla de archivos de SP-165).
+- [ ] Incluye el comando para levantar el servidor local y las URLs de `/docs` y `/redoc`.
+- [ ] La sección enlaza a `ai-specs/specs/stacks/python-fastapi-standards.mdc` como
+      referencia normativa completa, en vez de duplicar todo su contenido.
+<!-- /SUBTASK:SP-166 -->

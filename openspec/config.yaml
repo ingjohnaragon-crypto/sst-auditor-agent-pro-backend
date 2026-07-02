@@ -18,7 +18,7 @@ agent: claude-code
 # code, comments, docs, Jira content, commits, PR titles/bodies.
 # Change with: os-language <code>
 # ─────────────────────────────────────────────
-language: en
+language: es
 
 # ─────────────────────────────────────────────
 # STACK REGISTRY
@@ -110,8 +110,7 @@ agents:
     label: Claude Code (CLI)
     delivery: cli
     command: claude
-    args: --print
-
+    args: --print --dangerously-skip-permissions
   aider:
     label: Aider (CLI)
     delivery: cli

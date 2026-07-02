@@ -87,17 +87,6 @@ $DATA_MODEL
 $ENRICH_TEMPLATE
 
 ---
-## Output Instructions
-Produce ONLY the enhanced description in markdown — no preamble, no explanation.
-Include:
-- Full description of the functionality
-- Fields to create or update
-- Endpoint URLs, HTTP methods, request/response shapes
-- Files to create or modify (with their architecture layer)
-- Acceptance criteria
-- Unit test cases to cover
-- Non-functional requirements (security, performance, validation)
-
 Follow the "## Active Language" directive above for all text.
 PROMPT_EOF
 )
@@ -109,12 +98,23 @@ printf '%s' "$PROMPT" > "$PROMPT_FILE"
 CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes"
 ARCHIVE_FILE="$CHANGES_DIR/${TICKET_ID}_enriched.md"
 mkdir -p "$CHANGES_DIR"
+rm -f "$ARCHIVE_FILE"
 
 os_divider
 
 # ── Deliver and capture output ────────────────────────────────
 os_deliver_prompt_capture "$PROMPT_FILE" "$OUTPUT_FILE"
-cp "$OUTPUT_FILE" "$ARCHIVE_FILE"
+if [ -s "$ARCHIVE_FILE" ]; then
+  # CLI agents with filesystem access (claude-code, aider) write the archive
+  # file themselves per enrich-us.md's "Output" instructions; stdout only
+  # carries the short "Final message format" confirmation, so the file on
+  # disk is authoritative — mirror it into the working file for preview.
+  cp "$ARCHIVE_FILE" "$OUTPUT_FILE"
+else
+  # Clipboard agents have no filesystem access — the captured/pasted text
+  # is the actual content.
+  cp "$OUTPUT_FILE" "$ARCHIVE_FILE"
+fi
 os_success "Enriched content saved!"
 os_info "Working : .openspec-cli/.enriched-content.md"
 os_info "Archive : ai-specs/changes/${TICKET_ID}_enriched.md"
