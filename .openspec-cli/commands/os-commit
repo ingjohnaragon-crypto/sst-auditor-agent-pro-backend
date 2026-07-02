@@ -12,9 +12,11 @@ CLI_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 . "$CLI_DIR/lib/colors.sh"
 . "$CLI_DIR/lib/config.sh"
+. "$CLI_DIR/lib/language.sh"
 
 os_load_config
 os_load_env
+os_load_language
 
 cd "$OS_REPO_ROOT"
 
@@ -124,15 +126,28 @@ esac
 
 FILE_COUNT=$(echo "$STAGED" | wc -l | tr -d ' ')
 
-if [ -n "$TICKET_ID" ]; then
-  SUBJECT="${COMMIT_TYPE}(${SCOPE}): implement $TICKET_ID"
-  BODY="- Implements $TICKET_ID: changes across $FILE_COUNT file(s)
+if [ "$OS_ACTIVE_LANGUAGE" = "es" ]; then
+  if [ -n "$TICKET_ID" ]; then
+    SUBJECT="${COMMIT_TYPE}(${SCOPE}): implementa $TICKET_ID"
+    BODY="- Implementa $TICKET_ID: cambios en $FILE_COUNT archivo(s)
+- Stack: $OS_ACTIVE_STACK
+- Rama: $CURRENT_BRANCH"
+  else
+    SUBJECT="${COMMIT_TYPE}(${SCOPE}): aplica cambios de $CURRENT_BRANCH"
+    BODY="- Cambios en $FILE_COUNT archivo(s)
+- Stack: $OS_ACTIVE_STACK"
+  fi
+else
+  if [ -n "$TICKET_ID" ]; then
+    SUBJECT="${COMMIT_TYPE}(${SCOPE}): implement $TICKET_ID"
+    BODY="- Implements $TICKET_ID: changes across $FILE_COUNT file(s)
 - Stack: $OS_ACTIVE_STACK
 - Branch: $CURRENT_BRANCH"
-else
-  SUBJECT="${COMMIT_TYPE}(${SCOPE}): apply changes from $CURRENT_BRANCH"
-  BODY="- Changes across $FILE_COUNT file(s)
+  else
+    SUBJECT="${COMMIT_TYPE}(${SCOPE}): apply changes from $CURRENT_BRANCH"
+    BODY="- Changes across $FILE_COUNT file(s)
 - Stack: $OS_ACTIVE_STACK"
+  fi
 fi
 
 os_divider
@@ -171,9 +186,33 @@ fi
 
 os_step "Creating Pull Request → develop..."
 
-if [ -n "$TICKET_ID" ]; then
-  PR_TITLE="[$TICKET_ID] $SUBJECT"
-  PR_BODY="## Summary
+if [ "$OS_ACTIVE_LANGUAGE" = "es" ]; then
+  if [ -n "$TICKET_ID" ]; then
+    PR_TITLE="[$TICKET_ID] $SUBJECT"
+    PR_BODY="## Resumen
+Implementa $TICKET_ID en el stack: $OS_ACTIVE_STACK ($OS_STACK_LABEL)
+
+## Cambios
+$(echo "$STAGED" | sed 's/^/- /')
+
+## Checklist
+- [ ] Tests pasan (\`$OS_TEST_CMD\`)
+- [ ] Cobertura >= 90% (\`$OS_COVERAGE_CMD\`)
+- [ ] Documentación actualizada
+- [ ] Endpoints probados manualmente"
+  else
+    PR_TITLE="$SUBJECT"
+    PR_BODY="## Resumen
+Stack: $OS_ACTIVE_STACK ($OS_STACK_LABEL)
+Rama: $CURRENT_BRANCH
+
+## Cambios
+$(echo "$STAGED" | sed 's/^/- /')"
+  fi
+else
+  if [ -n "$TICKET_ID" ]; then
+    PR_TITLE="[$TICKET_ID] $SUBJECT"
+    PR_BODY="## Summary
 Implements $TICKET_ID on stack: $OS_ACTIVE_STACK ($OS_STACK_LABEL)
 
 ## Changes
@@ -184,14 +223,15 @@ $(echo "$STAGED" | sed 's/^/- /')
 - [ ] Coverage >= 90% (\`$OS_COVERAGE_CMD\`)
 - [ ] Documentation updated
 - [ ] Endpoints manually tested"
-else
-  PR_TITLE="$SUBJECT"
-  PR_BODY="## Summary
+  else
+    PR_TITLE="$SUBJECT"
+    PR_BODY="## Summary
 Stack: $OS_ACTIVE_STACK ($OS_STACK_LABEL)
 Branch: $CURRENT_BRANCH
 
 ## Changes
 $(echo "$STAGED" | sed 's/^/- /')"
+  fi
 fi
 
 PR_URL=$(gh pr create \

@@ -8,6 +8,7 @@ CLI_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 . "$CLI_DIR/lib/colors.sh"
 . "$CLI_DIR/lib/config.sh"
 . "$CLI_DIR/lib/agent.sh"
+. "$CLI_DIR/lib/language.sh"
 
 if [ -z "$PR_NUMBER" ]; then
   os_error "Usage: os-review <PR-NUMBER>"
@@ -22,7 +23,9 @@ fi
 os_load_config
 os_load_env
 os_load_agent
+os_load_language
 os_print_config
+os_print_language
 
 # ── Fetch PR metadata ────────────────────────────────────────
 os_step "Fetching PR #$PR_NUMBER metadata..."
@@ -92,6 +95,10 @@ os_step "Building review prompt..."
 
 PROMPT="You are an expert code reviewer for an openspec project.
 Review the following Pull Request against the active stack standards.
+
+## Active Language
+$OS_LANGUAGE_LABEL
+$OS_LANGUAGE_DIRECTIVE
 
 ## PR #$PR_NUMBER — $PR_TITLE
 Author  : $PR_AUTHOR

@@ -45,7 +45,12 @@ os_divider
 head -10 "$SOURCE_FILE"
 os_divider
 
-printf "%bUpdate Jira ticket %s? [y/N]: %b" "$COLOR_WARN" "$TICKET_ID" "$RESET"
+SUBTASK_COUNT=$(grep -c '<!-- *SUBTASK:' "$SOURCE_FILE" 2>/dev/null || echo 0)
+if [ "$SUBTASK_COUNT" -gt 0 ] 2>/dev/null; then
+  printf "%bUpdate Jira ticket %s? (will also update %s subtask(s)) [y/N]: %b" "$COLOR_WARN" "$TICKET_ID" "$SUBTASK_COUNT" "$RESET"
+else
+  printf "%bUpdate Jira ticket %s? [y/N]: %b" "$COLOR_WARN" "$TICKET_ID" "$RESET"
+fi
 read -r confirm
 case "$confirm" in
   y|Y|yes|YES) ;;

@@ -50,4 +50,4 @@ infrastructure/ Prisma repositories + DB config
 
 ## Git Workflow
 - Branch naming: `feature/<ticket-id>-backend`
-- Commits: English, conventional commits (`feat`, `fix`, `test`, `docs`)
+- Commits: project's configured language, conventional commits (`feat`, `fix`, `test`, `docs`)

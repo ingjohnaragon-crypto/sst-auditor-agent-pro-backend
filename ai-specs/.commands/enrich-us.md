@@ -10,6 +10,7 @@ Follow these steps:
 @documentation. Return it in markdown format.
 6. Update ticket in Jira, adding the new content after the old one and marking each section with the h2 tags [original] and [enhanced]. Apply proper formatting to make it readable and visually clear, using appropriate text types (lists, code snippets...).
 7. If the ticket status was "To refine", move the task to the "Pending refinement validation" column (or the equivalent transition in **this** Jira project — status names vary by workflow; use the MCP to discover valid transitions).
+8. Look at the `## Subtasks` context block provided (fetched from Jira via `parent = <ticket-id>`). For each subtask listed there, apply the same detail bar as step 4: if its description lacks the technical specifics needed for autonomous implementation, write an enhanced version following step 5's criteria, scoped to that subtask. If a subtask is already sufficiently detailed, or if no subtasks exist, skip it — do not invent subtasks that aren't in the context block.
 
 ## Output
 
@@ -48,9 +49,34 @@ request/response shapes.
 ### `## Non-Functional Requirements`
 Security, performance, validation constraints.
 
+### `## Subtasks`
+Only include this section if the `## Subtasks` context block lists at least one
+subtask. Emit one block per subtask that needed refinement, wrapped in HTML comment
+markers so `os-enrich-apply` can upload each one to its own Jira issue:
+
+```markdown
+<!-- SUBTASK:<SUBTASK-KEY> -->
+### Subtask: <SUBTASK-KEY> — <Summary>
+
+#### Original Description
+(copy of the subtask's current description)
+
+#### Enhanced Description
+Refined, technically detailed description matching the HU-level rigor from step 5.
+
+#### Acceptance Criteria
+- [ ] Criterion 1
+- [ ] Criterion 2
+<!-- /SUBTASK:<SUBTASK-KEY> -->
+```
+
+Repeat the block for every subtask that was refined. Subtasks that were already
+sufficiently detailed are omitted from this section entirely.
+
 ---
 
 ## Final message format
 
 > Enriched content saved to `ai-specs/changes/<ticket-id>_enriched.md`.
+> N subtask(s) will also be updated.
 > Run `os-enrich-apply <TICKET-ID>` to upload it to Jira.

@@ -140,7 +140,7 @@ public class Candidate {
 | DB columns | snake_case | `first_name`, `created_at` |
 | Flyway scripts | `V{n}__description.sql` | `V2__add_resume_table.sql` |
 
-**All code, comments, logs, and error messages must be in English.**
+**All code, comments, logs, and error messages must use the project's configured language** (`openspec/config.yaml` → `language`, default English).
 
 ---
 
@@ -269,6 +269,6 @@ DELETE /candidates/{id}      Delete
 ## Git Workflow
 
 - Branch naming: `feature/<ticket-id>-backend`
-- Commits: English, imperative, conventional commits format
+- Commits: project's configured language, imperative, conventional commits format
 - Small, focused branches — one concern per branch
 - All PRs require review before merging; CI must be green
