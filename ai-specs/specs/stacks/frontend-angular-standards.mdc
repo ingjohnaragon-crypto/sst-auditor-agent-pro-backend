@@ -47,4 +47,4 @@ layout/     Shell, navigation, header components
 
 ## Git Workflow
 - Branch naming: `feature/<ticket-id>-frontend`
-- Commits: English, conventional commits
+- Commits: project's configured language, conventional commits

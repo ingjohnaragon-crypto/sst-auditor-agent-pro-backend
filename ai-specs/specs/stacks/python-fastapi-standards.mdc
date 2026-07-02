@@ -49,4 +49,4 @@ infrastructure/ SQLAlchemy repositories + DB session + Config
 
 ## Git Workflow
 - Branch naming: `feature/<ticket-id>-backend`
-- Commits: English, conventional commits
+- Commits: project's configured language, conventional commits

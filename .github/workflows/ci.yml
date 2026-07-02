@@ -27,5 +27,29 @@ jobs:
           done
           echo "All CLI commands validated."
 
+      - name: Syntax-check shell scripts (sh -n)
+        run: |
+          status=0
+          for f in .openspec-cli/install.sh .openspec-cli/commands/os-* .openspec-cli/lib/*.sh; do
+            [ -f "$f" ] || continue
+            if ! sh -n "$f"; then
+              echo "SYNTAX ERROR: $f"
+              status=1
+            fi
+          done
+          exit $status
+
+      - name: Compile-check Python helper scripts
+        run: |
+          status=0
+          for f in .openspec-cli/lib/*.py; do
+            [ -f "$f" ] || continue
+            if ! python -m py_compile "$f"; then
+              echo "COMPILE ERROR: $f"
+              status=1
+            fi
+          done
+          exit $status
+
       - name: Run placeholder tests
         run: pytest tests/ -v
