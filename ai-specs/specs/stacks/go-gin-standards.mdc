@@ -50,4 +50,4 @@ internal/infrastructure/ GORM repository impls + DB setup + Config
 
 ## Git Workflow
 - Branch naming: `feature/<ticket-id>-backend`
-- Commits: English, conventional commits
+- Commits: project's configured language, conventional commits

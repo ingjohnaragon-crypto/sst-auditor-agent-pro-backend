@@ -58,10 +58,9 @@ Test all HTTP status codes for every new or modified endpoint:
 Document the curl commands used in a comment block in the plan file.
 
 ### Step 6 — Update technical documentation
-Run the update-docs command:
-```
-/update-docs
-```
+Follow the "## Documentation Standards" section provided in this prompt (loaded from
+`documentation-standards.mdc`) to determine what needs updating based on the changes
+made in Steps 1-5.
 Minimum files to review and update:
 - `ai-specs/specs/data-model.md` — if schema changed
 - `ai-specs/specs/api-spec.yml` — if endpoints changed
@@ -72,7 +71,7 @@ Stage only the files affected by this ticket:
 ```bash
 git add <affected files only>
 ```
-Use a descriptive commit message (conventional commits format, English):
+Use a descriptive commit message (conventional commits format, project's configured language):
 ```
 feat(<scope>): <short imperative description>
 
@@ -89,5 +88,5 @@ gh pr create --title "[<ticket-id>] <summary>" --body "<description>"
 - **Never skip Step 0** (branch) or Step 6 (docs)
 - **TDD is mandatory** — tests before implementation, always
 - **Use resolved tooling commands** from `openspec/config.yaml` — never hardcode
-- All code, comments, and commit messages must be in English
+- All code, comments, and commit messages must use the project's configured language (see "## Active Language" above)
 - Do not commit unrelated files; stage only what belongs to this ticket

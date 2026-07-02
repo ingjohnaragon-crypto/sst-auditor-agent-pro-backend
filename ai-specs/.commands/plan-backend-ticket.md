@@ -41,6 +41,17 @@ State the active stack.
 - Active stack: `<stack>` (`<label>`)
 - Layers involved and which files are affected per layer
 
+### `### Subtask Mapping`
+If the `## Subtasks` context block lists Jira subtasks, add a table mapping each
+subtask to the Implementation Step(s) below that fulfill it:
+
+| Subtask key | Summary | Implementation Step(s) |
+|---|---|---|
+| `<SUBTASK-KEY>` | `<summary>` | Step `<n>`, Step `<n>` |
+
+If the context block reports no subtasks, write: "No subtasks — plan derived
+directly from the HU."
+
 ### `## 3. Implementation Steps`
 
 #### Step 0: Create Feature Branch
