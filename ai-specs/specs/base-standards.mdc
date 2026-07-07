@@ -37,4 +37,17 @@ For detailed standards and guidelines specific to different areas of the project
 - [Backend Standards](./backend-standards.mdc) - API development, database patterns, testing, security and backend best practices
 - [Documentation Standards](./documentation-standards.mdc) - Technical documentation structure, formatting, and maintenance guidelines, including AI standards like this document
 
+## 4. Domain reference (SST)
+
+- **Normative source of truth**: [`.sst-agent-document.md`](../../.sst-agent-document.md)
+  (repo root) documents the SST domain knowledge this backend implements: the
+  PHVA cycle, Colombian regulations (Decreto 1072 de 2015, Resolución 312 de
+  2019, GTC 45:2012), risk-level calculation (`NR = NP × NC`), the hierarchy of
+  controls, and agent-specific normative rules.
+- Any business rule, domain model, validation, or endpoint touching SST
+  concepts (hazards, risks, audits, minimum standards, controls) must be
+  traceable to that document. When planning or implementing a ticket, read it
+  before inventing domain behavior; if the ticket contradicts it, flag the
+  conflict instead of guessing.
+
 
