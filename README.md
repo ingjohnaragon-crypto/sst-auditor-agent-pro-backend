@@ -155,10 +155,93 @@ open-spec-developer/
 │   └── config.yaml          # Active stack, active agent, stack registry
 ├── src/                     # Application source code
 ├── tests/                   # Test suite
-├── pytest.ini               # pytest config
+├── pyproject.toml           # pytest/coverage, ruff and mypy config
 ├── .env.example             # Environment variable template
 └── README.md                # This file
 ```
+
+---
+
+## Arquitectura del backend (`src/`)
+
+El backend de **SST Auditor Agent Pro** sigue Domain-Driven Design (DDD) con
+cuatro capas. Cada capa vive en su propio paquete bajo `src/` y tiene una
+única dirección de dependencia permitida: **de afuera hacia adentro**.
+
+```
+src/
+├── domain/                  # Reglas de negocio puras — sin FastAPI ni SQLAlchemy
+│   ├── models/               # Entidades y value objects (dataclasses)
+│   ├── repositories/         # Interfaces abstractas de persistencia (ABC)
+│   └── exceptions/            # Excepciones de negocio (DomainException y subclases)
+├── application/              # Casos de uso — orquestan dominio + repositorios
+│   ├── services/              # Servicios de aplicación (un caso de uso por método)
+│   ├── dto/                   # Esquemas Pydantic de entrada/salida (Request/Response)
+│   └── mappers/                # Transformaciones modelo de dominio <-> DTO
+├── presentation/              # Capa HTTP — FastAPI
+│   ├── routers/                # APIRouter por dominio + router agregador (api_router)
+│   ├── dependencies/            # Fábricas de Depends() para inyección de dependencias
+│   └── exception_handlers/      # Manejadores globales de excepciones registrados en `app`
+├── infrastructure/            # Implementaciones concretas de las interfaces del dominio
+│   ├── repositories/            # Repositorios SQLAlchemy que implementan domain/repositories
+│   ├── database/                 # Engine asíncrono y fábrica de sesiones de SQLAlchemy
+│   └── config/                    # Configuración tipada (Settings, Pydantic BaseSettings)
+└── main.py                     # Composition root — instancia FastAPI, registra handlers y monta el router raíz
+```
+
+### Reglas de dependencia entre capas
+
+- **`domain/`** no importa nada de `application/`, `presentation/` ni
+  `infrastructure/`, y tampoco depende de FastAPI ni de SQLAlchemy. Es Python
+  puro.
+- **`application/`** depende solo de `domain/` (a través de las interfaces de
+  repositorio) y de Pydantic para los DTO. No importa FastAPI ni SQLAlchemy.
+- **`presentation/`** depende de `application/` (servicios) y usa FastAPI para
+  exponer HTTP. Los routers son delgados: validan con Pydantic, llaman al
+  servicio y devuelven la respuesta.
+- **`infrastructure/`** implementa las interfaces definidas en `domain/`
+  (por ejemplo, un repositorio SQLAlchemy que hereda de una ABC de
+  `domain/repositories/`) y provee la configuración y el acceso a datos.
+
+### Cómo agregar un nuevo dominio (por ejemplo, `audits`)
+
+1. Crear el modelo de dominio en `src/domain/models/audit.py` y, si aplica,
+   la interfaz de repositorio en `src/domain/repositories/audit_repository.py`.
+2. Crear el servicio de aplicación en
+   `src/application/services/audit_service.py` y sus DTO en
+   `src/application/dto/audit_dto.py`.
+3. Crear `src/presentation/routers/audits_router.py` con su propio
+   `APIRouter`.
+4. Registrarlo en el router agregador
+   (`src/presentation/routers/__init__.py`) con una sola línea:
+
+   ```python
+   from src.presentation.routers.audits_router import router as audits_router
+
+   api_router.include_router(
+       audits_router, prefix=f"{settings.api_prefix}/audits", tags=["Audits"]
+   )
+   ```
+
+   No es necesario tocar `src/main.py`.
+5. Si el dominio requiere persistencia, implementar el repositorio SQLAlchemy
+   en `src/infrastructure/repositories/` y el modelo ORM en
+   `src/infrastructure/database/`.
+
+### Configuración (`Settings`)
+
+`src/infrastructure/config/settings.py` expone una clase `Settings`
+(Pydantic `BaseSettings`) cargada desde variables de entorno o desde `.env`:
+
+| Variable | Descripción | Valor por defecto |
+| --- | --- | --- |
+| `APP_NAME` | Nombre de la aplicación | `SST Auditor Agent Pro` |
+| `APP_VERSION` | Versión de la aplicación | `0.1.0` |
+| `API_PREFIX` | Prefijo de los endpoints de dominio | `/api/v1` |
+
+Se accede vía inyección de dependencias con
+`Depends(get_settings)` (ver `src/presentation/routers/health_router.py`
+como plantilla de referencia).
 
 ---
 

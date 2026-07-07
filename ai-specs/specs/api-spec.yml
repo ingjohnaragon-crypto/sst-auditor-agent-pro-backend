@@ -1,0 +1,30 @@
+openapi: 3.0.3
+info:
+  title: SST Auditor Agent Pro — Backend API
+  version: "0.1.0"
+  description: >
+    Especificación de referencia de los endpoints expuestos por el backend.
+    Se actualiza en cada ticket que agregue o modifique endpoints.
+paths:
+  /health:
+    get:
+      summary: Verifica que la aplicación y el enrutador raíz están operativos
+      tags: [Health]
+      responses:
+        "200":
+          description: La aplicación está operativa
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, app, version]
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  app:
+                    type: string
+                    example: SST Auditor Agent Pro
+                  version:
+                    type: string
+                    example: "0.1.0"
