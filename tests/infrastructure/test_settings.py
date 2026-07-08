@@ -12,6 +12,22 @@ def test_should_load_default_values_when_no_env_vars_are_set() -> None:
     assert settings.api_prefix == "/api/v1"
 
 
+def test_should_usar_log_level_info_por_defecto() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.log_level == "INFO"
+
+
+def test_should_leer_log_level_desde_entorno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("LOG_LEVEL", "DEBUG")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.log_level == "DEBUG"
+
+
 def test_should_override_values_from_environment_variables(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

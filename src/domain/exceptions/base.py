@@ -8,7 +8,7 @@ class DomainException(Exception):
     o sobreescribirlos por instancia al construir la excepción.
     """
 
-    code: str = "DOMAIN_ERROR"
+    code: str = "ERROR_DOMINIO"
     http_status: int = 400
 
     def __init__(

@@ -1,0 +1,287 @@
+# Enriched Ticket: SP-138 — Implementar middleware global de control de errores
+
+## Original Description
+
+Configurar el formateo estándar de excepciones HTTP del backend.
+
+## Enhanced Description
+
+Como consumidor del API del backend **SST Auditor Agent Pro**, quiero que toda respuesta
+fallida (error de dominio, error de validación, error HTTP genérico o error inesperado)
+tenga un **formato JSON único y predecible**, para poder manejar los errores de forma
+uniforme desde cualquier cliente y facilitar el diagnóstico en producción.
+
+### Contexto del código actual (punto de partida)
+
+El ticket SP-137 ya dejó una base parcial que **este ticket debe completar y unificar**:
+
+- `src/domain/exceptions/base.py` — clase `DomainException` con atributos `code`
+  (por defecto `"DOMAIN_ERROR"`), `http_status` (por defecto `400`) y `message`.
+- `src/presentation/exception_handlers/domain_handler.py` — manejador de
+  `DomainException` que responde `{"success": false, "code": ..., "message": ...}`.
+- `src/presentation/exception_handlers/validation_handler.py` — manejador de
+  `RequestValidationError` que responde `{"success": false, "code": "VALIDATION_ERROR", "details": [...]}`.
+- `src/main.py` — registra ambos manejadores directamente sobre la instancia `app`.
+
+Problemas a resolver:
+
+1. **Esquema inconsistente**: el manejador de dominio devuelve `message` pero no
+   `details`; el de validación devuelve `details` pero no `message`. No existe un DTO
+   Pydantic que formalice el contrato de error.
+2. **Cobertura incompleta**: una `HTTPException` de Starlette/FastAPI (p. ej. un 404 de
+   ruta inexistente o un 405 de método no permitido) y cualquier `Exception` no
+   controlada devuelven hoy el formato por defecto de FastAPI (`{"detail": ...}`) o un
+   500 en texto plano, rompiendo la uniformidad.
+3. **Sin observabilidad**: los errores inesperados (500) no dejan traza en el log, lo
+   que impide diagnosticarlos en producción.
+
+### Alcance de la solución
+
+1. **Esquema único de error** (`RespuestaError`, Pydantic v2) con los campos `exito`
+   (siempre `false`), `codigo`, `mensaje` y `detalle` (opcional). Se actualizan los dos
+   manejadores existentes y sus tests para emitir este esquema, y los códigos de error
+   se estandarizan en español: `ERROR_DOMINIO`, `ERROR_VALIDACION`, `ERROR_HTTP`,
+   `ERROR_INTERNO`.
+2. **Manejadores nuevos** para `StarletteHTTPException` (conserva el `status_code`
+   original) y para `Exception` (responde 500 con mensaje genérico, sin filtrar detalles
+   internos).
+3. **Registro centralizado**: una función `registrar_manejadores_excepciones(app)` en
+   `src/presentation/exception_handlers/__init__.py` que registra los cuatro
+   manejadores, dejando `src/main.py` con una sola llamada.
+4. **Logging estructurado**: configuración de `logging` estándar de Python (nivel
+   configurable vía `Settings.log_level`, por defecto `INFO`) y registro con
+   `logger.exception(...)` (método HTTP + ruta) en el manejador de errores no
+   controlados. Los errores de dominio y validación se registran a nivel `WARNING`
+   sin traza.
+
+**Fuera de alcance**: middlewares ASGI personalizados (los exception handlers de
+FastAPI son suficientes y más idiomáticos), integración con APM/Sentry, y persistencia
+de errores en base de datos.
+
+## Acceptance Criteria
+
+- [ ] Toda respuesta de error del API (4xx y 5xx) cumple el esquema
+      `{"exito": false, "codigo": str, "mensaje": str, "detalle": list | dict | null}`.
+- [ ] Una `DomainException` responde con su `http_status` y código `ERROR_DOMINIO`
+      (o el código específico de la subclase), incluyendo `mensaje`.
+- [ ] Un `RequestValidationError` responde 422 con código `ERROR_VALIDACION` y los
+      errores de Pydantic serializados en `detalle`.
+- [ ] Una `HTTPException` (p. ej. GET a ruta inexistente → 404) responde con el
+      esquema único y código `ERROR_HTTP`, conservando el `status_code` original.
+- [ ] Cualquier `Exception` no controlada responde 500 con código `ERROR_INTERNO` y un
+      mensaje genérico ("Ha ocurrido un error interno. Contacte al administrador."),
+      **sin exponer** la traza, el tipo de excepción ni rutas de archivos.
+- [ ] El error no controlado queda registrado en el log con nivel `ERROR`, traza
+      completa (`logger.exception`), método HTTP y ruta de la petición.
+- [ ] El nivel de log es configurable vía la variable de entorno `LOG_LEVEL`
+      (campo `log_level` en `Settings`, por defecto `INFO`).
+- [ ] `src/main.py` registra todos los manejadores mediante una única llamada a
+      `registrar_manejadores_excepciones(app)`.
+- [ ] El endpoint `/health` sigue respondiendo 200 con su contrato actual (sin regresión).
+- [ ] `ruff` y `mypy --strict` pasan sin errores; cobertura de pruebas ≥ 90 %.
+- [ ] La especificación del API (`ai-specs`) incorpora el componente `RespuestaError`
+      como esquema reutilizable para respuestas de error.
+
+## Fields & Endpoints
+
+Este ticket **no crea endpoints nuevos**: define el contrato transversal de error que
+aplica a todas las rutas presentes y futuras.
+
+### Esquema único de error — `RespuestaError`
+
+| Campo | Tipo | Obligatorio | Descripción |
+|---|---|---|---|
+| `exito` | `bool` | Sí | Siempre `false` en respuestas de error. |
+| `codigo` | `str` | Sí | Código estable en mayúsculas: `ERROR_DOMINIO`, `ERROR_VALIDACION`, `ERROR_HTTP`, `ERROR_INTERNO` o el código específico de una subclase de `DomainException`. |
+| `mensaje` | `str` | Sí | Descripción legible del error, en español. |
+| `detalle` | `list \| dict \| null` | No | Información adicional (p. ej. errores de campo de Pydantic). `null` cuando no aplica. |
+
+### Mapeo excepción → respuesta
+
+| Excepción capturada | Status HTTP | `codigo` | `detalle` |
+|---|---|---|---|
+| `DomainException` (y subclases) | `exc.http_status` | `exc.code` (por defecto `ERROR_DOMINIO`) | `null` |
+| `RequestValidationError` | 422 | `ERROR_VALIDACION` | `jsonable_encoder(exc.errors())` |
+| `StarletteHTTPException` | `exc.status_code` | `ERROR_HTTP` | `null` |
+| `Exception` (no controlada) | 500 | `ERROR_INTERNO` | `null` |
+
+### Ejemplos
+
+```json
+// 422 — validación
+{
+  "exito": false,
+  "codigo": "ERROR_VALIDACION",
+  "mensaje": "La petición contiene datos inválidos.",
+  "detalle": [{"loc": ["body", "name"], "msg": "Field required", "type": "missing"}]
+}
+
+// 500 — error no controlado
+{
+  "exito": false,
+  "codigo": "ERROR_INTERNO",
+  "mensaje": "Ha ocurrido un error interno. Contacte al administrador.",
+  "detalle": null
+}
+```
+
+## Files to Create or Modify
+
+| File | Layer | Action |
+|---|---|---|
+| `src/application/dto/respuesta_error.py` | Application | Create — DTO Pydantic `RespuestaError` (`exito`, `codigo`, `mensaje`, `detalle`). |
+| `src/application/dto/__init__.py` | Application | Modify — exportar `RespuestaError`. |
+| `src/domain/exceptions/base.py` | Domain | Modify — código por defecto `"DOMAIN_ERROR"` → `"ERROR_DOMINIO"`. |
+| `src/presentation/exception_handlers/domain_handler.py` | Presentation | Modify — emitir `RespuestaError` y log `WARNING`. |
+| `src/presentation/exception_handlers/validation_handler.py` | Presentation | Modify — emitir `RespuestaError` (agregar `mensaje`; `details` → `detalle`) y log `WARNING`. |
+| `src/presentation/exception_handlers/http_handler.py` | Presentation | Create — manejador de `StarletteHTTPException` con código `ERROR_HTTP`. |
+| `src/presentation/exception_handlers/no_controlado_handler.py` | Presentation | Create — manejador de `Exception`: `logger.exception` + respuesta 500 genérica. |
+| `src/presentation/exception_handlers/__init__.py` | Presentation | Modify — función `registrar_manejadores_excepciones(app: FastAPI) -> None`. |
+| `src/infrastructure/config/configuracion_logging.py` | Infrastructure | Create — `configurar_logging(nivel: str) -> None` con formato `%(asctime)s %(levelname)s %(name)s %(message)s`. |
+| `src/infrastructure/config/settings.py` | Infrastructure | Modify — campo `log_level: str = "INFO"`. |
+| `src/main.py` | Presentation (composición) | Modify — llamar `configurar_logging(settings.log_level)` y `registrar_manejadores_excepciones(app)`. |
+| `tests/presentation/test_exception_handlers.py` | Tests | Modify — adaptar al esquema nuevo y cubrir los cuatro manejadores. |
+| `tests/infrastructure/test_configuracion_logging.py` | Tests | Create — pruebas de nivel de log y formato. |
+| `tests/infrastructure/test_settings.py` | Tests | Modify — cubrir `log_level` (valor por defecto y lectura de entorno). |
+
+## Unit Test Cases
+
+- **Camino feliz (dominio)**: `test_should_devolver_esquema_error_cuando_se_lanza_domain_exception`
+  — lanzar `DomainException("recurso no encontrado", code="NOT_FOUND", http_status=404)`
+  y verificar status 404 y cuerpo `{exito, codigo, mensaje, detalle}`.
+- **Validación**: `test_should_devolver_error_validacion_cuando_payload_es_invalido`
+  — POST con cuerpo vacío → 422, `codigo == "ERROR_VALIDACION"`, `detalle` lista no vacía.
+- **HTTP genérico**: `test_should_devolver_esquema_error_cuando_ruta_no_existe`
+  — GET a `/no-existe` → 404 con `codigo == "ERROR_HTTP"` (usa el manejador de `StarletteHTTPException`).
+- **Error no controlado**: `test_should_devolver_500_generico_cuando_excepcion_no_controlada`
+  — endpoint de prueba que lanza `RuntimeError`; usar
+  `TestClient(app, raise_server_exceptions=False)`; verificar 500, `codigo == "ERROR_INTERNO"`
+  y que el cuerpo **no** contiene el texto de la excepción original.
+- **Logging del 500**: `test_should_registrar_traza_cuando_excepcion_no_controlada`
+  — con `caplog` verificar registro nivel `ERROR` que incluye método, ruta y traza.
+- **Sin fuga de información**: `test_should_no_exponer_traza_en_respuesta_cuando_falla_interno`
+  — el cuerpo del 500 no contiene `Traceback`, nombres de archivo ni el mensaje interno.
+- **Configuración**: `test_should_usar_nivel_info_cuando_log_level_no_definido` y
+  `test_should_aplicar_nivel_debug_cuando_log_level_es_debug` (leer `LOG_LEVEL` del entorno).
+- **Regresión**: `test_should_responder_ok_cuando_se_consulta_health` sigue pasando sin cambios de contrato.
+
+## Non-Functional Requirements
+
+- **Seguridad**: las respuestas 500 nunca exponen trazas, tipos de excepción, consultas
+  SQL ni rutas del sistema de archivos; el detalle completo vive solo en el log. No
+  registrar datos sensibles (tokens, credenciales, cuerpos de petición) en los mensajes de log.
+- **Observabilidad**: todo error 5xx queda trazado con `logger.exception` (traza completa,
+  método y ruta); errores 4xx esperados se registran a nivel `WARNING` sin traza para no
+  contaminar el log.
+- **Rendimiento**: los manejadores son funciones `async` sin I/O adicional; impacto
+  despreciable por petición. No serializar `exc.errors()` más de una vez.
+- **Arquitectura**: `DomainException` permanece pura (sin imports de FastAPI); los
+  manejadores viven en `presentation/exception_handlers/`; la configuración de logging
+  en `infrastructure/config/`. Cumplir mypy `--strict` (type hints en todas las firmas) y ruff.
+- **Compatibilidad**: el cambio de esquema (`success/code/message` → `exito/codigo/mensaje/detalle`)
+  es una ruptura de contrato aceptable en `0.1.0` porque aún no hay consumidores externos;
+  debe reflejarse en la especificación OpenAPI de `ai-specs`.
+
+## Subtasks
+
+<!-- SUBTASK:SP-167 -->
+### Subtask: SP-167 — Crear middleware de manejo global de excepciones
+
+#### Original Description
+Implementar exception handler centralizado para capturar errores HTTP y de validación.
+
+#### Enhanced Description
+Completar la cobertura de manejadores globales de excepciones de la aplicación y
+centralizar su registro. Ya existen `domain_handler.py` y `validation_handler.py`
+(SP-137); esta subtarea agrega los dos manejadores faltantes y el punto único de registro:
+
+1. Crear `src/presentation/exception_handlers/http_handler.py` con
+   `http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse`:
+   responde con `exc.status_code`, código `ERROR_HTTP` y `str(exc.detail)` como mensaje.
+   Importar `HTTPException` desde `starlette.exceptions` para capturar también los
+   404/405 generados por el propio enrutador.
+2. Crear `src/presentation/exception_handlers/no_controlado_handler.py` con
+   `excepcion_no_controlada_handler(request: Request, exc: Exception) -> JSONResponse`:
+   responde 500 con código `ERROR_INTERNO` y mensaje genérico, sin datos internos.
+3. Crear `registrar_manejadores_excepciones(app: FastAPI) -> None` en
+   `src/presentation/exception_handlers/__init__.py` que registre los cuatro manejadores
+   (`DomainException`, `RequestValidationError`, `StarletteHTTPException`, `Exception`).
+4. Reemplazar en `src/main.py` las dos llamadas `app.exception_handler(...)` por una
+   sola llamada a `registrar_manejadores_excepciones(app)`.
+
+Nota técnica: para probar el manejador de `Exception` con `TestClient` se debe
+instanciar con `raise_server_exceptions=False`.
+
+#### Acceptance Criteria
+- [ ] GET a una ruta inexistente responde 404 con el esquema único y `codigo == "ERROR_HTTP"`.
+- [ ] Una excepción no controlada en un endpoint responde 500 con `codigo == "ERROR_INTERNO"` y mensaje genérico.
+- [ ] `src/main.py` registra todos los manejadores con una única llamada a `registrar_manejadores_excepciones(app)`.
+- [ ] Los cuatro manejadores tienen pruebas en `tests/presentation/test_exception_handlers.py` (AAA, `test_should_..._when_...`).
+- [ ] mypy `--strict` y ruff pasan; cobertura ≥ 90 %.
+<!-- /SUBTASK:SP-167 -->
+
+<!-- SUBTASK:SP-168 -->
+### Subtask: SP-168 — Estandarizar formato de respuesta de error (JSON)
+
+#### Original Description
+Definir esquema único de error (código, mensaje, detalle) para todas las respuestas fallidas del API.
+
+#### Enhanced Description
+Formalizar el contrato de error en un DTO Pydantic y hacer que **todos** los manejadores
+lo emitan, eliminando las divergencias actuales (`message` sin `details` en el manejador
+de dominio, `details` sin `message` en el de validación):
+
+1. Crear `src/application/dto/respuesta_error.py` con la clase `RespuestaError(BaseModel)`:
+   `exito: bool = False`, `codigo: str`, `mensaje: str`,
+   `detalle: list[dict[str, object]] | dict[str, object] | None = None`.
+   Exportarla en `src/application/dto/__init__.py`.
+2. Actualizar `domain_handler.py` y `validation_handler.py` para construir la respuesta
+   con `RespuestaError(...).model_dump()` (la clave `details` pasa a `detalle`; el
+   manejador de validación agrega `mensaje = "La petición contiene datos inválidos."`).
+3. Estandarizar los códigos en español: cambiar el valor por defecto de
+   `DomainException.code` en `src/domain/exceptions/base.py` de `"DOMAIN_ERROR"` a
+   `"ERROR_DOMINIO"`, y usar `ERROR_VALIDACION`, `ERROR_HTTP`, `ERROR_INTERNO` en los
+   manejadores correspondientes.
+4. Actualizar las aserciones de `tests/presentation/test_exception_handlers.py` al
+   esquema nuevo y registrar el componente `RespuestaError` en la especificación
+   OpenAPI de `ai-specs` como respuesta por defecto de error.
+
+#### Acceptance Criteria
+- [ ] Existe el DTO `RespuestaError` con type hints completos y validación Pydantic v2.
+- [ ] Las cuatro respuestas de error (dominio, validación, HTTP, interna) serializan exactamente `{exito, codigo, mensaje, detalle}`.
+- [ ] `DomainException` sin código explícito produce `codigo == "ERROR_DOMINIO"`.
+- [ ] El error de validación incluye `mensaje` legible y los errores de Pydantic en `detalle`.
+- [ ] La especificación del API en `ai-specs` documenta el esquema `RespuestaError`.
+<!-- /SUBTASK:SP-168 -->
+
+<!-- SUBTASK:SP-169 -->
+### Subtask: SP-169 — Agregar logging de errores no controlados
+
+#### Original Description
+Registrar trazas de excepciones inesperadas para facilitar diagnóstico en producción.
+
+#### Enhanced Description
+Configurar el logging de la aplicación y trazar los errores capturados por los
+manejadores globales:
+
+1. Crear `src/infrastructure/config/configuracion_logging.py` con
+   `configurar_logging(nivel: str = "INFO") -> None` que invoque `logging.basicConfig`
+   con formato `"%(asctime)s %(levelname)s %(name)s %(message)s"` y el nivel recibido
+   (validar con `logging.getLevelName`; ante un nivel inválido usar `INFO`).
+2. Agregar `log_level: str = "INFO"` a `Settings`
+   (`src/infrastructure/config/settings.py`), configurable vía variable de entorno
+   `LOG_LEVEL`, y documentarla en `.env.example` si el archivo existe.
+3. Invocar `configurar_logging(settings.log_level)` en `src/main.py` antes de crear la app.
+4. En `no_controlado_handler.py` obtener `logger = logging.getLogger(__name__)` y
+   registrar con `logger.exception("Error no controlado en %s %s", request.method, request.url.path)`
+   — esto captura la traza completa. En los manejadores de dominio y validación
+   registrar a nivel `WARNING` (sin traza) con código y ruta.
+5. No registrar cuerpos de petición, cabeceras ni datos sensibles.
+
+#### Acceptance Criteria
+- [ ] Un error no controlado genera un registro de nivel `ERROR` con traza completa, método HTTP y ruta.
+- [ ] Los errores de dominio y validación se registran a nivel `WARNING` sin traza.
+- [ ] El nivel de log se controla con `LOG_LEVEL` (por defecto `INFO`); un valor inválido degrada a `INFO` sin romper el arranque.
+- [ ] Ningún registro contiene cuerpos de petición, cabeceras ni credenciales.
+- [ ] Pruebas con `caplog` en `tests/infrastructure/test_configuracion_logging.py` y en las pruebas de manejadores; cobertura ≥ 90 %.
+<!-- /SUBTASK:SP-169 -->

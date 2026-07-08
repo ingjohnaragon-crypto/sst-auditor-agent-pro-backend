@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: SST Auditor Agent Pro — Backend API
   version: "0.1.0"
@@ -28,3 +28,65 @@ paths:
                   version:
                     type: string
                     example: "0.1.0"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+components:
+  schemas:
+    RespuestaError:
+      type: object
+      description: >
+        Contrato único de toda respuesta de error del API (4xx y 5xx).
+        Todas las rutas presentes y futuras responden errores con este esquema.
+      required: [exito, codigo, mensaje]
+      properties:
+        exito:
+          type: boolean
+          description: Siempre `false` en respuestas de error.
+          example: false
+        codigo:
+          type: string
+          description: >
+            Código estable en mayúsculas: ERROR_DOMINIO, ERROR_VALIDACION,
+            ERROR_HTTP, ERROR_INTERNO o el código específico de una subclase
+            de DomainException.
+          example: ERROR_VALIDACION
+        mensaje:
+          type: string
+          description: Descripción legible del error, en español.
+          example: La petición contiene datos inválidos.
+        detalle:
+          description: >
+            Información adicional (p. ej. errores de campo de Pydantic).
+            `null` cuando no aplica.
+          oneOf:
+            - type: array
+              items:
+                type: object
+            - type: object
+            - type: "null"
+  responses:
+    ErrorPorDefecto:
+      description: Respuesta de error con el esquema único `RespuestaError`.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/RespuestaError"
+          examples:
+            errorValidacion:
+              summary: 422 — error de validación
+              value:
+                exito: false
+                codigo: ERROR_VALIDACION
+                mensaje: La petición contiene datos inválidos.
+                detalle:
+                  - loc: [body, name]
+                    msg: Field required
+                    type: missing
+            errorInterno:
+              summary: 500 — error no controlado
+              value:
+                exito: false
+                codigo: ERROR_INTERNO
+                mensaje: Ha ocurrido un error interno. Contacte al administrador.
+                detalle: null
