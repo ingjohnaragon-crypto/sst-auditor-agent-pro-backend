@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     app_name: str = "SST Auditor Agent Pro"
     app_version: str = "0.1.0"
     api_prefix: str = "/api/v1"
+    log_level: str = "INFO"
 
 
 @lru_cache
