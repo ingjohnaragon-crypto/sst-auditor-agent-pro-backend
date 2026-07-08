@@ -255,15 +255,15 @@ if [ "$AUTO_COMMIT" = "true" ]; then
   fi
 
   # ── Save fix report ─────────────────────────────────────────
-  CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes"
-  mkdir -p "$CHANGES_DIR"
   if [ -n "$TICKET_ID" ]; then
+    CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes/reviews/${TICKET_ID}"
+    mkdir -p "$CHANGES_DIR"
     FIX_REPORT_FILE="$CHANGES_DIR/${TICKET_ID}_fix.md"
     cat > "$FIX_REPORT_FILE" << FIX_EOF
 # Review Fix Report: PR #$PR_NUMBER
 
 ## Original Verdict
-REQUEST CHANGES — see \`ai-specs/changes/${TICKET_ID}_review.md\`
+REQUEST CHANGES — see \`ai-specs/changes/reviews/${TICKET_ID}/${TICKET_ID}_review.md\`
 
 ## Issues Addressed
 Fixes applied to issues identified in the review.
@@ -276,7 +276,7 @@ See git diff for specific changes.
 ## Verdict After Fixes
 READY FOR RE-REVIEW
 FIX_EOF
-    os_info "Fix report: ai-specs/changes/${TICKET_ID}_fix.md"
+    os_info "Fix report: ai-specs/changes/reviews/${TICKET_ID}/${TICKET_ID}_fix.md"
   fi
 fi
 

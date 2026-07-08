@@ -95,7 +95,7 @@ PROMPT_FILE="$OS_REPO_ROOT/.openspec-cli/.last-prompt.md"
 OUTPUT_FILE="$OS_REPO_ROOT/.openspec-cli/.enriched-content.md"
 printf '%s' "$PROMPT" > "$PROMPT_FILE"
 
-CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes"
+CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes/enriquecimientos/${TICKET_ID}"
 ARCHIVE_FILE="$CHANGES_DIR/${TICKET_ID}_enriched.md"
 mkdir -p "$CHANGES_DIR"
 rm -f "$ARCHIVE_FILE"
@@ -117,7 +117,7 @@ else
 fi
 os_success "Enriched content saved!"
 os_info "Working : .openspec-cli/.enriched-content.md"
-os_info "Archive : ai-specs/changes/${TICKET_ID}_enriched.md"
+os_info "Archive : ai-specs/changes/enriquecimientos/${TICKET_ID}/${TICKET_ID}_enriched.md"
 os_divider
 os_info "Preview (first 10 lines):"
 head -10 "$OUTPUT_FILE"
