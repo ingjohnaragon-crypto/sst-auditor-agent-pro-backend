@@ -14,15 +14,25 @@ from src.application.dto.respuesta_error import RespuestaError
 
 logger = logging.getLogger(__name__)
 
+MENSAJE_HTTP_GENERICO = "La petición HTTP no pudo completarse."
+
 
 async def http_exception_handler(
     request: Request, exc: StarletteHTTPException
 ) -> JSONResponse:
     """Convierte cualquier `HTTPException` en la respuesta JSON única, conservando su status."""
     logger.warning(
-        "Error HTTP %s ERROR_HTTP en %s %s", exc.status_code, request.method, request.url.path
+        "Error HTTP %s (ERROR_HTTP) en %s %s", exc.status_code, request.method, request.url.path
     )
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=RespuestaError(codigo="ERROR_HTTP", mensaje=str(exc.detail)).model_dump(),
-    )
+    # FastAPI permite `detail` no textual (dict, list, etc.); un str(...) directo
+    # produciría un repr de Python en `mensaje`, así que lo enviamos en `detalle`.
+    detalle_crudo: object = exc.detail
+    if isinstance(detalle_crudo, str):
+        respuesta = RespuestaError(codigo="ERROR_HTTP", mensaje=detalle_crudo)
+    elif isinstance(detalle_crudo, dict | list):
+        respuesta = RespuestaError(
+            codigo="ERROR_HTTP", mensaje=MENSAJE_HTTP_GENERICO, detalle=detalle_crudo
+        )
+    else:
+        respuesta = RespuestaError(codigo="ERROR_HTTP", mensaje=str(detalle_crudo))
+    return JSONResponse(status_code=exc.status_code, content=respuesta.model_dump())

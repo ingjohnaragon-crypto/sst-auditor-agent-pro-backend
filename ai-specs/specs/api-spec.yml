@@ -1,4 +1,4 @@
-openapi: 3.0.3
+openapi: 3.1.0
 info:
   title: SST Auditor Agent Pro — Backend API
   version: "0.1.0"
@@ -59,12 +59,12 @@ components:
           description: >
             Información adicional (p. ej. errores de campo de Pydantic).
             `null` cuando no aplica.
-          nullable: true
           oneOf:
             - type: array
               items:
                 type: object
             - type: object
+            - type: "null"
   responses:
     ErrorPorDefecto:
       description: Respuesta de error con el esquema único `RespuestaError`.

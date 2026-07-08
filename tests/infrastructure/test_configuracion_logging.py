@@ -12,11 +12,17 @@ from src.infrastructure.config.configuracion_logging import (
 
 @pytest.fixture(autouse=True)
 def _restaurar_logging() -> Iterator[None]:
+    # `basicConfig(force=True)` cierra los handlers previos del root logger, así que
+    # reinstalarlos sería frágil: solo retiramos los que creó la prueba y dejamos
+    # que pytest vuelva a instalar los suyos en la siguiente fase.
     raiz = logging.getLogger()
     nivel_original = raiz.level
-    handlers_originales = raiz.handlers[:]
+    handlers_previos = raiz.handlers[:]
     yield
-    raiz.handlers = handlers_originales
+    for handler in raiz.handlers[:]:
+        if handler not in handlers_previos:
+            raiz.removeHandler(handler)
+            handler.close()
     raiz.setLevel(nivel_original)
 
 
@@ -51,5 +57,17 @@ def test_should_configurar_formato_esperado() -> None:
     assert len(raiz.handlers) > 0
     formateador = raiz.handlers[0].formatter
     assert formateador is not None
-    assert formateador._fmt == FORMATO_LOG
+    # Se formatea un registro sintético en lugar de inspeccionar internals
+    # (`_fmt`) del módulo `logging`.
+    registro = logging.LogRecord(
+        name="prueba.logger",
+        level=logging.INFO,
+        pathname=__file__,
+        lineno=1,
+        msg="mensaje de prueba",
+        args=None,
+        exc_info=None,
+    )
+    salida = formateador.format(registro)
+    assert salida.endswith("INFO prueba.logger mensaje de prueba")
     assert FORMATO_LOG == "%(asctime)s %(levelname)s %(name)s %(message)s"

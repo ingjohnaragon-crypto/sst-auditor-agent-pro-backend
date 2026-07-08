@@ -3,11 +3,12 @@
 import logging
 
 import pytest
-from fastapi import APIRouter, FastAPI
+from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.testclient import TestClient
 from pydantic import BaseModel
 from src.domain.exceptions.base import DomainException
 from src.presentation.exception_handlers import registrar_manejadores_excepciones
+from src.presentation.exception_handlers.http_handler import MENSAJE_HTTP_GENERICO
 
 
 class _CargaDePrueba(BaseModel):
@@ -35,6 +36,14 @@ def _construir_app_de_prueba() -> FastAPI:
     @router.get("/lanzar-error-interno")
     async def lanzar_error_interno() -> None:
         raise RuntimeError("secreto interno")
+
+    @router.get("/lanzar-error-http-detalle-dict")
+    async def lanzar_error_http_detalle_dict() -> None:
+        raise HTTPException(status_code=409, detail={"clave": "valor"})
+
+    @router.get("/lanzar-error-http-detalle-numerico")
+    async def lanzar_error_http_detalle_numerico() -> None:
+        raise HTTPException(status_code=418, detail=123)
 
     test_app.include_router(router)
     return test_app
@@ -98,6 +107,34 @@ def test_should_devolver_esquema_error_cuando_ruta_no_existe(
     assert body["codigo"] == "ERROR_HTTP"
     assert isinstance(body["mensaje"], str)
     assert body["detalle"] is None
+
+
+def test_should_enviar_detail_en_detalle_cuando_detail_http_no_es_texto(
+    client: TestClient,
+) -> None:
+    response = client.get("/lanzar-error-http-detalle-dict")
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "exito": False,
+        "codigo": "ERROR_HTTP",
+        "mensaje": MENSAJE_HTTP_GENERICO,
+        "detalle": {"clave": "valor"},
+    }
+
+
+def test_should_convertir_detail_a_texto_cuando_detail_http_es_escalar(
+    client: TestClient,
+) -> None:
+    response = client.get("/lanzar-error-http-detalle-numerico")
+
+    assert response.status_code == 418
+    assert response.json() == {
+        "exito": False,
+        "codigo": "ERROR_HTTP",
+        "mensaje": "123",
+        "detalle": None,
+    }
 
 
 def test_should_devolver_500_generico_cuando_excepcion_no_controlada(
