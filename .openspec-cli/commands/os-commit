@@ -247,7 +247,7 @@ os_divider
 
 # ── Save commit record ────────────────────────────────────────
 if [ -n "$TICKET_ID" ]; then
-  CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes"
+  CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes/commits/${TICKET_ID}"
   mkdir -p "$CHANGES_DIR"
   COMMIT_FILE="$CHANGES_DIR/${TICKET_ID}_commit.md"
   PR_NUMBER=$(echo "$PR_URL" | grep -oE '[0-9]+$' || echo "?")
@@ -277,6 +277,6 @@ $(echo "$STAGED" | sed 's/^/- /')
 - [ ] \`os-transition $TICKET_ID "In Review"\` — update Jira
 RECORD_EOF
 
-  os_info "Commit record: ai-specs/changes/${TICKET_ID}_commit.md"
+  os_info "Commit record: ai-specs/changes/commits/${TICKET_ID}/${TICKET_ID}_commit.md"
   os_divider
 fi

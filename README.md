@@ -1,174 +1,60 @@
-# OpenSpec Developer — Spec-Driven AI Development Platform
+# SST Auditor Agent Pro — Backend
 
-OpenSpec connects your project management tool (Jira), your codebase, and your AI agent
-(Copilot, Claude Code, Cursor, etc.) into a single coherent workflow — driven by specs
-and standards, not by improvisation.
+Backend en **Python 3.12 + FastAPI** del agente auditor de Seguridad y Salud en el
+Trabajo (SST). Implementa la API que soporta la auditoría del SG-SST bajo la
+normativa colombiana (Decreto 1072 de 2015, Resolución 312 de 2019, GTC 45:2012),
+estructurada según el ciclo PHVA (Planear, Hacer, Verificar, Actuar).
 
-> **This is the developer edition.** It ships with stacks for Java, Python, Node.js, Go,
-> React, and Angular. For the Thought Machine Vault Smart Contracts stack, see the
-> `spec-driven-project` repository.
-
----
-
-## The Problem
-
-Modern development teams using AI assistants face a recurring gap: the AI knows
-how to code, but it doesn't know *your* project. It doesn't know your architecture,
-your conventions, your Jira tickets, or your stack. Every prompt has to re-explain
-context that already exists somewhere — scattered across Jira, README files,
-and tribal knowledge.
-
-The result: AI output that's generic, inconsistent, and requires heavy review
-and rework before it fits your codebase.
+> **Fuente de referencia normativa:** el conocimiento de dominio del agente
+> (estándares mínimos, cálculo del nivel de riesgo GTC 45, jerarquía de
+> controles, reglas normativas específicas) está documentado en
+> [`.sst-agent-document.md`](./.sst-agent-document.md). Toda funcionalidad de
+> negocio debe ser trazable a ese documento.
 
 ---
 
-## The Solution
+## Stack
 
-OpenSpec acts as the bridge. It stores your project's architectural decisions,
-stack conventions, and quality standards as structured spec files. A lightweight
-CLI reads those specs, fetches context from Jira, and builds a complete,
-context-rich prompt — then delivers it to whatever AI agent your team uses.
-
-```
-Jira Ticket
-    +
-Project Specs (architecture, standards, conventions)
-    +
-Active Stack (Java, Python, Node, Go, Angular, React)
-    +
-Active AI Agent (Copilot, Claude Code, Cursor, Aider)
-    ↓
-One CLI command
-    ↓
-Context-rich prompt → AI generates plan / implementation / review
-```
-
----
-
-## Core Concepts
-
-### Spec-Driven Development
-All architectural decisions live in `ai-specs/specs/`. Agents read these
-before generating any output. The AI always works within your conventions —
-not against them.
-
-### Multi-Stack Support
-One repo can support multiple technology stacks. Switch between them with
-`os-stack <name>`. The active stack determines which agent file, standards,
-and tooling commands are loaded.
-
-### Multi-Agent Support
-Works with any AI agent. Switch between them with `os-agent <name>`.
-Clipboard agents (Copilot, Cursor, Windsurf) copy prompts for manual paste.
-CLI agents (Claude Code, Aider) send prompts automatically via terminal.
-
-### Jira Integration
-Every command that generates a prompt starts by fetching the real ticket
-from Jira — title, description, status, assignee. No copy-pasting context.
-
----
-
-## Supported Stacks
-
-| Stack | Technologies |
+| Componente | Tecnología |
 | --- | --- |
-| `java-spring` | Java 17, Spring Boot, Spring Data JPA, Flyway, JUnit 5 |
-| `python-fastapi` | Python 3.12, FastAPI, SQLAlchemy, Alembic, pytest |
-| `node-express` | Node.js 20, Express, TypeScript, Prisma, Jest |
-| `go-gin` | Go 1.22, Gin, GORM, golang-migrate, testify |
-| `frontend-react` | React 18, Vite, TypeScript, TanStack Query, Vitest |
-| `frontend-angular` | Angular 17, TypeScript, NgRx, Jest |
+| Lenguaje | Python 3.12 |
+| Framework HTTP | FastAPI |
+| Configuración | Pydantic Settings (variables de entorno / `.env`) |
+| Tests | pytest + pytest-cov (gate de cobertura: 90%) |
+| Calidad | ruff (lint) + mypy (modo estricto) |
+| Persistencia | SQLAlchemy asíncrono (planificado — aún no implementado) |
+
+Las versiones exactas están fijadas en [`requirements.txt`](./requirements.txt).
 
 ---
 
-## Supported AI Agents
+## Inicio rápido
 
-| Agent | Delivery |
-| --- | --- |
-| GitHub Copilot | Clipboard — paste in VS Code chat |
-| Cursor | Clipboard — paste in Cursor chat |
-| Windsurf | Clipboard — paste in Windsurf chat |
-| Claude Code | CLI — automatic via `claude` terminal command |
-| Aider | CLI — automatic via `aider` terminal command |
+```bash
+# 1. Instalar dependencias
+pip install -r requirements.txt
 
----
+# 2. Configurar variables de entorno (opcional — hay defaults)
+cp .env.example .env
 
-## CLI Commands
+# 3. Levantar la aplicación
+uvicorn src.main:app --reload
+# → http://127.0.0.1:8000/health   (prueba de vida)
+# → http://127.0.0.1:8000/docs     (Swagger UI)
 
-### Configuration
-
-| Command | What it does |
-| --- | --- |
-| `os-stack [--list\|<name>]` | List or switch active tech stack |
-| `os-agent [--list\|<name>]` | List or switch active AI agent |
-
-### Jira
-
-| Command | What it does |
-| --- | --- |
-| `os-tickets [status]` | List all project tickets, optionally filtered by status |
-| `os-create-ticket --hu` | Create a ticket with an AI-generated user story |
-| `os-create-ticket "<title>" <type>` | Create a ticket quickly (Task, Bug, Story…) |
-| `--project <KEY>` (either command) | Target a different Jira project than `JIRA_PROJECT_KEY` in `.env` |
-| `os-enrich <TICKET-ID>` | Enrich a ticket with technical detail |
-| `os-enrich-apply <TICKET-ID>` | Upload enriched content to Jira |
-| `os-transition <TICKET-ID> [--list\|<state>]` | List transitions or move ticket to a state |
-
-### Development workflow
-
-| Command | What it does |
-| --- | --- |
-| `os-plan <TICKET-ID>` | Generate an implementation plan from a Jira ticket |
-| `os-develop <TICKET-ID>` | Create feature branch + implementation prompt |
-| `os-commit <TICKET-ID>` | Commit, push and open PR → develop |
-| `os-review <PR>` | Generate a structured AI code review for a PR |
-| `os-review-apply <PR>` | Publish the review to GitHub and apply verdict |
-| `os-review-fix <PR>` | Auto-fix REQUEST CHANGES feedback, re-review and re-publish |
-
----
-
-## Project Structure
-
-```
-open-spec-developer/
-├── .openspec-cli/           # CLI commands and libraries
-│   ├── commands/            # Executable commands (os-plan, os-commit, etc.)
-│   ├── lib/                 # Shared shell and Python helpers
-│   │   ├── colors.sh        # Terminal colour helpers
-│   │   ├── config.sh        # Stack + env config loader
-│   │   ├── jira.sh          # Jira API helpers
-│   │   └── agent.sh         # Agent delivery helpers
-│   └── install.sh           # Global installer
-├── ai-specs/
-│   ├── .agents/
-│   │   └── stacks/          # Stack-specific agent files (role + conventions)
-│   ├── .commands/           # Prompt templates for each workflow step
-│   ├── changes/             # Generated implementation plans (per ticket)
-│   └── specs/
-│       ├── stacks/          # Stack-specific standards files
-│       ├── base-standards.mdc
-│       ├── api-spec.yml
-│       ├── data-model.md
-│       └── documentation-standards.mdc
-├── openspec/
-│   └── config.yaml          # Active stack, active agent, stack registry
-├── src/                     # Application source code
-├── tests/                   # Test suite
-├── pyproject.toml           # pytest/coverage, ruff and mypy config
-├── .env.example             # Environment variable template
-└── README.md                # This file
+# 4. Ejecutar la suite de tests
+pytest tests/ -v
 ```
 
 ---
 
 ## Arquitectura del backend (`src/`)
 
-El backend de **SST Auditor Agent Pro** sigue Domain-Driven Design (DDD) con
-cuatro capas. Cada capa vive en su propio paquete bajo `src/` y tiene una
-única dirección de dependencia permitida: **de afuera hacia adentro**.
+El backend sigue Domain-Driven Design (DDD) con cuatro capas. Cada capa vive en
+su propio paquete bajo `src/` y tiene una única dirección de dependencia
+permitida: **de afuera hacia adentro**.
 
-```
+```text
 src/
 ├── domain/                  # Reglas de negocio puras — sin FastAPI ni SQLAlchemy
 │   ├── models/               # Entidades y value objects (dataclasses)
@@ -245,59 +131,57 @@ como plantilla de referencia).
 
 ---
 
-## Quick Start
+## Calidad y tests
 
-```bash
-# 1. Install the CLI
-sh .openspec-cli/install.sh
-source ~/.bashrc
+Toda la configuración de tooling vive en [`pyproject.toml`](./pyproject.toml):
 
-# 2. Configure credentials
-cp .env.example .env
-# Edit .env: JIRA_BASE_URL, JIRA_EMAIL, JIRA_TOKEN
-gh auth login
+- **pytest** con cobertura obligatoria ≥ 90% (`--cov-fail-under=90`).
+- **ruff** para linting.
+- **mypy** en modo estricto.
+- Convención de tests: patrón AAA y nombres `test_should_..._when_...`.
 
-# 3. Select your stack and agent
-os-stack --list
-os-stack python-fastapi
-os-agent --list
-os-agent copilot
+El CI (`.github/workflows/ci.yml`) ejecuta la suite en cada push/PR hacia
+`main` y `develop`.
 
-# 4. Start with a ticket
-os-enrich KAN-1          # enrich ticket with technical detail
-os-plan KAN-1            # generate implementation plan
-os-develop KAN-1         # create branch + implementation
-os-commit KAN-1          # commit + PR
-os-review 1              # AI code review
-os-review-apply 1        # publish review to GitHub
+---
+
+## Estructura del repositorio
+
+```text
+├── src/                      # Código fuente de la aplicación (DDD, ver arriba)
+├── tests/                    # Suite de tests (espeja la estructura de src/)
+├── .sst-agent-document.md    # Referencia normativa del dominio SST (PHVA, GTC 45)
+├── ai-specs/                 # Specs y estándares para el flujo OpenSpec
+├── openspec/                 # Configuración y documentación del framework OpenSpec
+├── .openspec-cli/            # CLI del framework OpenSpec (comandos os-*)
+├── pyproject.toml            # Configuración de pytest, coverage, ruff y mypy
+├── requirements.txt          # Dependencias con versiones fijadas
+└── .env.example              # Plantilla de variables de entorno
 ```
 
 ---
 
-## Architecture Principles
+## Flujo de desarrollo con OpenSpec
 
-OpenSpec enforces these principles across all stacks:
+Este repositorio se desarrolla con **OpenSpec Developer**, un framework
+spec-driven que conecta Jira, el código y el agente de IA mediante los comandos
+`os-*` (`os-plan`, `os-develop`, `os-commit`, `os-review`, …).
 
-- **Domain-Driven Design (DDD)** — Domain, Application, Presentation layers
-- **Test-Driven Development (TDD)** — tests before implementation, always
-- **90% coverage threshold** — enforced per stack
-- **English only** — all code, comments, docs, and commits
-- **Conventional commits** — `feat`, `fix`, `test`, `docs`, `chore`
-- **No secrets in code** — environment variables only
+Toda la documentación del framework — conceptos, comandos, stacks, agentes e
+instalación — está en [`openspec/README.md`](./openspec/README.md).
 
----
-
-## Contributing
-
-1. Pick a ticket from Jira
-2. Run `os-enrich <TICKET-ID>` to add technical detail
-3. Run `os-plan <TICKET-ID>` to generate the implementation plan
-4. Run `os-develop <TICKET-ID>` to implement
-5. Run `os-commit <TICKET-ID>` to open a PR
-6. Request review — `os-review <PR>` generates an AI code review
+```bash
+# Ciclo típico de un ticket
+os-enrich SP-XXX      # enriquecer ticket con detalle técnico
+os-plan SP-XXX        # generar plan de implementación
+os-develop SP-XXX     # crear rama + implementar
+os-commit SP-XXX      # commit + push + PR
+os-review <PR>        # code review con IA
+os-review-apply <PR>  # publicar review en GitHub
+```
 
 ---
 
-## License
+## Licencia
 
 ISC
