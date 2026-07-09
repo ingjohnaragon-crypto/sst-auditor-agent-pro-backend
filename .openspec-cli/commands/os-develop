@@ -53,7 +53,7 @@ DOC_STANDARDS="";    DOC_FILE="$OS_REPO_ROOT/ai-specs/specs/documentation-standa
 UPDATE_DOCS_TASK="";  UPDATE_DOCS_FILE="$OS_REPO_ROOT/ai-specs/.commands/update-docs.md"
                      [ -f "$UPDATE_DOCS_FILE" ] && UPDATE_DOCS_TASK=$(cat "$UPDATE_DOCS_FILE")
 
-PLAN_FILE="$OS_REPO_ROOT/ai-specs/changes/${TICKET_ID}_backend.md"
+PLAN_FILE="$OS_REPO_ROOT/ai-specs/changes/planes/${TICKET_ID}/${TICKET_ID}_backend.md"
 PLAN_SECTION=""
 if [ -f "$PLAN_FILE" ]; then
   os_success "Found existing plan: $PLAN_FILE"

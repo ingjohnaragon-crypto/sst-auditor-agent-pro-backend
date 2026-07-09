@@ -61,7 +61,7 @@ os-enrich-apply KAN-6                        # uploads to Jira automatically
 # 4. Generate implementation plan
 os-plan KAN-6
 # Prompt is delivered automatically to your active agent
-# → AI generates ai-specs/changes/KAN-6_backend.md
+# → AI generates ai-specs/changes/planes/KAN-6/KAN-6_backend.md
 
 # 5. Implement
 os-develop KAN-6
