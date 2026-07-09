@@ -20,7 +20,7 @@ os_load_env
 os_require_jira_env
 
 ENRICHED_FILE="$OS_REPO_ROOT/.openspec-cli/.enriched-content.md"
-ARCHIVE_FILE="$OS_REPO_ROOT/ai-specs/changes/${TICKET_ID}_enriched.md"
+ARCHIVE_FILE="$OS_REPO_ROOT/ai-specs/changes/enriquecimientos/${TICKET_ID}/${TICKET_ID}_enriched.md"
 
 if [ -n "$CONTENT_FILE" ] && [ -f "$CONTENT_FILE" ]; then
   SOURCE_FILE="$CONTENT_FILE"
@@ -30,7 +30,7 @@ elif [ -f "$ENRICHED_FILE" ]; then
   SOURCE_FILE="$ENRICHED_FILE"
 else
   os_error "No enriched content file found."
-  os_info  "Expected at: ai-specs/changes/${TICKET_ID}_enriched.md"
+  os_info  "Expected at: ai-specs/changes/enriquecimientos/${TICKET_ID}/${TICKET_ID}_enriched.md"
   os_info  "Fallback  : .openspec-cli/.enriched-content.md"
   exit 1
 fi

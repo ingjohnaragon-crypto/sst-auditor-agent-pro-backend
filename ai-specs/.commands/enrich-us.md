@@ -14,7 +14,7 @@ Follow these steps:
 
 ## Output
 
-Save the enriched content as a markdown file at `ai-specs/changes/$ARGUMENTS_enriched.md`
+Save the enriched content as a markdown file at `ai-specs/changes/enriquecimientos/$ARGUMENTS/$ARGUMENTS_enriched.md`
 using this structure:
 
 ---
@@ -77,6 +77,6 @@ sufficiently detailed are omitted from this section entirely.
 
 ## Final message format
 
-> Enriched content saved to `ai-specs/changes/<ticket-id>_enriched.md`.
+> Enriched content saved to `ai-specs/changes/enriquecimientos/<ticket-id>/<ticket-id>_enriched.md`.
 > N subtask(s) will also be updated.
 > Run `os-enrich-apply <TICKET-ID>` to upload it to Jira.

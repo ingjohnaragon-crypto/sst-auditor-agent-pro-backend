@@ -82,7 +82,7 @@ os-transition KAN-XX "En curso"        # mover ticket de estado
 ```bash
 os-enrich KAN-XX                       # enriquecer ticket con contexto técnico
 os-enrich-apply KAN-XX                 # subir enriquecimiento a Jira
-os-plan KAN-XX                         # generar plan → ai-specs/changes/KAN-XX_backend.md
+os-plan KAN-XX                         # generar plan → ai-specs/changes/planes/KAN-XX/KAN-XX_backend.md
 os-develop KAN-XX                      # crear rama feature/KAN-XX-backend + implementar
 os-commit KAN-XX                       # commit + push + PR → develop
 os-review PR_NUMBER                    # generar code review del PR
