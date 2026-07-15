@@ -48,3 +48,8 @@ layout/     Shell, navigation, header components
 ## Git Workflow
 - Branch naming: `feature/<ticket-id>-frontend`
 - Commits: project's configured language, conventional commits
+- **Never commit** `.angular/` cache, `node_modules/`, `dist/`, or `.env`
+- ESLint `parserOptions.project` must point at `tsconfig.app.json` (not the empty root `tsconfig.json`)
+- Avoid `!(observable | async)` in templates — use `as` + `else` instead
+- On Windows: husky needs Git for Windows `sh` ahead of the WSL `bash.exe` stub, or commits fail with `HCS_E_SERVICE_NOT_AVAILABLE` (often misreported as ESLint failure). Prefer Git Bash or prepend `C:\Program Files\Git\bin` to `PATH` before `git commit` / `os-commit`
+- CRLF/LF notices from git are informational when `core.autocrlf` is on — not failures

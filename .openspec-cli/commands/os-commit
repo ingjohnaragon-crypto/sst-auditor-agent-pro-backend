@@ -14,6 +14,37 @@ CLI_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 . "$CLI_DIR/lib/config.sh"
 . "$CLI_DIR/lib/language.sh"
 
+# Prefer Git for Windows sh/bash over the WSL stub in WindowsApps.
+# Without this, husky pre-commit fails with:
+#   HCS_E_SERVICE_NOT_AVAILABLE / "Bash/Service/CreateInstance/..."
+# and surfaces a misleading "ESLint failed" message.
+os_prefer_git_bash() {
+  _git_bins=""
+  for _candidate in \
+    "/c/Program Files/Git/bin" \
+    "/c/Program Files/Git/usr/bin" \
+    "/c/Program Files (x86)/Git/bin" \
+    "/c/Program Files (x86)/Git/usr/bin" \
+    "/mnt/c/Program Files/Git/bin" \
+    "/mnt/c/Program Files/Git/usr/bin"
+  do
+    if [ -d "$_candidate" ]; then
+      _git_bins="${_git_bins}${_candidate}:"
+    fi
+  done
+  # Native Windows paths when running under a POSIX shell that still sees them
+  if [ -n "${PROGRAMFILES:-}" ] && [ -d "$PROGRAMFILES/Git/bin" ]; then
+    _git_bins="${_git_bins}${PROGRAMFILES}/Git/bin:${PROGRAMFILES}/Git/usr/bin:"
+  fi
+  if [ -n "$_git_bins" ]; then
+    PATH="${_git_bins}${PATH}"
+    export PATH
+  fi
+  unset _candidate _git_bins
+}
+
+os_prefer_git_bash
+
 os_load_config
 os_load_env
 os_load_language
@@ -82,14 +113,61 @@ git add -u
 
 for f in $UNTRACKED; do
   case "$f" in
-    .env|*.env|*.secret|build/|dist/|target/|node_modules/|__pycache__/)
+    .env|*.env|*.secret|build/*|dist/*|target/*|node_modules/*|__pycache__/*|.angular/*|coverage/*|.cache/*|*.pack|*.pack.old)
       os_warn "Skipping: $f"
       ;;
+    openspec/config.yaml)
+      # Local agent/stack preference — do not bundle into feature commits
+      os_warn "Skipping local OpenSpec config: $f"
+      ;;
     *)
+      # When committing a ticket, skip plan docs for other tickets
+      if [ -n "$TICKET_ID" ]; then
+        case "$f" in
+          ai-specs/changes/planes/*)
+            case "$f" in
+              *"${TICKET_ID}"*) ;;
+              *)
+                os_warn "Skipping unrelated plan: $f"
+                continue
+                ;;
+            esac
+            ;;
+        esac
+      fi
       git add "$f"
       ;;
   esac
 done
+
+# Unstage artifacts that may already be tracked or were force-added
+STAGED_RAW=$(git diff --cached --name-only || true)
+if [ -n "$STAGED_RAW" ]; then
+  echo "$STAGED_RAW" | while IFS= read -r f; do
+    [ -z "$f" ] && continue
+    case "$f" in
+      .angular/*|node_modules/*|dist/*|build/*|coverage/*|.cache/*|*.pack|*.pack.old)
+        git reset HEAD -- "$f" >/dev/null 2>&1 || true
+        os_warn "Unstaged artifact: $f"
+        ;;
+      openspec/config.yaml)
+        git reset HEAD -- "$f" >/dev/null 2>&1 || true
+        os_warn "Unstaged local OpenSpec config: $f"
+        ;;
+      ai-specs/changes/planes/*)
+        if [ -n "$TICKET_ID" ]; then
+          case "$f" in
+            *"${TICKET_ID}"*) ;;
+            *)
+              git reset HEAD -- "$f" >/dev/null 2>&1 || true
+              os_warn "Unstaged unrelated plan: $f"
+              ;;
+          esac
+        fi
+        ;;
+    esac
+  done
+fi
 
 STAGED=$(git diff --cached --name-only)
 if [ -z "$STAGED" ]; then
@@ -99,6 +177,9 @@ fi
 
 os_info "Staged files:"
 echo "$STAGED" | sed 's/^/  /'
+
+# Harmless on Windows with core.autocrlf=true — do not treat as failure
+os_info "Note: CRLF/LF line-ending notices from git are informational only."
 
 # ── Determine scope ──────────────────────────────────────────
 SCOPE=$(echo "$STAGED" \
@@ -170,7 +251,18 @@ case "$confirm" in
 esac
 
 # ── Commit ───────────────────────────────────────────────────
-git commit -m "$SUBJECT" -m "$BODY"
+# Re-apply Git bash preference so husky's `sh` does not hit the WSL stub
+os_prefer_git_bash
+os_step "Running git commit (husky pre-commit may invoke ESLint)..."
+if ! git commit -m "$SUBJECT" -m "$BODY"; then
+  os_warn "Commit failed (often husky/ESLint)."
+  os_warn "On Windows: ensure Git for Windows is installed and PATH prefers"
+  os_warn "  'C:\\Program Files\\Git\\bin' over WindowsApps\\bash.exe (WSL stub)."
+  os_warn "If husky reports ESLint failed but you see HCS_E_SERVICE_NOT_AVAILABLE,"
+  os_warn "  the shell failed — not ESLint. Re-run from Git Bash or fix PATH."
+  os_warn "Also ensure .eslintrc uses tsconfig.app.json (not empty root tsconfig.json)."
+  exit 1
+fi
 os_success "Committed: $SUBJECT"
 
 # ── Push ─────────────────────────────────────────────────────

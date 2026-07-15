@@ -46,6 +46,21 @@ If the user **explicitly** requested no git operations (e.g. "no PR", "only comm
   - Leave any other modified files **unstaged** and do not include them in the commit.  
   - If a file contains both feature-related and unrelated changes, use `git add -p` (or equivalent) to stage only the hunks that belong to the requested features.  
   - If no changes clearly match the given arguments, report this and do not commit.
+  - **Never** stage plan docs for other tickets (e.g. do not include `ai-specs/changes/planes/SP-173/...` when committing `SP-172`).
+  - **Never** stage local OpenSpec preference drifts such as `openspec/config.yaml` (`agent:` / `stack:` switches) unless the user explicitly asked to commit tooling config.
+
+## 2b. Never stage these paths (Windows / Angular gotchas)
+
+Always **exclude** from staging and commit:
+
+| Pattern | Why |
+|---|---|
+| `.angular/` (cache packs, babel-webpack JSON) | Local Angular CLI cache — can inflate commits to hundreds of junk files |
+| `node_modules/`, `dist/`, `coverage/`, `build/` | Build / dependency artifacts |
+| `.env`, `*.env`, secrets | Credentials |
+| `openspec/config.yaml` | Local agent/stack preference unless explicitly requested |
+
+If `git status` shows hundreds of `.angular/cache/...` files staged, **unstage them** and ensure `.angular/` is in `.gitignore` before committing.
 
 ## 3. Commit message
 
@@ -56,9 +71,45 @@ If the user **explicitly** requested no git operations (e.g. "no PR", "only comm
   - **Body** (if needed): Bullet points or short paragraphs describing what changed and why (areas touched, new behavior, fixes). Reference ticket IDs here if they apply.
 - Do not commit secrets, `.env`, or other sensitive or generated artifacts.
 
-## 4. Commit and push
+## 4. Commit and push (Windows + husky)
+
+### Pre-flight (Angular / frontend)
+
+1. Confirm ESLint `parserOptions.project` includes app sources (`tsconfig.app.json`), **not** the empty solution-style root `tsconfig.json` (that yields false "Parsing error" on every `src/**/*.ts` file).
+2. Prefer running `npm run lint:eslint` (or the project lint script) before `git commit` so failures are real lint issues, not shell noise.
+3. Template rule: do not use `!(obs$ | async)` — use `*ngIf="(obs$ | async) as x; else loading"` (or equivalent) to satisfy `@angular-eslint/template/no-negated-async`.
+
+### Windows PATH for husky
+
+Husky runs hooks via `sh`. On Windows, the stub at `WindowsApps\bash.exe` often fails with:
+
+```text
+HCS_E_SERVICE_NOT_AVAILABLE
+Bash/Service/CreateInstance/CreateVm/...
+```
+
+and the pre-commit may echo a **misleading** `ESLint falló` / `ESLint failed` even when ESLint never ran.
+
+**Before `git commit` / `git push`**, ensure Git for Windows binaries win over the WSL stub:
+
+```powershell
+$env:Path = "C:\Program Files\Git\bin;C:\Program Files\Git\usr\bin;" + $env:Path
+```
+
+Or run the commit from **Git Bash**. Prefer Git's `sh.exe`/`bash.exe` under `C:\Program Files\Git\bin`.
+
+`os-commit` applies this PATH preference automatically; if you commit manually outside `os-commit`, apply the same PATH fix.
+
+### Line endings
+
+Messages like `LF will be replaced by CRLF` / `file will have its original line endings in your working directory` are **informational** when `core.autocrlf` is enabled — **not** a commit failure. Do not abort for them.
+
+### Commit steps
 
 - Create the commit with the message from step 3.
+- If the pre-commit hook fails:
+  - If the log contains `HCS_E_SERVICE_NOT_AVAILABLE` / spaced-out Spanish about a missing Windows feature → fix PATH / use Git Bash, then retry.
+  - If ESLint reports real rule violations → fix the code, then retry (do **not** use `--no-verify`).
 - Push the current branch to the remote (`git push origin <branch>`). If the branch does not exist on the remote, push with `-u` to set upstream.
 
 ## 5. Pull Request
@@ -87,3 +138,4 @@ If the user **explicitly** requested no git operations (e.g. "no PR", "only comm
 - Do not run destructive git commands (e.g. `git push --force` without explicit user request).
 - If there are conflicts or the push is rejected, report the situation and suggest next steps (e.g. pull/rebase then push), but do not force-push unless the user asks.
 - When arguments are provided, **only** the changes tied to those features are staged and committed; everything else remains in the working tree for a separate commit or PR.
+- Prefer `os-commit <TICKET>` for the scripted path; it stages safely and prefers Git for Windows `sh` so husky works.
