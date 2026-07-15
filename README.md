@@ -192,18 +192,28 @@ El CI (`.github/workflows/ci.yml`) ejecuta la suite en cada push/PR hacia
 
 El endpoint `GET /api/v1/ping` responde `{"mensaje": "pong"}` y existe para que
 el frontend Angular ([`sst-auditor-agent-pro-frontend`](https://github.com/ingjohnaragon-crypto/sst-auditor-agent-pro-frontend),
-puerto 4200) valide la comunicación cross-origin:
+puerto 4200) valide la comunicación cross-origin (**SP-173**).
 
-1. Backend: `poetry run uvicorn src.main:app --reload` (puerto 8000).
+### Checklist E2E (SP-173)
+
+1. Backend: `poetry run uvicorn src.main:app --reload --port 8000`.
 2. Frontend: `ng serve` (puerto 4200).
-3. El navegador debe mostrar «pong» sin errores CORS en consola
-   (`HttpClient.get('http://localhost:8000/api/v1/ping')`).
+3. Abrir `http://localhost:4200`: el root debe mostrar «pong» y la consola no debe
+   registrar errores CORS (`ServicioSalud` → `GET http://localhost:8000/api/v1/ping`).
+4. Prueba negativa: servir el frontend en otro origen (p. ej. `ng serve --port 4300`)
+   con el default `ORIGENES_CORS` → el navegador bloquea la petición (sin
+   `access-control-allow-origin` igual a `http://localhost:4300`).
+5. Override: exportar `ORIGENES_CORS='["http://localhost:4300"]'`, reiniciar el
+   backend y repetir el paso 4; entonces el origen 4300 debe ser aceptado.
 
 La política CORS se configura con `ORIGENES_CORS` (ver tabla de `Settings`);
 solo los orígenes listados reciben la cabecera `access-control-allow-origin`.
 Verificación rápida sin frontend:
 
 ```bash
+# Happy path
+curl -i http://localhost:8000/api/v1/ping
+
 # Preflight permitido → responde con access-control-allow-origin
 curl -i -X OPTIONS http://localhost:8000/api/v1/ping \
   -H "Origin: http://localhost:4200" -H "Access-Control-Request-Method: GET"
