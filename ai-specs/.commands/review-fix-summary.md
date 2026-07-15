@@ -5,11 +5,11 @@ PR Number: $ARGUMENTS
 ## Goal
 After addressing all issues from a code review, generate a structured fix report
 that summarises what was resolved and confirms the PR is ready for re-review.
-Save the result to `ai-specs/changes/` so the fix cycle is fully traceable.
+Save the result to `ai-specs/changes/reviews/` so the fix cycle is fully traceable.
 
 ## Pre-flight checklist
 
-1. Read the original review at `ai-specs/changes/<ticket-id>_review.md`
+1. Read the original review at `ai-specs/changes/reviews/<ticket-id>/<ticket-id>_review.md`
    — Fall back to `.openspec-cli/.review-output.md` if the archive is not found
 2. Read `openspec/config.yaml` — active stack, tooling commands
 3. Verify current test status: `{{test_command}}`
@@ -23,11 +23,11 @@ Save the result to `ai-specs/changes/` so the fix cycle is fully traceable.
 4. Note any issues intentionally deferred, with justification
 5. Record test and coverage results
 6. Emit a final verdict: READY FOR RE-REVIEW / NEEDS FURTHER WORK
-7. **Save the report** to `ai-specs/changes/<ticket-id>_fix.md`
+7. **Save the report** to `ai-specs/changes/reviews/<ticket-id>/<ticket-id>_fix.md`
 
 ## Output format
 
-Save a markdown file at `ai-specs/changes/<ticket-id>_fix.md` with this structure:
+Save a markdown file at `ai-specs/changes/reviews/<ticket-id>/<ticket-id>_fix.md` with this structure:
 
 ---
 
@@ -35,7 +35,7 @@ Save a markdown file at `ai-specs/changes/<ticket-id>_fix.md` with this structur
 
 ### `## Original Verdict`
 The verdict from the previous review (REQUEST CHANGES / COMMENT ONLY).
-Review file: `ai-specs/changes/<ticket-id>_review.md`
+Review file: `ai-specs/changes/reviews/<ticket-id>/<ticket-id>_review.md`
 
 ### `## Issues Addressed`
 For each fixed issue:
@@ -66,5 +66,5 @@ Brief explanation of confidence level.
 
 ## Final message format
 
-> Fix report saved to `ai-specs/changes/<ticket-id>_fix.md`.
+> Fix report saved to `ai-specs/changes/reviews/<ticket-id>/<ticket-id>_fix.md`.
 > Run `os-review <PR_NUMBER>` to generate a fresh review, then `os-review-apply <PR_NUMBER>`.

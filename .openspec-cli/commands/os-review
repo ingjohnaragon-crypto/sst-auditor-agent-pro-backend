@@ -76,7 +76,7 @@ BASE_STANDARDS="";   BASE_FILE="$OS_REPO_ROOT/ai-specs/specs/base-standards.mdc"
 PLAN_CONTENT=""
 TICKET_ID=$(echo "$PR_BRANCH" | grep -oE '[A-Z]+-[0-9]+' | head -1 || true)
 if [ -n "$TICKET_ID" ]; then
-  PLAN_FILE="$OS_REPO_ROOT/ai-specs/changes/${TICKET_ID}_backend.md"
+  PLAN_FILE="$OS_REPO_ROOT/ai-specs/changes/planes/${TICKET_ID}/${TICKET_ID}_backend.md"
   [ -f "$PLAN_FILE" ] && PLAN_CONTENT=$(cat "$PLAN_FILE")
 fi
 
@@ -149,19 +149,31 @@ PROMPT_FILE="$OS_REPO_ROOT/.openspec-cli/.last-prompt.md"
 OUTPUT_FILE="$OS_REPO_ROOT/.openspec-cli/.review-output.md"
 printf '%s' "$PROMPT" > "$PROMPT_FILE"
 
-CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes"
-mkdir -p "$CHANGES_DIR"
 if [ -n "$TICKET_ID" ]; then
+  CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes/reviews/${TICKET_ID}"
   REVIEW_ARCHIVE="$CHANGES_DIR/${TICKET_ID}_review.md"
 else
+  CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes/reviews/pr-${PR_NUMBER}"
   REVIEW_ARCHIVE="$CHANGES_DIR/pr-${PR_NUMBER}_review.md"
 fi
+mkdir -p "$CHANGES_DIR"
+rm -f "$REVIEW_ARCHIVE"
 
 os_divider
 
 # ── Deliver and capture output ────────────────────────────────
 os_deliver_prompt_capture "$PROMPT_FILE" "$OUTPUT_FILE"
-cp "$OUTPUT_FILE" "$REVIEW_ARCHIVE"
+if [ -s "$REVIEW_ARCHIVE" ]; then
+  # CLI agents with filesystem access (claude-code, aider) write the archive
+  # file themselves per review-pr.md's "Output format" instructions; stdout
+  # only carries the short "Final message format" confirmation, so the file
+  # on disk is authoritative — mirror it into the working file for preview.
+  cp "$REVIEW_ARCHIVE" "$OUTPUT_FILE"
+else
+  # Clipboard agents have no filesystem access — the captured/pasted text
+  # is the actual content.
+  cp "$OUTPUT_FILE" "$REVIEW_ARCHIVE"
+fi
 os_success "Review saved!"
 os_info "Working : .openspec-cli/.review-output.md"
 os_info "Archive : $REVIEW_ARCHIVE"

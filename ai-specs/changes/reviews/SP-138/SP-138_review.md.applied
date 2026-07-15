@@ -1,0 +1,98 @@
+# Code Review: PR #4 — [SP-138] feat(errores): implementa middleware global de control de errores
+
+## Metadata
+- Author: `ingjohnaragon-crypto`
+- Branch: `feature/SP-138-backend` → `develop`
+- Changes: `+1052` / `-43` across `20` files
+- Stack: `python-fastapi` (Python 3.12 + FastAPI)
+- Date: 2026-07-07
+
+## Summary
+
+El PR implementa de forma completa y fiel el plan de SP-138: formaliza el contrato único
+de error en el DTO Pydantic `RespuestaError` (`exito/codigo/mensaje/detalle`), migra los
+dos manejadores existentes (dominio y validación) al esquema nuevo, agrega los dos
+manejadores faltantes (`StarletteHTTPException` y `Exception` no controlada), centraliza
+el registro en `registrar_manejadores_excepciones(app)` y añade logging configurable vía
+`LOG_LEVEL` con degradación segura a `INFO`. La verificación local de esta revisión
+confirma las afirmaciones del PR: **26 pruebas en verde y cobertura 100 %** (umbral 90 %).
+El manejador de 500 no filtra información interna y está cubierto por pruebas negativas
+explícitas. Los hallazgos son todos menores; ninguno bloquea la fusión.
+
+Overall verdict: **APPROVE**
+
+## Architecture & Design
+
+- **Capas DDD respetadas.** `DomainException` permanece pura (sin imports de framework);
+  el DTO vive en `application/dto/`; los manejadores en `presentation/exception_handlers/`;
+  la configuración de logging en `infrastructure/config/`. La dirección de dependencias
+  es correcta (presentation → application → domain; nunca al revés).
+- **Registro centralizado bien resuelto.** `registrar_manejadores_excepciones(app)` deja
+  `src/main.py` con una sola llamada, y la decisión de usar la forma decorador
+  `app.exception_handler(...)` en lugar de `add_exception_handler` para satisfacer mypy
+  strict está documentada con un comentario que explica la restricción real (varianza de
+  la firma), no la mecánica.
+- **Decisión acertada** de registrar el manejador HTTP sobre `starlette.exceptions.HTTPException`:
+  captura los 404/405 generados por el enrutador, verificado manualmente según el plan.
+- Sin middlewares ASGI personalizados, conforme a la decisión explícita del ticket.
+
+## Code Quality
+
+- Nombres en español coherentes con la directiva de idioma activa
+  (`RespuestaError`, `configurar_logging`, `excepcion_no_controlada_handler`,
+  `MENSAJE_ERROR_INTERNO`), manteniendo sin traducir las APIs de framework.
+- Type hints completos en todas las firmas nuevas; constantes de mensaje extraídas
+  (`MENSAJE_VALIDACION`, `MENSAJE_ERROR_INTERNO`, `FORMATO_LOG`) en lugar de literales
+  repetidos.
+- `exc.errors()` se serializa una sola vez en el manejador de validación, como pedía el plan.
+- Dos asperezas menores: el mensaje de log de `http_handler` lee de forma redundante
+  («Error HTTP 404 ERROR_HTTP en GET /ruta»), y `str(exc.detail)` produce un repr de
+  Python si `detail` es un dict (ver Specific Issues).
+
+## Testing
+
+- **Cobertura 100 %** verificada en esta revisión (`py -m pytest --cov`): 26 pruebas,
+  0 fallos, umbral del 90 % superado.
+- Patrón AAA y convención `test_should_..._cuando_...` respetados en toda la suite nueva.
+- Excelente cobertura de casos límite: código de dominio por defecto, `http_status`
+  personalizado, 404 de ruta inexistente, 500 genérico, prueba negativa de no-fuga
+  (`Traceback`, tipo de excepción, mensaje interno y `.py` ausentes del cuerpo), y
+  verificación con `caplog` de nivel `ERROR` con traza vs `WARNING` sin traza.
+- Uso correcto de `TestClient(raise_server_exceptions=False)`, imprescindible para
+  ejercitar el manejador de `Exception`.
+- Fragilidad menor en `test_configuracion_logging.py`: se accede al atributo privado
+  `formatter._fmt` y el fixture restaura handlers que `basicConfig(force=True)` ya cerró
+  (ver Specific Issues).
+
+## Security
+
+- Sin secretos ni tokens hardcodeados; `.env.example` solo documenta `LOG_LEVEL` comentado.
+- El cuerpo del 500 usa siempre el mensaje genérico fijo; la traza vive únicamente en el
+  log (`logger.exception`), verificado por prueba negativa dedicada.
+- Los logs registran solo código de error, método HTTP y ruta — sin cuerpos de petición,
+  cabeceras ni credenciales, conforme a la restricción del plan.
+- Un valor inválido de `LOG_LEVEL` degrada a `INFO` sin impedir el arranque (probado).
+
+## Specific Issues
+
+- **File**: `src/presentation/exception_handlers/http_handler.py` (línea 27) — **Severity**: MINOR — **Fix**: `str(exc.detail)` produce un repr de Python («{'clave': ...}») cuando `detail` es un dict, algo que FastAPI permite. Sugerencia: si `exc.detail` no es `str`, enviarlo en `detalle` y usar un mensaje genérico en `mensaje`.
+- **File**: `src/presentation/exception_handlers/http_handler.py` (línea 22) — **Severity**: MINOR — **Fix**: el mensaje «Error HTTP %s ERROR_HTTP en %s %s» resulta redundante al leerse («Error HTTP 404 ERROR_HTTP en GET /x»). Reformular, p. ej. `"Error HTTP %s (ERROR_HTTP) en %s %s"` o incluir el código como campo separado.
+- **File**: `tests/infrastructure/test_configuracion_logging.py` (línea 19) — **Severity**: MINOR — **Fix**: `logging.basicConfig(force=True)` cierra los handlers previos del root logger; el fixture `_restaurar_logging` luego reinstala esos handlers ya cerrados (incluido el de captura de pytest). Hoy es benigno porque `StreamHandler.close()` no cierra el stream, pero es frágil. Sugerencia: en lugar de restaurar la lista vieja, limpiar los handlers creados por la prueba y dejar que pytest reinstale los suyos, o aislar con un logger dedicado.
+- **File**: `tests/infrastructure/test_configuracion_logging.py` (línea 53) — **Severity**: MINOR — **Fix**: la aserción sobre el atributo privado `formateador._fmt` depende de internals de `logging`. Alternativa estable: formatear un `LogRecord` sintético con `formateador.format(...)` y verificar la estructura del resultado.
+- **File**: `ai-specs/specs/api-spec.yml` (línea 58) — **Severity**: MINOR — **Fix**: en OpenAPI 3.0.3, `nullable: true` junto a `oneOf` (sin `type` en el mismo nivel) no tiene semántica definida y muchos validadores lo ignoran. Opciones: mover `nullable: true` dentro de cada rama del `oneOf`, o migrar la spec a OpenAPI 3.1 y agregar una rama `type: "null"`.
+
+## What's Done Well
+
+1. **Prueba negativa de no-fuga de información**: `test_should_no_exponer_traza_en_respuesta_cuando_falla_interno` verifica explícitamente que el cuerpo del 500 no contiene `Traceback`, el tipo de excepción, el mensaje interno ni nombres de archivo — exactamente el tipo de aserción de seguridad que suele omitirse.
+2. **Degradación segura de configuración**: un `LOG_LEVEL` inválido nunca impide el arranque (validación vía `logging.getLevelName` con fallback a `INFO`), con prueba dedicada y documentación en `.env.example`.
+3. **Comentario de diseño en el punto exacto de fricción**: la justificación del uso de la forma decorador frente a `add_exception_handler` (varianza de tipos bajo mypy strict) queda documentada donde el próximo lector se lo preguntará, y responde a una nota anticipada en el plan.
+
+## Final Verdict
+
+**APPROVE**
+
+Los cinco hallazgos son menores (estilo de mensajes, robustez de pruebas y un detalle
+de la especificación OpenAPI) y pueden corregirse en un commit de seguimiento o en el
+próximo ticket. El contrato de error queda formalizado, cubierto al 100 % y sin fuga
+de información; la ruptura de contrato `success/code/message` → `exito/codigo/mensaje/detalle`
+está aceptada explícitamente para `0.1.0` y reflejada en `api-spec.yml`.

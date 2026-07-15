@@ -1,0 +1,215 @@
+# Enriched Ticket: SP-139 — SST-HU 1.1: Configuración de Entornos Base (Python + Angular)
+
+## Original Description
+
+Como desarrollador del proyecto, quiero inicializar el repositorio del frontend en Angular y el backend en Python con sus configuraciones de CORS, para asegurar un inicio tecnológico óptimo.
+
+## Enhanced Description
+
+Como desarrollador del proyecto, quiero dejar operativos y comunicados los entornos base del backend (Python 3.12 + FastAPI, este repositorio) y del frontend (Angular + Tailwind CSS, repositorio `sst-auditor-agent-pro-frontend`), con calidad de código automatizada (pre-commit) y política CORS configurada, para que el resto de las historias del proyecto puedan desarrollarse sin fricción de infraestructura.
+
+**Estado actual del backend (ya implementado en SP-137/SP-138 — no rehacer):**
+
+- Aplicación FastAPI en `src/main.py` con arquitectura DDD (`domain/`, `application/`, `presentation/`, `infrastructure/`).
+- Endpoint `GET /health` operativo en `src/presentation/routers/health_router.py`.
+- Manejadores globales de excepciones con contrato único `RespuestaError` (`exito`, `codigo`, `mensaje`, `detalle`).
+- Configuración tipada vía Pydantic Settings en `src/infrastructure/config/settings.py` (`app_name`, `app_version`, `api_prefix`, `log_level`).
+- `pyproject.toml` con pytest (cobertura ≥ 90 %), Ruff y mypy `strict` ya configurados.
+
+**Alcance de esta HU en el backend (este repositorio):**
+
+1. **CORS**: agregar el campo `origenes_cors: list[str]` a `Settings` (valor por defecto `["http://localhost:4200"]`, sobreescribible por variable de entorno `ORIGENES_CORS`) y registrar `CORSMiddleware` en `src/main.py` leyendo ese valor. Nunca usar `allow_origins=["*"]` combinado con `allow_credentials=True`.
+2. **Endpoint de conectividad**: exponer `GET /api/v1/ping` que responda `200` con `{"mensaje": "pong"}`, montado bajo el prefijo `settings.api_prefix`, para que el frontend valide la comunicación cross-origin.
+3. **Gitflow + pre-commit**: crear `.pre-commit-config.yaml` con hooks de Ruff (lint + format) y mypy, y documentar en `README.md` el flujo Gitflow (`main`, ramas `feature/SP-XX-backend`, PR hacia `main`). Nota: el proyecto ya estandarizó Ruff + mypy en `pyproject.toml`; Ruff reemplaza a Flake8 (mismo conjunto de reglas E/F y más), por lo que **no** se instala Flake8 para evitar dos linters con reglas divergentes.
+4. **Gestión de dependencias con Poetry**: formalizar `pyproject.toml` con las secciones `[tool.poetry]` (o `[project]` + `poetry-core` como build-backend), migrar las dependencias de `requirements.txt` a grupos `main` y `dev`, generar `poetry.lock` y actualizar el `README.md` con las instrucciones de instalación (`poetry install`) y ejecución (`poetry run uvicorn src.main:app --reload`). Mantener `requirements.txt` exportado (`poetry export`) solo si el CI lo requiere.
+
+**Fuera de alcance en este repositorio:** la inicialización del proyecto Angular con Tailwind CSS (subtarea SP-172) se ejecuta en el repositorio del frontend; aquí solo se garantiza que el backend acepte su origen (`http://localhost:4200`) vía CORS.
+
+## Acceptance Criteria
+
+- [ ] `Settings` expone `origenes_cors: list[str]` con valor por defecto `["http://localhost:4200"]`, configurable vía `.env` (`ORIGENES_CORS='["http://localhost:4200"]'`) y documentado en `.env.example`.
+- [ ] `src/main.py` registra `CORSMiddleware` con `allow_origins=settings.origenes_cors`, `allow_methods=["*"]`, `allow_headers=["*"]` y `allow_credentials=True`.
+- [ ] Una petición `OPTIONS` (preflight) a `/api/v1/ping` con `Origin: http://localhost:4200` responde con la cabecera `access-control-allow-origin: http://localhost:4200`; con un origen no permitido, la cabecera no se emite.
+- [ ] `GET /api/v1/ping` responde `200` con el cuerpo exacto `{"mensaje": "pong"}` y aparece en `/docs` bajo el tag `Salud`.
+- [ ] Existe `.pre-commit-config.yaml` con hooks de Ruff (lint y format) y mypy; `pre-commit run --all-files` pasa sin errores.
+- [ ] `pyproject.toml` queda gestionado por Poetry con grupos `main` y `dev`, existe `poetry.lock` versionado y `poetry install` deja el entorno funcional.
+- [ ] `README.md` documenta: instalación con Poetry, ejecución local, activación de pre-commit (`pre-commit install`) y flujo Gitflow del proyecto.
+- [ ] La suite completa (`pytest`) pasa con cobertura ≥ 90 % incluyendo los tests nuevos de CORS y ping.
+- [ ] `ruff check .` y `mypy` (strict) pasan sin errores.
+- [ ] Desde el frontend Angular corriendo en `http://localhost:4200`, una llamada `HttpClient.get('http://localhost:8000/api/v1/ping')` recibe `pong` sin error de CORS en la consola del navegador (validación manual documentada en el PR).
+
+## Fields & Endpoints
+
+### Nuevos campos de configuración (`Settings`)
+
+| Campo | Tipo | Default | Variable de entorno |
+|---|---|---|---|
+| `origenes_cors` | `list[str]` | `["http://localhost:4200"]` | `ORIGENES_CORS` (JSON array) |
+
+### Endpoints
+
+| Método | URL | Request | Response 200 | Errores |
+|---|---|---|---|---|
+| GET | `/api/v1/ping` | — (sin parámetros ni cuerpo) | `{"mensaje": "pong"}` | Esquema único `RespuestaError` vía manejadores globales |
+| GET | `/health` | — | Ya existe — sin cambios | — |
+
+Respuesta de `/api/v1/ping` modelada con un DTO Pydantic `RespuestaPing` (`mensaje: str`) declarado como `response_model` para que quede tipada en el OpenAPI.
+
+## Files to Create or Modify
+
+| File | Layer | Action |
+|---|---|---|
+| `src/infrastructure/config/settings.py` | Infrastructure | Modify — agregar `origenes_cors` |
+| `src/main.py` | Presentation (composición) | Modify — registrar `CORSMiddleware` |
+| `src/application/dto/respuesta_ping.py` | Application | Create — DTO `RespuestaPing` |
+| `src/application/dto/__init__.py` | Application | Modify — exportar `RespuestaPing` |
+| `src/presentation/routers/ping_router.py` | Presentation | Create — `GET /ping` bajo `api_prefix` |
+| `src/presentation/routers/__init__.py` | Presentation | Modify — montar `ping_router` en `api_router` con prefijo `settings.api_prefix` |
+| `.pre-commit-config.yaml` | Tooling | Create — hooks Ruff + mypy |
+| `pyproject.toml` | Tooling | Modify — secciones Poetry, dependencias `main`/`dev` |
+| `poetry.lock` | Tooling | Create — generado por `poetry lock` |
+| `requirements.txt` | Tooling | Modify — regenerar vía `poetry export` (o eliminar si el CI ya no lo usa) |
+| `.env.example` | Tooling | Modify — documentar `ORIGENES_CORS` |
+| `README.md` | Docs | Modify — Poetry, pre-commit, Gitflow, validación ping/pong |
+| `tests/presentation/test_ping_router.py` | Tests | Create |
+| `tests/presentation/test_cors.py` | Tests | Create |
+| `tests/infrastructure/test_settings.py` | Tests | Modify — cubrir `origenes_cors` |
+| `ai-specs/specs/api-spec.yaml` (spec OpenAPI del proyecto) | Docs | Modify — agregar `/api/v1/ping` |
+
+## Unit Test Cases
+
+Todos con pytest + httpx `AsyncClient` (patrón AAA, convención `test_deberia_..._cuando_...`):
+
+- **Happy path ping**: `GET /api/v1/ping` responde `200` y cuerpo `{"mensaje": "pong"}`.
+- **Ruta con prefijo**: `GET /ping` (sin prefijo `/api/v1`) responde `404` con esquema `RespuestaError`.
+- **CORS origen permitido**: preflight `OPTIONS /api/v1/ping` con `Origin: http://localhost:4200` y `Access-Control-Request-Method: GET` devuelve `access-control-allow-origin` igual al origen.
+- **CORS origen no permitido**: preflight con `Origin: http://malicioso.example` no incluye `access-control-allow-origin`.
+- **Settings default**: `Settings()` sin variables de entorno expone `origenes_cors == ["http://localhost:4200"]`.
+- **Settings override**: con `ORIGENES_CORS='["https://app.example.com"]'` en el entorno, `origenes_cors` refleja el valor (usar `monkeypatch` y limpiar el `lru_cache` de `get_settings`).
+- **Edge case**: método no soportado `POST /api/v1/ping` responde `405` con esquema `RespuestaError` (cubierto por el manejador HTTP existente).
+
+## Non-Functional Requirements
+
+- **Seguridad**: la lista de orígenes CORS proviene exclusivamente de configuración tipada; prohibido `allow_origins=["*"]` con credenciales. Ningún secreto en el repositorio (`.env` fuera de git, `.env.example` como plantilla).
+- **Calidad**: mypy `strict` y Ruff sin excepciones nuevas; los hooks de pre-commit deben ejecutar en menos de ~10 s para no penalizar cada commit (usar `ruff` en lugar de Flake8 + isort + black contribuye a esto).
+- **Rendimiento**: `/api/v1/ping` no realiza I/O ni accede a base de datos; latencia esperada < 10 ms local.
+- **Cobertura**: umbral existente de 90 % (`--cov-fail-under=90`) se mantiene.
+- **Compatibilidad**: Python ≥ 3.12; el `CORSMiddleware` es el de `fastapi.middleware.cors` (Starlette), sin dependencias adicionales.
+- **Trazabilidad**: commits convencionales (`feat`, `chore`, `test`) en la rama `feature/SP-139-backend`; PR hacia `main`.
+
+## Subtasks
+
+<!-- SUBTASK:SP-170 -->
+### Subtask: SP-170 — Configurar Gitflow y hooks de linter pre-commit
+
+#### Original Description
+Instalar pre-commit con Flake8 y ESLint para asegurar calidad del código.
+
+#### Enhanced Description
+Configurar el framework `pre-commit` en el repositorio backend y documentar el flujo Gitflow del proyecto.
+
+**Decisión técnica**: el proyecto ya estandarizó **Ruff + mypy** en `pyproject.toml` (Ruff cubre y supera las reglas de Flake8); instalar Flake8 en paralelo generaría reglas divergentes. Por tanto, los hooks del backend son Ruff y mypy — **no** Flake8. ESLint aplica únicamente al repositorio frontend Angular y se configura allí (ver SP-172).
+
+Pasos en este repositorio:
+
+1. Agregar `pre-commit` al grupo `dev` de Poetry.
+2. Crear `.pre-commit-config.yaml` en la raíz con:
+   - `repo: https://github.com/astral-sh/ruff-pre-commit` → hooks `ruff` (con `--fix`) y `ruff-format`.
+   - `repo: https://github.com/pre-commit/mirrors-mypy` → hook `mypy` (o hook `local` que ejecute `poetry run mypy` para usar la config estricta de `pyproject.toml`).
+   - Hooks básicos de `pre-commit-hooks`: `trailing-whitespace`, `end-of-file-fixer`, `check-yaml`, `check-merge-conflict`.
+3. Ejecutar `pre-commit install` y `pre-commit run --all-files`; corregir cualquier hallazgo.
+4. Documentar en `README.md`: activación de los hooks y el flujo Gitflow (rama base `main`, ramas `feature/SP-XX-backend`, merge vía Pull Request con review).
+
+#### Acceptance Criteria
+- [ ] `.pre-commit-config.yaml` existe con hooks de Ruff (lint + format), mypy y hooks básicos de higiene.
+- [ ] `pre-commit run --all-files` pasa sin errores en el estado actual del repo.
+- [ ] `pre-commit` figura como dependencia de desarrollo en `pyproject.toml`.
+- [ ] `README.md` documenta la instalación de los hooks (`pre-commit install`) y el flujo Gitflow del proyecto.
+- [ ] Un commit con código que viola Ruff es rechazado localmente por el hook (verificación manual documentada en el PR).
+<!-- /SUBTASK:SP-170 -->
+
+<!-- SUBTASK:SP-171 -->
+### Subtask: SP-171 — Configurar entorno virtual Python con Poetry
+
+#### Original Description
+Inicializar el proyecto backend instalando dependencias base y frameworks.
+
+#### Enhanced Description
+Formalizar la gestión de dependencias y del entorno virtual con **Poetry**, partiendo del `pyproject.toml` existente (no crear uno nuevo — conservar intactas las secciones de pytest, coverage, Ruff y mypy).
+
+Pasos:
+
+1. Instalar Poetry ≥ 1.8 (`pipx install poetry`) y configurar `poetry config virtualenvs.in-project true` para que el venv quede en `.venv/` (ya ignorado por git).
+2. Completar `pyproject.toml` con los metadatos y dependencias:
+   - Grupo principal: `fastapi`, `uvicorn[standard]`, `pydantic-settings`.
+   - Grupo `dev`: `pytest`, `pytest-asyncio`, `pytest-cov`, `httpx`, `ruff`, `mypy`, `pre-commit`.
+   - Declarar `requires-python = ">=3.12"` y el build-backend `poetry-core`.
+3. Ejecutar `poetry lock` y `poetry install`; versionar `poetry.lock`.
+4. Verificar que `poetry run pytest` y `poetry run uvicorn src.main:app --reload` funcionan.
+5. Actualizar `README.md` (instalación y ejecución con Poetry) y decidir el destino de `requirements.txt`: regenerarlo con `poetry export -f requirements.txt -o requirements.txt --without-hashes` si el CI lo consume, o eliminarlo si el CI se migra a Poetry en este mismo cambio.
+
+#### Acceptance Criteria
+- [ ] `pyproject.toml` gestionado por Poetry con grupos `main` y `dev`, conservando la configuración existente de pytest/Ruff/mypy.
+- [ ] `poetry.lock` versionado y consistente (`poetry check` pasa).
+- [ ] `poetry install` en un clon limpio deja el entorno funcional y `poetry run pytest` pasa con cobertura ≥ 90 %.
+- [ ] `README.md` actualizado con instalación, ejecución y comandos de test vía Poetry.
+- [ ] El CI (`.github/workflows/ci.yml`) sigue en verde con la nueva gestión de dependencias.
+<!-- /SUBTASK:SP-171 -->
+
+<!-- SUBTASK:SP-172 -->
+### Subtask: SP-172 — Inicializar proyecto Angular con Tailwind CSS
+
+#### Original Description
+Crear el esqueleto del frontend e integrar el framework CSS Tailwind.
+
+#### Enhanced Description
+Crear el repositorio/proyecto **`sst-auditor-agent-pro-frontend`** (fuera de este repositorio backend) con Angular 18+ y Tailwind CSS.
+
+Pasos:
+
+1. Generar el esqueleto: `ng new sst-auditor-agent-pro-frontend --style=css --routing --standalone` (componentes standalone, sin NgModules).
+2. Integrar Tailwind CSS según la guía oficial de Angular: instalar `tailwindcss`, `postcss` y `autoprefixer`, crear `tailwind.config.js` con `content: ["./src/**/*.{html,ts}"]` y agregar las directivas `@tailwind base; @tailwind components; @tailwind utilities;` en `src/styles.css`.
+3. Configurar ESLint (`ng add @angular-eslint/schematics`) y Prettier; agregar hook de pre-commit con ESLint en ese repositorio (contraparte frontend de SP-170).
+4. Crear un servicio `ServicioSalud` (`src/app/nucleo/servicios/servicio-salud.ts`) con un método `obtenerPing(): Observable<{ mensaje: string }>` que consuma `http://localhost:8000/api/v1/ping` usando `HttpClient` (URL base en `environments/`).
+5. Mostrar el resultado del ping en el componente raíz como verificación visual (texto «pong» renderizado), insumo de la validación de SP-173.
+6. Verificar que `ng serve` levanta en `http://localhost:4200` (origen que el backend permite por CORS) y que `ng build` compila sin errores.
+
+#### Acceptance Criteria
+- [ ] Proyecto Angular 18+ standalone creado y versionado en su propio repositorio con `README.md` de instalación (`npm ci`, `ng serve`).
+- [ ] Tailwind CSS operativo: una clase utilitaria (p. ej. `text-emerald-600`) aplicada en el componente raíz se refleja en el navegador.
+- [ ] ESLint + Prettier configurados y `ng lint` pasa sin errores.
+- [ ] `environments/` define la URL base del API (`http://localhost:8000/api/v1` en desarrollo).
+- [ ] `ng build` finaliza sin errores ni warnings de presupuesto.
+<!-- /SUBTASK:SP-172 -->
+
+<!-- SUBTASK:SP-173 -->
+### Subtask: SP-173 — Validar conectividad ping/pong backend-frontend (CORS)
+
+#### Original Description
+Garantizar comunicación básica entre Angular y API resolviendo políticas CORS.
+
+#### Enhanced Description
+Cerrar el ciclo de conectividad entre ambos entornos: backend exponiendo `GET /api/v1/ping` con CORS configurado y frontend consumiéndolo desde el navegador sin errores de política de origen cruzado.
+
+Backend (este repositorio):
+
+1. Agregar `origenes_cors: list[str]` a `Settings` (`src/infrastructure/config/settings.py`), default `["http://localhost:4200"]`, documentado en `.env.example` como `ORIGENES_CORS='["http://localhost:4200"]'`.
+2. Registrar en `src/main.py`, antes de montar routers: `app.add_middleware(CORSMiddleware, allow_origins=settings.origenes_cors, allow_credentials=True, allow_methods=["*"], allow_headers=["*"])`.
+3. Crear `src/presentation/routers/ping_router.py` con `GET /ping` (tag `Salud`, `response_model=RespuestaPing`) y montarlo en `api_router` bajo `settings.api_prefix`, quedando la ruta final `/api/v1/ping`.
+4. Crear el DTO `RespuestaPing` en `src/application/dto/respuesta_ping.py` (`mensaje: str`, ejemplo `"pong"`).
+5. Tests: happy path, preflight con origen permitido y no permitido, override de `ORIGENES_CORS` (ver casos de prueba de la HU).
+6. Actualizar la especificación OpenAPI del proyecto (`ai-specs`) con el nuevo endpoint.
+
+Validación end-to-end (manual, documentada en el PR con captura):
+
+1. Levantar backend: `poetry run uvicorn src.main:app --reload` (puerto 8000).
+2. Levantar frontend: `ng serve` (puerto 4200).
+3. Confirmar en el navegador que el componente raíz muestra «pong» y que la consola no registra errores CORS.
+4. Prueba negativa: servir el frontend desde otro puerto (p. ej. 4300) y confirmar que el navegador bloquea la petición por CORS.
+
+#### Acceptance Criteria
+- [ ] `GET /api/v1/ping` responde `200` con `{"mensaje": "pong"}` y está documentado en `/docs` y en la spec OpenAPI del proyecto.
+- [ ] `CORSMiddleware` registrado con orígenes provenientes de `Settings`; sin `"*"` hardcodeado.
+- [ ] Tests de preflight (origen permitido y no permitido) y de ping pasan; cobertura global ≥ 90 %.
+- [ ] Validación manual navegador→API exitosa desde `http://localhost:4200` y bloqueada desde un origen no configurado, con evidencia en el PR.
+<!-- /SUBTASK:SP-173 -->

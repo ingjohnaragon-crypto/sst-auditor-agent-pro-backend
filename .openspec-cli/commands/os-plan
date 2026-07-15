@@ -127,7 +127,7 @@ printf '%s' "$PROMPT" > "$PROMPT_FILE"
 NEXT_STEPS="1. Open $OS_AGENT_LABEL
 2. Paste the prompt
 3. The AI will generate the plan at:
-   ai-specs/changes/${TICKET_ID}_backend.md
+   ai-specs/changes/planes/${TICKET_ID}/${TICKET_ID}_backend.md
 4. Review the plan, then run:
    os-develop $TICKET_ID"
 
