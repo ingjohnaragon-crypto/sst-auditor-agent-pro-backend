@@ -17,9 +17,7 @@ logger = logging.getLogger(__name__)
 MENSAJE_HTTP_GENERICO = "La petición HTTP no pudo completarse."
 
 
-async def http_exception_handler(
-    request: Request, exc: StarletteHTTPException
-) -> JSONResponse:
+async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
     """Convierte cualquier `HTTPException` en la respuesta JSON única, conservando su status."""
     logger.warning(
         "Error HTTP %s (ERROR_HTTP) en %s %s", exc.status_code, request.method, request.url.path

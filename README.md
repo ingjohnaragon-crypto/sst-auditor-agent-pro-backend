@@ -20,31 +20,45 @@ estructurada según el ciclo PHVA (Planear, Hacer, Verificar, Actuar).
 | Lenguaje | Python 3.12 |
 | Framework HTTP | FastAPI |
 | Configuración | Pydantic Settings (variables de entorno / `.env`) |
+| Dependencias | Poetry (grupos `main` y `dev`, lock versionado) |
 | Tests | pytest + pytest-cov (gate de cobertura: 90%) |
-| Calidad | ruff (lint) + mypy (modo estricto) |
+| Calidad | ruff (lint + format) + mypy (modo estricto) + pre-commit |
 | Persistencia | SQLAlchemy asíncrono (planificado — aún no implementado) |
 
-Las versiones exactas están fijadas en [`requirements.txt`](./requirements.txt).
+Las versiones exactas están fijadas en [`poetry.lock`](./poetry.lock).
+[`requirements.txt`](./requirements.txt) es un **artefacto generado** con
+`poetry export` (lo consume el CI); la fuente de verdad es `poetry.lock`.
 
 ---
 
 ## Inicio rápido
 
 ```bash
-# 1. Instalar dependencias
-pip install -r requirements.txt
+# 0. Instalar Poetry (una sola vez, fuera del proyecto)
+pipx install poetry
 
-# 2. Configurar variables de entorno (opcional — hay defaults)
+# 1. Instalar dependencias (crea .venv/ en el proyecto)
+poetry install
+
+# 2. Activar los hooks de calidad (una sola vez por clon)
+poetry run pre-commit install
+
+# 3. Configurar variables de entorno (opcional — hay defaults)
 cp .env.example .env
 
-# 3. Levantar la aplicación
-uvicorn src.main:app --reload
-# → http://127.0.0.1:8000/health   (prueba de vida)
-# → http://127.0.0.1:8000/docs     (Swagger UI)
+# 4. Levantar la aplicación
+poetry run uvicorn src.main:app --reload
+# → http://127.0.0.1:8000/health       (prueba de vida)
+# → http://127.0.0.1:8000/api/v1/ping  (conectividad con el frontend)
+# → http://127.0.0.1:8000/docs         (Swagger UI)
 
-# 4. Ejecutar la suite de tests
-pytest tests/ -v
+# 5. Ejecutar la suite de tests
+poetry run pytest
 ```
+
+> Si se conserva el flujo con pip, `pip install -r requirements.txt` sigue
+> funcionando; tras cambiar dependencias, regenerar el archivo con
+> `poetry export -f requirements.txt -o requirements.txt --with dev --without-hashes`.
 
 ---
 
@@ -124,6 +138,8 @@ src/
 | `APP_NAME` | Nombre de la aplicación | `SST Auditor Agent Pro` |
 | `APP_VERSION` | Versión de la aplicación | `0.1.0` |
 | `API_PREFIX` | Prefijo de los endpoints de dominio | `/api/v1` |
+| `LOG_LEVEL` | Nivel de log del backend | `INFO` |
+| `ORIGENES_CORS` | Orígenes permitidos por CORS (JSON array) | `["http://localhost:4200"]` |
 
 Se accede vía inyección de dependencias con
 `Depends(get_settings)` (ver `src/presentation/routers/health_router.py`
@@ -136,12 +152,66 @@ como plantilla de referencia).
 Toda la configuración de tooling vive en [`pyproject.toml`](./pyproject.toml):
 
 - **pytest** con cobertura obligatoria ≥ 90% (`--cov-fail-under=90`).
-- **ruff** para linting.
+- **ruff** para linting y formato (reemplaza a Flake8 + isort + black).
 - **mypy** en modo estricto.
-- Convención de tests: patrón AAA y nombres `test_should_..._when_...`.
+- Convención de tests: patrón AAA y nombres `test_should_..._when_...` /
+  `test_deberia_..._cuando_...`.
+
+```bash
+poetry run pytest                    # suite + cobertura
+poetry run ruff check .              # lint
+poetry run mypy                      # tipado estricto
+poetry run pre-commit run --all-files  # todos los hooks sobre el repo
+```
+
+### Hooks de pre-commit
+
+[`.pre-commit-config.yaml`](./.pre-commit-config.yaml) ejecuta en cada commit:
+higiene básica (espacios finales, fin de archivo, YAML, marcas de merge),
+**ruff** (lint con `--fix` + format) y **mypy** (hook local con el entorno del
+proyecto). Se activan una sola vez por clon con `poetry run pre-commit install`;
+un commit que viole las reglas es rechazado localmente.
 
 El CI (`.github/workflows/ci.yml`) ejecuta la suite en cada push/PR hacia
 `main` y `develop`.
+
+---
+
+## Flujo Gitflow
+
+- **`main`** es la rama base y siempre debe estar desplegable.
+- Cada ticket se desarrolla en una rama **`feature/SP-XX-backend`** creada desde
+  `main`.
+- La integración se hace exclusivamente vía **Pull Request hacia `main`** con
+  review; no se hace push directo a `main`.
+- Commits convencionales (`feat`, `fix`, `chore`, `test`, …) en español.
+
+---
+
+## Validación de conectividad con el frontend (ping/pong)
+
+El endpoint `GET /api/v1/ping` responde `{"mensaje": "pong"}` y existe para que
+el frontend Angular ([`sst-auditor-agent-pro-frontend`](https://github.com/ingjohnaragon-crypto/sst-auditor-agent-pro-frontend),
+puerto 4200) valide la comunicación cross-origin:
+
+1. Backend: `poetry run uvicorn src.main:app --reload` (puerto 8000).
+2. Frontend: `ng serve` (puerto 4200).
+3. El navegador debe mostrar «pong» sin errores CORS en consola
+   (`HttpClient.get('http://localhost:8000/api/v1/ping')`).
+
+La política CORS se configura con `ORIGENES_CORS` (ver tabla de `Settings`);
+solo los orígenes listados reciben la cabecera `access-control-allow-origin`.
+Verificación rápida sin frontend:
+
+```bash
+# Preflight permitido → responde con access-control-allow-origin
+curl -i -X OPTIONS http://localhost:8000/api/v1/ping \
+  -H "Origin: http://localhost:4200" -H "Access-Control-Request-Method: GET"
+
+# Origen no permitido → la cabecera no se emite
+curl -i -X OPTIONS http://localhost:8000/api/v1/ping \
+  -H "Origin: http://malicioso.example" -H "Access-Control-Request-Method: GET"
+```
 
 ---
 
@@ -154,8 +224,10 @@ El CI (`.github/workflows/ci.yml`) ejecuta la suite en cada push/PR hacia
 ├── ai-specs/                 # Specs y estándares para el flujo OpenSpec
 ├── openspec/                 # Configuración y documentación del framework OpenSpec
 ├── .openspec-cli/            # CLI del framework OpenSpec (comandos os-*)
-├── pyproject.toml            # Configuración de pytest, coverage, ruff y mypy
-├── requirements.txt          # Dependencias con versiones fijadas
+├── pyproject.toml            # Metadatos Poetry + configuración de pytest, coverage, ruff y mypy
+├── poetry.lock               # Versiones exactas resueltas por Poetry (fuente de verdad)
+├── requirements.txt          # Artefacto generado con `poetry export` (lo consume el CI)
+├── .pre-commit-config.yaml   # Hooks de calidad (ruff, mypy, higiene básica)
 └── .env.example              # Plantilla de variables de entorno
 ```
 

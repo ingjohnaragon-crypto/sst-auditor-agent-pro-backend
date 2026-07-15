@@ -21,7 +21,5 @@ async def excepcion_no_controlada_handler(request: Request, exc: Exception) -> J
     logger.exception("Error no controlado en %s %s", request.method, request.url.path)
     return JSONResponse(
         status_code=500,
-        content=RespuestaError(
-            codigo="ERROR_INTERNO", mensaje=MENSAJE_ERROR_INTERNO
-        ).model_dump(),
+        content=RespuestaError(codigo="ERROR_INTERNO", mensaje=MENSAJE_ERROR_INTERNO).model_dump(),
     )

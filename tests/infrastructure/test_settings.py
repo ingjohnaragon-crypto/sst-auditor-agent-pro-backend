@@ -42,6 +42,22 @@ def test_should_override_values_from_environment_variables(
     assert settings.api_prefix == "/api/v2"
 
 
+def test_deberia_usar_origen_localhost_4200_por_defecto() -> None:
+    settings = Settings(_env_file=None)
+
+    assert settings.origenes_cors == ["http://localhost:4200"]
+
+
+def test_deberia_leer_origenes_cors_desde_entorno(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ORIGENES_CORS", '["https://app.example.com"]')
+
+    settings = Settings(_env_file=None)
+
+    assert settings.origenes_cors == ["https://app.example.com"]
+
+
 def test_should_return_cached_instance_from_get_settings() -> None:
     first = get_settings()
     second = get_settings()

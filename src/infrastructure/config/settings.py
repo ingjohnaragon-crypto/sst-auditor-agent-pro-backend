@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     api_prefix: str = "/api/v1"
     log_level: str = "INFO"
+    # Vía entorno se sobreescribe con un JSON array: ORIGENES_CORS='["http://localhost:4200"]'
+    origenes_cors: list[str] = ["http://localhost:4200"]
 
 
 @lru_cache
