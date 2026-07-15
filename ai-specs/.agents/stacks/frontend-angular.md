@@ -72,3 +72,10 @@ src/
 | Run | `{{run_command}}` |
 | Lint | `{{lint_command}}` |
 | Coverage | `{{coverage_command}}` |
+
+## Commit / husky (Windows)
+
+- Do not stage `.angular/` cache or other build artifacts.
+- ESLint type-aware linting must use `tsconfig.app.json`.
+- Before `git commit` on Windows, prefer Git for Windows binaries over the WSL bash stub (`HCS_E_SERVICE_NOT_AVAILABLE` otherwise; husky may wrongly say ESLint failed).
+- Use `os-commit <TICKET>` when available — it applies the PATH preference and ticket-scoped staging.

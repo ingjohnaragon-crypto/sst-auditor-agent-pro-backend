@@ -31,8 +31,33 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/ping:
+    get:
+      summary: Endpoint de conectividad para validar la comunicación con el frontend
+      description: >
+        Responde "pong" sin realizar I/O. El frontend Angular (http://localhost:4200)
+        lo usa para validar la comunicación cross-origin (CORS).
+      tags: [Salud]
+      responses:
+        "200":
+          description: Conectividad verificada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaPing"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
 components:
   schemas:
+    RespuestaPing:
+      type: object
+      description: Respuesta del endpoint de conectividad ping/pong.
+      required: [mensaje]
+      properties:
+        mensaje:
+          type: string
+          example: pong
     RespuestaError:
       type: object
       description: >
