@@ -43,3 +43,13 @@ def test_should_leer_configuracion_jwt_desde_entorno(monkeypatch: pytest.MonkeyP
 
     assert settings.jwt_minutos_expiracion_acceso == 15
     assert settings.jwt_dias_expiracion_refresco == 1
+
+
+def test_should_rechazar_jwt_algoritmo_distinto_de_hs256() -> None:
+    with pytest.raises(ValidationError, match="HS256"):
+        Settings(
+            _env_file=None,
+            jwt_secreto=SECRETO_VALIDO,
+            url_base_datos=URL_PRUEBAS,
+            jwt_algoritmo="none",
+        )

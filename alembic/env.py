@@ -1,14 +1,19 @@
-"""Entorno de Alembic en modo async — la URL de conexión proviene de Settings."""
+"""Entorno de Alembic en modo async — solo requiere URL_BASE_DATOS (no JWT)."""
 
 import asyncio
+import os
 from logging.config import fileConfig
+from pathlib import Path
 
 from alembic import context
+from dotenv import load_dotenv
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
-from src.infrastructure.config.settings import Settings
 from src.infrastructure.database.base import Base
 from src.infrastructure.database.modelos import UsuarioORM  # noqa: F401 — registra la tabla
+
+# Carga .env para desarrollo local; en CI/prod las vars ya vienen del entorno.
+load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 config = context.config
 if config.config_file_name is not None:
@@ -18,8 +23,13 @@ target_metadata = Base.metadata
 
 
 def obtener_url() -> str:
-    """Resuelve la URL de la base de datos desde el entorno (sin cache, apto para tests)."""
-    return Settings().url_base_datos
+    """Resuelve la URL de la BD sin instanciar Settings (evita exigir JWT_SECRETO)."""
+    url = os.environ.get("URL_BASE_DATOS")
+    if not url:
+        raise RuntimeError(
+            "Falta URL_BASE_DATOS en el entorno. Defínela en .env o exporta la variable."
+        )
+    return url
 
 
 def run_migrations_offline() -> None:
@@ -42,7 +52,7 @@ def ejecutar_migraciones(conexion: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    """Ejecuta las migraciones con un motor async creado desde Settings."""
+    """Ejecuta las migraciones con un motor async desde URL_BASE_DATOS."""
     motor = create_async_engine(obtener_url(), poolclass=pool.NullPool)
     async with motor.connect() as conexion:
         await conexion.run_sync(ejecutar_migraciones)

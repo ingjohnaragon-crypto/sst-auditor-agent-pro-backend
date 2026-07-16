@@ -8,8 +8,8 @@ from src.application.dto.respuesta_tokens import RespuestaTokenAcceso, Respuesta
 from src.application.dto.respuesta_usuario import RespuestaUsuario
 from src.application.dto.solicitud_login import SolicitudLogin
 from src.application.dto.solicitud_refresh import SolicitudRefresh
+from src.application.mappers.mapper_usuario import MapperUsuario
 from src.application.services.servicio_autenticacion import ServicioAutenticacion
-from src.domain.exceptions.autenticacion import TokenInvalidoException
 from src.domain.models.usuario import Usuario
 from src.presentation.dependencies.autenticacion import (
     obtener_servicio_autenticacion,
@@ -67,9 +67,7 @@ async def refresh(
 )
 async def yo(
     usuario: Usuario = Depends(obtener_usuario_actual),
-    servicio: ServicioAutenticacion = Depends(obtener_servicio_autenticacion),
 ) -> RespuestaUsuario:
     """Perfil del usuario del Bearer token — útil para hidratar sesión en el frontend."""
-    if usuario.id is None:
-        raise TokenInvalidoException()
-    return await servicio.obtener_perfil(usuario.id)
+    # Ya validado y cargado por `obtener_usuario_actual`; evita un round-trip extra a BD.
+    return MapperUsuario.a_respuesta(usuario)

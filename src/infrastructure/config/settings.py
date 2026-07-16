@@ -6,6 +6,7 @@ from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 LONGITUD_MINIMA_JWT_SECRETO = 32
+ALGORITMO_JWT_PERMITIDO = "HS256"
 
 
 class Settings(BaseSettings):
@@ -29,7 +30,7 @@ class Settings(BaseSettings):
 
     # JWT — el secreto es obligatorio y solo llega por entorno; nunca se versiona.
     jwt_secreto: str
-    jwt_algoritmo: str = "HS256"
+    jwt_algoritmo: str = ALGORITMO_JWT_PERMITIDO
     jwt_minutos_expiracion_acceso: int = 30
     jwt_dias_expiracion_refresco: int = 7
 
@@ -40,6 +41,16 @@ class Settings(BaseSettings):
         if len(valor) < LONGITUD_MINIMA_JWT_SECRETO:
             raise ValueError(
                 f"JWT_SECRETO debe tener al menos {LONGITUD_MINIMA_JWT_SECRETO} caracteres"
+            )
+        return valor
+
+    @field_validator("jwt_algoritmo")
+    @classmethod
+    def validar_algoritmo_jwt(cls, valor: str) -> str:
+        """Solo HS256 está soportado (alineado con TokensJWT.encode/decode)."""
+        if valor != ALGORITMO_JWT_PERMITIDO:
+            raise ValueError(
+                f"JWT_ALGORITMO debe ser '{ALGORITMO_JWT_PERMITIDO}' (recibido: '{valor}')"
             )
         return valor
 

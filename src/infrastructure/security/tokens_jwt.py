@@ -12,14 +12,14 @@ from src.infrastructure.config.settings import Settings
 
 TIPO_TOKEN_ACCESO = "acceso"
 TIPO_TOKEN_REFRESCO = "refresco"
+ALGORITMO_JWT = "HS256"
 
 
 class TokensJWT(ServicioTokens):
-    """Emite y valida JWT firmados con el secreto y algoritmo de `Settings`."""
+    """Emite y valida JWT firmados con el secreto de `Settings` (siempre HS256)."""
 
     def __init__(self, settings: Settings) -> None:
         self._secreto = settings.jwt_secreto
-        self._algoritmo = settings.jwt_algoritmo
         self._expiracion_acceso = timedelta(minutes=settings.jwt_minutos_expiracion_acceso)
         self._expiracion_refresco = timedelta(days=settings.jwt_dias_expiracion_refresco)
 
@@ -33,7 +33,7 @@ class TokensJWT(ServicioTokens):
             "exp": ahora + self._expiracion_acceso,
             "jti": str(uuid4()),
         }
-        return jwt.encode(claims, self._secreto, algorithm=self._algoritmo)
+        return jwt.encode(claims, self._secreto, algorithm=ALGORITMO_JWT)
 
     def emitir_token_refresco(self, usuario: Usuario) -> str:
         ahora = datetime.now(UTC)
@@ -45,12 +45,12 @@ class TokensJWT(ServicioTokens):
             "exp": ahora + self._expiracion_refresco,
             "jti": str(uuid4()),
         }
-        return jwt.encode(claims, self._secreto, algorithm=self._algoritmo)
+        return jwt.encode(claims, self._secreto, algorithm=ALGORITMO_JWT)
 
     def decodificar(self, token: str) -> dict[str, object]:
         try:
-            # Lista fija a HS256 (nunca self._algoritmo) — previene ataque de algoritmo `none`.
-            claims: dict[str, object] = jwt.decode(token, self._secreto, algorithms=["HS256"])
+            # Lista fija a HS256 — previene el ataque de algoritmo `none`.
+            claims: dict[str, object] = jwt.decode(token, self._secreto, algorithms=[ALGORITMO_JWT])
         except jwt.ExpiredSignatureError as error:
             raise TokenExpiradoException() from error
         except jwt.InvalidTokenError as error:
