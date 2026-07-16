@@ -48,7 +48,103 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/auth/login:
+    post:
+      summary: Inicia sesión y emite el par de tokens (acceso + refresco)
+      tags: [Autenticación]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudLogin"
+      responses:
+        "200":
+          description: Credenciales válidas — tokens emitidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaTokens"
+        "401":
+          description: Credenciales inválidas (CREDENCIALES_INVALIDAS)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: Body inválido (ERROR_VALIDACION)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/auth/refresh:
+    post:
+      summary: Renueva el token de acceso a partir del token de refresco
+      tags: [Autenticación]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudRefresh"
+      responses:
+        "200":
+          description: Token de refresco válido — nuevo token de acceso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaTokenAcceso"
+        "401":
+          description: >
+            Token inválido o expirado (TOKEN_INVALIDO, TOKEN_EXPIRADO)
+            o usuario inactivo (CREDENCIALES_INVALIDAS)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: Body inválido (ERROR_VALIDACION)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/auth/yo:
+    get:
+      summary: Devuelve el perfil del usuario autenticado
+      tags: [Autenticación]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Perfil del usuario del Bearer token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaUsuario"
+        "401":
+          description: >
+            Sin token, token corrupto, expirado o de tipo refresco
+            (TOKEN_INVALIDO / TOKEN_EXPIRADO)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT de acceso (claim `tipo=acceso`). No aceptar tokens de refresco.
   schemas:
     RespuestaPing:
       type: object
@@ -58,6 +154,74 @@ components:
         mensaje:
           type: string
           example: pong
+    SolicitudLogin:
+      type: object
+      description: Credenciales de inicio de sesión.
+      required: [correo, contrasena]
+      properties:
+        correo:
+          type: string
+          format: email
+          example: admin@empresa.com
+        contrasena:
+          type: string
+          format: password
+          minLength: 8
+          writeOnly: true
+    SolicitudRefresh:
+      type: object
+      description: Token de refresco para renovar el acceso.
+      required: [token_refresco]
+      properties:
+        token_refresco:
+          type: string
+          description: JWT con claim `tipo=refresco`
+    RespuestaTokens:
+      type: object
+      description: Par de tokens emitido al iniciar sesión.
+      required: [token_acceso, token_refresco, tipo_token, expira_en_segundos]
+      properties:
+        token_acceso:
+          type: string
+        token_refresco:
+          type: string
+        tipo_token:
+          type: string
+          example: Bearer
+        expira_en_segundos:
+          type: integer
+          example: 1800
+    RespuestaTokenAcceso:
+      type: object
+      description: Nuevo token de acceso emitido al refrescar.
+      required: [token_acceso, tipo_token, expira_en_segundos]
+      properties:
+        token_acceso:
+          type: string
+        tipo_token:
+          type: string
+          example: Bearer
+        expira_en_segundos:
+          type: integer
+          example: 1800
+    RespuestaUsuario:
+      type: object
+      description: Perfil público del usuario (sin hash de contraseña).
+      required: [id, nombre_completo, correo, rol]
+      properties:
+        id:
+          type: string
+          format: uuid
+        nombre_completo:
+          type: string
+          example: Ana Auditora
+        correo:
+          type: string
+          format: email
+          example: ana@empresa.com
+        rol:
+          type: string
+          enum: [ADMINISTRADOR, AUDITOR_SST, CONSULTA]
     RespuestaError:
       type: object
       description: >
