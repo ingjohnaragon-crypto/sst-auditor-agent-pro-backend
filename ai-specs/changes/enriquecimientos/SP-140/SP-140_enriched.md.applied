@@ -1,0 +1,251 @@
+# Enriched Ticket: SP-140 — SST-HU 1.2: Autenticación JWT y Roles de SST
+
+## Original Description
+
+Como Auditor de SST, quiero iniciar sesión de forma segura y contar con permisos específicos según mi perfil, para proteger la confidencialidad de la información médica e índices de siniestralidad.
+
+## Enhanced Description
+
+Implementar el sistema de autenticación y autorización del backend de **SST Auditor Agent Pro** mediante JWT (JSON Web Tokens) con control de acceso basado en roles (RBAC).
+
+Esta HU introduce por primera vez la **capa de persistencia** del proyecto (SQLAlchemy 2.x async + PostgreSQL + Alembic), ya que hasta ahora el backend solo expone `/health` y `/api/v1/ping` sin base de datos. El alcance backend cubre:
+
+1. **Modelo de dominio `Usuario`** con rol de SST y credenciales cifradas con **Bcrypt** (nunca se persiste la contraseña en claro; el hash incluye salt propio por usuario).
+2. **Enum de roles** `RolUsuario` alineado con el dominio SST:
+   - `ADMINISTRADOR`: gestión de usuarios y configuración del sistema.
+   - `AUDITOR_SST`: acceso completo a auditorías, información médica ocupacional e índices de siniestralidad.
+   - `CONSULTA`: acceso de solo lectura a información no sensible (sin datos médicos ni siniestralidad).
+3. **Endpoints de autenticación** bajo `/api/v1/auth`: `login` (emite par de tokens), `refresh` (renueva el token de acceso a partir del token de refresco) y `yo` (perfil del usuario autenticado, útil para que el frontend hidrate sesión).
+4. **Tokens JWT firmados con HS256** (secreto vía variable de entorno, mínimo 32 caracteres):
+   - Token de acceso: expiración 30 minutos. Claims: `sub` (id del usuario), `rol`, `tipo="acceso"`, `iat`, `exp`, `jti`.
+   - Token de refresco: expiración 7 días. Claims: `sub`, `tipo="refresco"`, `iat`, `exp`, `jti`. **No** contiene rol ni sirve para acceder a endpoints protegidos.
+5. **Dependencias de autorización reutilizables** en `presentation/dependencies/`: `obtener_usuario_actual` (valida el Bearer token) y la fábrica `requerir_roles(*roles)` que protegerá los endpoints de tickets futuros (información médica → solo `AUDITOR_SST`/`ADMINISTRADOR`).
+6. **Migración Alembic inicial** con la tabla `usuarios` y un script de seed (`scripts/crear_usuario_admin.py`) que crea el primer `ADMINISTRADOR` leyendo credenciales de variables de entorno (nunca hardcodeadas).
+
+Los errores de autenticación/autorización siguen el contrato único `RespuestaError` ya existente (`exito`, `codigo`, `mensaje`, `detalle`), con nuevas excepciones de dominio: `CredencialesInvalidasException` (401, `CREDENCIALES_INVALIDAS`), `TokenInvalidoException` (401, `TOKEN_INVALIDO`), `TokenExpiradoException` (401, `TOKEN_EXPIRADO`) y `PermisosInsuficientesException` (403, `PERMISOS_INSUFICIENTES`).
+
+Arquitectura DDD (obligatoria en este repo): el dominio define los **puertos** `RepositorioUsuario`, `ServicioHashContrasena` y `ServicioTokens` como ABCs; la infraestructura aporta las implementaciones (SQLAlchemy, bcrypt, PyJWT). Ni `domain/` ni `application/` importan FastAPI, SQLAlchemy, bcrypt o jwt.
+
+Los subtareas SP-176 y SP-177 corresponden al **frontend Angular** (repositorio del frontend); se enriquecen aquí para que el equipo frontend sea autónomo, pero no forman parte del alcance de código de este repositorio.
+
+## Acceptance Criteria
+
+- [ ] `POST /api/v1/auth/login` con credenciales válidas responde 200 con `token_acceso`, `token_refresco`, `tipo_token="Bearer"` y `expira_en_segundos`.
+- [ ] `POST /api/v1/auth/login` con correo inexistente o contraseña incorrecta responde 401 `CREDENCIALES_INVALIDAS` con el **mismo mensaje genérico** en ambos casos (no revelar cuál falló) y sin diferencia de tiempo observable relevante (siempre se ejecuta la verificación bcrypt).
+- [ ] Un usuario con `activo=false` no puede iniciar sesión ni refrescar tokens (401 `CREDENCIALES_INVALIDAS`).
+- [ ] `POST /api/v1/auth/refresh` con un token de refresco válido responde 200 con un nuevo `token_acceso`; con un token de acceso (tipo incorrecto), expirado o mal firmado responde 401 (`TOKEN_INVALIDO` / `TOKEN_EXPIRADO`).
+- [ ] `GET /api/v1/auth/yo` con Bearer válido responde 200 con `id`, `nombre_completo`, `correo`, `rol`; sin token o con token inválido responde 401.
+- [ ] Un token de refresco **no** es aceptado como Bearer en endpoints protegidos (401 `TOKEN_INVALIDO`).
+- [ ] La dependencia `requerir_roles(...)` responde 403 `PERMISOS_INSUFICIENTES` cuando el rol del usuario no está en la lista permitida.
+- [ ] Las contraseñas se almacenan únicamente como hash bcrypt (costo ≥ 12); ningún log, respuesta ni excepción expone la contraseña ni el hash.
+- [ ] Existe la migración Alembic que crea la tabla `usuarios` con índice único en `correo`, y `alembic upgrade head` la aplica sin errores sobre una BD vacía.
+- [ ] `scripts/crear_usuario_admin.py` crea el usuario administrador inicial desde variables de entorno y es idempotente (si el correo ya existe, no duplica ni falla).
+- [ ] Todos los errores de auth respetan el esquema `RespuestaError` existente.
+- [ ] `ai-specs/specs/api-spec.yml` incluye los tres endpoints nuevos y el esquema de seguridad `bearerAuth`; `ai-specs/specs/data-model.md` documenta la entidad `Usuario` y el enum `RolUsuario`.
+- [ ] Cobertura de tests ≥ 90 % (umbral ya configurado en `pyproject.toml`); `ruff` y `mypy --strict` pasan sin errores.
+
+## Fields & Endpoints
+
+### Entidad `Usuario` (tabla `usuarios`)
+
+| Campo | Tipo (PostgreSQL) | Restricciones |
+|---|---|---|
+| `id` | `UUID` (pk, `gen_random_uuid()` o generado en app) | PK |
+| `nombre_completo` | `VARCHAR(150)` | NOT NULL |
+| `correo` | `VARCHAR(254)` | NOT NULL, UNIQUE (índice único), normalizado a minúsculas |
+| `hash_contrasena` | `VARCHAR(72)` | NOT NULL (hash bcrypt) |
+| `rol` | `VARCHAR(30)` (enum en app: `ADMINISTRADOR`, `AUDITOR_SST`, `CONSULTA`) | NOT NULL |
+| `activo` | `BOOLEAN` | NOT NULL, default `true` |
+| `fecha_creacion` | `TIMESTAMPTZ` | NOT NULL, default `now()` |
+| `fecha_actualizacion` | `TIMESTAMPTZ` | NOT NULL, `onupdate now()` |
+
+### Endpoints
+
+| Método | URL | Auth | Request (JSON) | Respuesta 200/201 |
+|---|---|---|---|---|
+| POST | `/api/v1/auth/login` | Pública | `{ "correo": str (EmailStr), "contrasena": str (min 8) }` | `{ "token_acceso": str, "token_refresco": str, "tipo_token": "Bearer", "expira_en_segundos": 1800 }` |
+| POST | `/api/v1/auth/refresh` | Pública (requiere token de refresco en el body) | `{ "token_refresco": str }` | `{ "token_acceso": str, "tipo_token": "Bearer", "expira_en_segundos": 1800 }` |
+| GET | `/api/v1/auth/yo` | Bearer (cualquier rol) | — | `{ "id": uuid, "nombre_completo": str, "correo": str, "rol": str }` |
+
+Errores: 401 `CREDENCIALES_INVALIDAS` / `TOKEN_INVALIDO` / `TOKEN_EXPIRADO`, 403 `PERMISOS_INSUFICIENTES`, 422 `ERROR_VALIDACION` — todos con esquema `RespuestaError`.
+
+### Nuevas variables de entorno (`Settings`)
+
+| Variable | Tipo | Default / Notas |
+|---|---|---|
+| `URL_BASE_DATOS` | `str` | `postgresql+asyncpg://...` — sin default en producción |
+| `JWT_SECRETO` | `str` | Obligatoria, mínimo 32 caracteres (validar en `Settings`) |
+| `JWT_ALGORITMO` | `str` | `HS256` |
+| `JWT_MINUTOS_EXPIRACION_ACCESO` | `int` | `30` |
+| `JWT_DIAS_EXPIRACION_REFRESCO` | `int` | `7` |
+| `ADMIN_INICIAL_CORREO` / `ADMIN_INICIAL_CONTRASENA` / `ADMIN_INICIAL_NOMBRE` | `str` | Solo usadas por el script de seed |
+
+### Nuevas dependencias (pyproject.toml)
+
+`sqlalchemy[asyncio]==2.x`, `asyncpg`, `alembic`, `bcrypt` (uso directo, sin passlib), `pyjwt`. Dev/test: `aiosqlite` (BD de integración en memoria) o PostgreSQL vía Docker Compose.
+
+## Files to Create or Modify
+
+| File | Layer | Action |
+|---|---|---|
+| `src/domain/models/usuario.py` | Domain | Create — dataclass `Usuario` + enum `RolUsuario`; factoría `crear()` que valida invariantes (correo con formato, nombre no vacío) |
+| `src/domain/repositories/repositorio_usuario.py` | Domain | Create — ABC: `buscar_por_correo`, `buscar_por_id`, `guardar`, `existe_por_correo` |
+| `src/domain/repositories/servicio_hash_contrasena.py` | Domain | Create — ABC (puerto): `generar_hash`, `verificar` |
+| `src/domain/repositories/servicio_tokens.py` | Domain | Create — ABC (puerto): `emitir_token_acceso`, `emitir_token_refresco`, `decodificar` |
+| `src/domain/exceptions/autenticacion.py` | Domain | Create — `CredencialesInvalidasException`, `TokenInvalidoException`, `TokenExpiradoException`, `PermisosInsuficientesException` (subclases de `DomainException` con `code`/`http_status`) |
+| `src/application/dto/solicitud_login.py` | Application | Create — `SolicitudLogin` (Pydantic, `EmailStr`, contraseña min 8) |
+| `src/application/dto/solicitud_refresh.py` | Application | Create — `SolicitudRefresh` |
+| `src/application/dto/respuesta_tokens.py` | Application | Create — `RespuestaTokens`, `RespuestaTokenAcceso` |
+| `src/application/dto/respuesta_usuario.py` | Application | Create — `RespuestaUsuario` (sin `hash_contrasena`) |
+| `src/application/mappers/mapper_usuario.py` | Application | Create — `Usuario` → `RespuestaUsuario` |
+| `src/application/services/servicio_autenticacion.py` | Application | Create — casos de uso `iniciar_sesion`, `refrescar_token`, `obtener_perfil`; inyección por constructor de los tres puertos |
+| `src/presentation/routers/auth_router.py` | Presentation | Create — router `/auth`, tags `["Autenticación"]` |
+| `src/presentation/dependencies/autenticacion.py` | Presentation | Create — `obtener_usuario_actual` (HTTPBearer), fábrica `requerir_roles(*roles)`, wiring del servicio con `Depends()` |
+| `src/infrastructure/database/base.py` | Infrastructure | Create — `Base` declarativa (SQLAlchemy 2.x `DeclarativeBase`) |
+| `src/infrastructure/database/sesion.py` | Infrastructure | Create — engine async + `async_sessionmaker` + dependencia `obtener_sesion` |
+| `src/infrastructure/database/modelos/usuario_orm.py` | Infrastructure | Create — modelo ORM `UsuarioORM` (tabla `usuarios`) |
+| `src/infrastructure/repositories/repositorio_usuario_sqlalchemy.py` | Infrastructure | Create — implementación del ABC; mapea ORM ↔ dominio |
+| `src/infrastructure/security/hash_bcrypt.py` | Infrastructure | Create — implementación bcrypt del puerto de hashing (costo 12) |
+| `src/infrastructure/security/tokens_jwt.py` | Infrastructure | Create — implementación PyJWT del puerto de tokens |
+| `src/infrastructure/config/settings.py` | Infrastructure | Modify — agregar variables de BD y JWT |
+| `src/main.py` | Presentation | Modify — registrar `auth_router` bajo `api_prefix` |
+| `alembic.ini` + `alembic/env.py` + `alembic/versions/<rev>_crear_tabla_usuarios.py` | Infrastructure | Create — inicializar Alembic en modo async y primera migración |
+| `scripts/crear_usuario_admin.py` | Scripts | Create — seed idempotente del administrador inicial |
+| `pyproject.toml` | Config | Modify — nuevas dependencias |
+| `.env.example` | Config | Modify — documentar nuevas variables (con valores placeholder, nunca secretos reales) |
+| `tests/unit/...` y `tests/integration/...` | Tests | Create — ver sección de tests |
+| `ai-specs/specs/api-spec.yml` | Docs | Modify — endpoints de auth + `securitySchemes.bearerAuth` |
+| `ai-specs/specs/data-model.md` | Docs | Modify — entidad `Usuario`, enum `RolUsuario`, tabla `usuarios` |
+
+## Unit Test Cases
+
+**Unitarios (sin FastAPI ni SQLAlchemy; puertos mockeados):**
+- `test_should_devolver_tokens_when_credenciales_validas` — happy path de `iniciar_sesion`.
+- `test_should_lanzar_credenciales_invalidas_when_correo_no_existe` — y verifica que **igualmente** se invoca la verificación de hash (mitigación de timing).
+- `test_should_lanzar_credenciales_invalidas_when_contrasena_incorrecta`.
+- `test_should_lanzar_credenciales_invalidas_when_usuario_inactivo`.
+- `test_should_emitir_nuevo_token_acceso_when_refresh_valido`.
+- `test_should_lanzar_token_invalido_when_refresh_recibe_token_de_acceso` — claim `tipo` incorrecto.
+- `test_should_lanzar_token_expirado_when_token_vencido`.
+- `test_should_crear_usuario_when_datos_validos` y `test_should_lanzar_error_when_correo_invalido` (factoría del dominio).
+- Puerto bcrypt: hash ≠ contraseña en claro, `verificar` verdadero/falso, dos hashes de la misma contraseña difieren (salt).
+- Puerto JWT: claims presentes (`sub`, `rol`, `tipo`, `exp`, `jti`), firma inválida rechazada, algoritmo `none` rechazado.
+
+**Integración (httpx `AsyncClient` + BD de test):**
+- `POST /auth/login` 200, 401 y 422 (body inválido → `ERROR_VALIDACION`).
+- `POST /auth/refresh` 200 y 401.
+- `GET /auth/yo` 200 con Bearer válido; 401 sin token, con token corrupto y con token de refresco.
+- Endpoint dummy protegido con `requerir_roles("ADMINISTRADOR")` → 403 para rol `CONSULTA`.
+- Verificar que todas las respuestas de error cumplen el contrato `RespuestaError`.
+
+## Non-Functional Requirements
+
+- **Seguridad**:
+  - Bcrypt con costo ≥ 12; contraseña en claro nunca logueada ni retornada; `hash_contrasena` excluido de todos los DTOs de respuesta.
+  - Mensaje de error de login genérico e idéntico para "usuario no existe" y "contraseña incorrecta"; ejecutar siempre la comparación bcrypt para evitar enumeración por tiempo de respuesta.
+  - `JWT_SECRETO` solo vía entorno (validar longitud mínima 32 en `Settings`); rechazar tokens sin verificar firma y fijar explícitamente `algorithms=["HS256"]` al decodificar (previene ataque de algoritmo `none`).
+  - Los tokens de refresco no otorgan acceso a recursos; distinguir por claim `tipo`.
+  - CORS ya restringido a `http://localhost:4200`; el header `Authorization` debe permanecer permitido en la configuración existente.
+- **Rendimiento**: la verificación bcrypt es CPU-bound (~100 ms con costo 12) — ejecutarla con `asyncio.to_thread` para no bloquear el event loop. Consulta de login por índice único de `correo`.
+- **Validación**: Pydantic v2 en todos los inputs (`EmailStr` requiere `email-validator`); correo normalizado a minúsculas antes de consultar/persistir.
+- **Calidad**: type hints en el 100 % de funciones, `mypy --strict` y `ruff` limpios, cobertura ≥ 90 %.
+- **Observabilidad**: loguear en INFO los inicios de sesión exitosos y en WARNING los fallidos (solo el correo, jamás la contraseña), usando la configuración de logging existente.
+
+## Subtasks
+
+<!-- SUBTASK:SP-174 -->
+### Subtask: SP-174 — Modelar tablas de usuarios y encriptación de claves
+
+#### Original Description
+Crear modelo de usuario y cifrado seguro (Bcrypt) para credenciales.
+
+#### Enhanced Description
+Introducir la capa de persistencia del proyecto y el modelo de usuarios:
+
+1. **Dependencias**: agregar `sqlalchemy[asyncio]`, `asyncpg`, `alembic` y `bcrypt` a `pyproject.toml` (Poetry).
+2. **Dominio** (`src/domain/models/usuario.py`): dataclass pura `Usuario` (`id: UUID | None`, `nombre_completo`, `correo`, `hash_contrasena`, `rol: RolUsuario`, `activo`, `fecha_creacion`, `fecha_actualizacion`) y enum `RolUsuario` (`ADMINISTRADOR`, `AUDITOR_SST`, `CONSULTA`). Factoría `Usuario.crear()` que valida invariantes. Sin imports de SQLAlchemy.
+3. **Puertos** (`src/domain/repositories/`): ABC `RepositorioUsuario` (`buscar_por_correo`, `buscar_por_id`, `guardar`, `existe_por_correo`) y ABC `ServicioHashContrasena` (`generar_hash`, `verificar`).
+4. **Infraestructura**: `Base` declarativa y sesión async (`src/infrastructure/database/`), modelo ORM `UsuarioORM` (tabla `usuarios`, índice único en `correo`), `RepositorioUsuarioSQLAlchemy` que mapea ORM ↔ dominio, e implementación `HashBcrypt` (costo 12, ejecutada con `asyncio.to_thread`).
+5. **Alembic**: inicializar en modo async (`alembic init`, `env.py` con `async_engine_from_config`) y crear la migración `crear_tabla_usuarios`. Nada de `Base.metadata.create_all()` fuera de tests.
+6. **Seed**: `scripts/crear_usuario_admin.py` idempotente que lee `ADMIN_INICIAL_*` del entorno.
+7. **Config**: agregar `URL_BASE_DATOS` a `Settings` y a `.env.example`.
+
+#### Acceptance Criteria
+- [ ] `alembic upgrade head` crea la tabla `usuarios` con todas las columnas y el índice único de `correo` sobre una BD vacía.
+- [ ] Dos hashes bcrypt de la misma contraseña son distintos (salt) y ambos verifican correctamente.
+- [ ] `domain/` no importa SQLAlchemy, bcrypt ni FastAPI (verificable por inspección y por los tests unitarios sin esas librerías).
+- [ ] El repositorio SQLAlchemy devuelve modelos de dominio, nunca instancias ORM.
+- [ ] El script de seed crea el administrador una sola vez y no falla si ya existe.
+- [ ] Tests unitarios del modelo, del hash y del mapeo ORM ↔ dominio; cobertura del módulo ≥ 90 %.
+<!-- /SUBTASK:SP-174 -->
+
+<!-- SUBTASK:SP-175 -->
+### Subtask: SP-175 — Desarrollar endpoints de Login y Refresh JWT
+
+#### Original Description
+Programar generación y renovación de tokens JWT en el backend.
+
+#### Enhanced Description
+Sobre la base de SP-174, exponer el flujo completo de autenticación:
+
+1. **Puerto de tokens** (`src/domain/repositories/servicio_tokens.py`): ABC con `emitir_token_acceso(usuario)`, `emitir_token_refresco(usuario)`, `decodificar(token)`. Implementación `TokensJWT` con PyJWT en `src/infrastructure/security/tokens_jwt.py` (HS256, `algorithms=["HS256"]` fijo al decodificar; claims `sub`, `rol`, `tipo`, `iat`, `exp`, `jti`).
+2. **Excepciones de dominio** (`src/domain/exceptions/autenticacion.py`): `CredencialesInvalidasException` (401, `CREDENCIALES_INVALIDAS`), `TokenInvalidoException` (401, `TOKEN_INVALIDO`), `TokenExpiradoException` (401, `TOKEN_EXPIRADO`), `PermisosInsuficientesException` (403, `PERMISOS_INSUFICIENTES`) — se resuelven con el `domain_handler` existente.
+3. **Servicio** (`src/application/services/servicio_autenticacion.py`): `iniciar_sesion(dto)` (verifica bcrypt siempre, incluso si el correo no existe), `refrescar_token(dto)` (exige claim `tipo="refresco"` y usuario activo), `obtener_perfil(id)`.
+4. **DTOs**: `SolicitudLogin` (EmailStr + contraseña min 8), `SolicitudRefresh`, `RespuestaTokens`, `RespuestaTokenAcceso`, `RespuestaUsuario`.
+5. **Router** (`src/presentation/routers/auth_router.py`): `POST /api/v1/auth/login` (200), `POST /api/v1/auth/refresh` (200), `GET /api/v1/auth/yo` (200, protegido). Registrar en `src/main.py` bajo `api_prefix`.
+6. **Dependencias de autorización** (`src/presentation/dependencies/autenticacion.py`): `obtener_usuario_actual` con `HTTPBearer` y fábrica `requerir_roles(*roles)` reutilizable en tickets futuros.
+7. **Config**: `JWT_SECRETO` (min 32 chars), `JWT_ALGORITMO`, `JWT_MINUTOS_EXPIRACION_ACCESO=30`, `JWT_DIAS_EXPIRACION_REFRESCO=7` en `Settings` y `.env.example`.
+8. **Docs**: actualizar `ai-specs/specs/api-spec.yml` (tres endpoints + `securitySchemes.bearerAuth`) y `ai-specs/specs/data-model.md`.
+
+#### Acceptance Criteria
+- [ ] Login válido responde 200 con `token_acceso`, `token_refresco`, `tipo_token="Bearer"` y `expira_en_segundos=1800`.
+- [ ] Login con correo inexistente y con contraseña incorrecta responden 401 con mensaje idéntico (`CREDENCIALES_INVALIDAS`).
+- [ ] Refresh con token de refresco válido emite un nuevo token de acceso; con token de acceso, expirado o mal firmado responde 401 con el código correspondiente.
+- [ ] `GET /api/v1/auth/yo` responde el perfil sin `hash_contrasena`; sin Bearer responde 401.
+- [ ] Un token de refresco usado como Bearer en un endpoint protegido responde 401 `TOKEN_INVALIDO`.
+- [ ] `requerir_roles` responde 403 `PERMISOS_INSUFICIENTES` para roles no autorizados.
+- [ ] Todos los errores cumplen el esquema `RespuestaError`; tests de integración con httpx `AsyncClient` cubren los casos anteriores; cobertura ≥ 90 %.
+<!-- /SUBTASK:SP-175 -->
+
+<!-- SUBTASK:SP-176 -->
+### Subtask: SP-176 — Implementar Interceptor HTTP de JWT en Angular
+
+#### Original Description
+Interceptar peticiones para inyectar token de autorización Bearer de forma dinámica.
+
+#### Enhanced Description
+*(Alcance: repositorio frontend Angular, `http://localhost:4200`.)*
+
+1. **`AuthService`** (`src/app/core/auth/auth.service.ts`): métodos `iniciarSesion(credenciales)` → `POST {apiUrl}/api/v1/auth/login`, `refrescarToken()` → `POST {apiUrl}/api/v1/auth/refresh`, `cerrarSesion()`, y estado reactivo del usuario (signal o `BehaviorSubject`) hidratado con `GET /api/v1/auth/yo`. Almacenar `token_acceso` y `token_refresco` (documentar la decisión de storage; preferir memoria + `sessionStorage` sobre `localStorage`).
+2. **Interceptor funcional** (`src/app/core/auth/auth.interceptor.ts`, registrado con `provideHttpClient(withInterceptors([...]))`): agrega `Authorization: Bearer <token_acceso>` a toda petición dirigida al `apiUrl` del backend, excluyendo `login` y `refresh`.
+3. **Manejo de 401 con refresh automático**: ante un 401 en una petición autenticada, invocar `refresh` una sola vez, reintentar la petición original con el nuevo token y, si el refresh también falla, limpiar sesión y redirigir a `/login`. Evitar tormenta de refresh concurrentes (compartir una única petición de refresh en curso).
+4. **Contrato con el backend**: request de login `{ correo, contrasena }`; respuesta `{ token_acceso, token_refresco, tipo_token, expira_en_segundos }`; errores con esquema `{ exito, codigo, mensaje, detalle }`.
+
+#### Acceptance Criteria
+- [ ] Toda petición al backend (excepto `login`/`refresh`) lleva el header `Authorization: Bearer <token_acceso>`.
+- [ ] Ante un 401, el interceptor refresca el token una sola vez y reintenta la petición original; múltiples peticiones concurrentes comparten un único refresh.
+- [ ] Si el refresh falla, se limpia la sesión y se redirige a `/login`.
+- [ ] Los tokens nunca se registran en consola; unit tests del interceptor con `HttpClientTestingModule`/`provideHttpClientTesting` cubren inyección de header, refresh y logout forzado.
+<!-- /SUBTASK:SP-176 -->
+
+<!-- SUBTASK:SP-177 -->
+### Subtask: SP-177 — Crear AuthGuard de rutas y directivas estructurales
+
+#### Original Description
+Prevenir accesos no autorizados a rutas de Angular según roles del usuario.
+
+#### Enhanced Description
+*(Alcance: repositorio frontend Angular.)*
+
+1. **Guard de autenticación** (`src/app/core/auth/auth.guard.ts`): `CanActivateFn` funcional que verifica sesión activa vía `AuthService`; si no hay sesión, redirige a `/login` guardando la URL de retorno (`returnUrl`).
+2. **Guard de roles** (`src/app/core/auth/rol.guard.ts`): `CanActivateFn` parametrizado vía `data: { rolesPermitidos: ['ADMINISTRADOR', 'AUDITOR_SST'] }` en la definición de rutas; si el rol del usuario (obtenido del estado de `AuthService`, no decodificando el JWT en cada verificación) no está permitido, redirigir a una página `/acceso-denegado` (403).
+3. **Directiva estructural** (`src/app/shared/directivas/si-tiene-rol.directive.ts`): `*appSiTieneRol="['AUDITOR_SST']"` que renderiza el contenido solo si el usuario tiene alguno de los roles indicados; reactiva ante cambios de sesión.
+4. **Roles del sistema** (deben coincidir con el backend): `ADMINISTRADOR`, `AUDITOR_SST`, `CONSULTA`. Las vistas de información médica e índices de siniestralidad se restringen a `ADMINISTRADOR` y `AUDITOR_SST`.
+5. **Nota de seguridad**: los guards y directivas son UX, no seguridad — la autorización real la impone el backend con `requerir_roles`; documentarlo en el código.
+
+#### Acceptance Criteria
+- [ ] Navegar a una ruta protegida sin sesión redirige a `/login` con `returnUrl` y, tras autenticarse, retorna a la ruta original.
+- [ ] Un usuario `CONSULTA` que navega a una ruta restringida a `AUDITOR_SST`/`ADMINISTRADOR` es redirigido a `/acceso-denegado`.
+- [ ] Los elementos marcados con `*appSiTieneRol` solo se renderizan para los roles indicados y se actualizan al cambiar la sesión.
+- [ ] Unit tests de ambos guards y de la directiva (roles permitido/denegado, sin sesión).
+<!-- /SUBTASK:SP-177 -->
