@@ -10,7 +10,9 @@ Variables de entorno requeridas:
 import asyncio
 import logging
 import os
+from pathlib import Path
 
+from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.domain.models.usuario import RolUsuario, Usuario
 from src.infrastructure.database.sesion import obtener_fabrica_sesiones
@@ -63,6 +65,7 @@ async def crear_usuario_admin(sesion: AsyncSession) -> bool:
 
 async def principal() -> None:
     """Punto de entrada async: abre sesión, ejecuta el seed y confirma la transacción."""
+    load_dotenv(Path(__file__).resolve().parents[1] / ".env")
     logging.basicConfig(level=logging.INFO)
     fabrica = obtener_fabrica_sesiones()
     async with fabrica() as sesion:
