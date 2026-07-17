@@ -4,7 +4,8 @@ PR Number: $ARGUMENTS
 
 ## Goal
 Review a Pull Request against the active stack standards and generate a structured,
-actionable code review. Save the result to `ai-specs/changes/reviews/` for traceability.
+actionable code review. Persist only a temporary working file under `.openspec-cli/`
+(GitHub is the source of truth after `os-review-apply`).
 
 ## Pre-flight checklist
 
@@ -33,12 +34,17 @@ actionable code review. Save the result to `ai-specs/changes/reviews/` for trace
 2. Classify each issue: CRITICAL (blocking), MAJOR (strongly recommended), MINOR (suggestion)
 3. Note at least 2-3 positives
 4. Issue a final verdict: APPROVE / REQUEST CHANGES / COMMENT ONLY
-5. **Save the review** to `ai-specs/changes/reviews/<ticket-id>/<ticket-id>_review.md`
-   — If no ticket ID found in the branch name, use `ai-specs/changes/reviews/pr-<PR_NUMBER>/pr-<PR_NUMBER>_review.md`
+5. **Save the review** to `.openspec-cli/.review-output.md` (temporary working file only —
+   do **not** create folders under `ai-specs/changes/reviews/`)
+
+## Language
+
+Write the entire review (including section headers) in the Active Language from the prompt.
 
 ## Output format
 
-Save a markdown file at `ai-specs/changes/reviews/<ticket-id>/<ticket-id>_review.md` with this structure:
+Save a markdown file at `.openspec-cli/.review-output.md` with this structure
+(translate headers when Active Language is Spanish):
 
 ---
 
@@ -94,5 +100,5 @@ If no issues: "No specific issues found."
 
 ## Final message format
 
-> I've saved the review to `ai-specs/changes/reviews/<ticket-id>/<ticket-id>_review.md`.
+> I've saved the review to `.openspec-cli/.review-output.md`.
 > Run `os-review-apply <PR_NUMBER>` to publish it to GitHub.

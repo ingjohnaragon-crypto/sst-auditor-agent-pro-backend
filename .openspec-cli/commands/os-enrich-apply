@@ -58,6 +58,8 @@ case "$confirm" in
 esac
 
 os_step "Uploading to Jira $TICKET_ID..."
+os_info "ADF converter strips <!-- jira-skip --> blocks and uploads story points from <!-- STORY_POINTS:N -->"
+os_info "Override field with JIRA_STORY_POINTS_FIELD (default: customfield_10016)"
 
 py "$HOME/.openspec/lib/jira_upload.py"   "$TICKET_ID" "$SOURCE_FILE"   "$JIRA_BASE_URL" "$JIRA_EMAIL" "$JIRA_TOKEN"
 

@@ -254,16 +254,13 @@ if [ "$AUTO_COMMIT" = "true" ]; then
     os_success "Fixes committed and pushed: $MSG"
   fi
 
-  # ── Save fix report ─────────────────────────────────────────
-  if [ -n "$TICKET_ID" ]; then
-    CHANGES_DIR="$OS_REPO_ROOT/ai-specs/changes/reviews/${TICKET_ID}"
-    mkdir -p "$CHANGES_DIR"
-    FIX_REPORT_FILE="$CHANGES_DIR/${TICKET_ID}_fix.md"
-    cat > "$FIX_REPORT_FILE" << FIX_EOF
+  # ── Save fix report (temp working file only) ───────────────
+  FIX_REPORT_FILE="$OS_REPO_ROOT/.openspec-cli/.fix-report.md"
+  cat > "$FIX_REPORT_FILE" << FIX_EOF
 # Review Fix Report: PR #$PR_NUMBER
 
 ## Original Verdict
-REQUEST CHANGES — see \`ai-specs/changes/reviews/${TICKET_ID}/${TICKET_ID}_review.md\`
+REQUEST CHANGES — see \`.openspec-cli/.review-output.md.applied\` or the GitHub PR review
 
 ## Issues Addressed
 Fixes applied to issues identified in the review.
@@ -276,8 +273,7 @@ See git diff for specific changes.
 ## Verdict After Fixes
 READY FOR RE-REVIEW
 FIX_EOF
-    os_info "Fix report: ai-specs/changes/reviews/${TICKET_ID}/${TICKET_ID}_fix.md"
-  fi
+  os_info "Fix report (temp): .openspec-cli/.fix-report.md"
 fi
 
 # ── Generate new review ───────────────────────────────────────

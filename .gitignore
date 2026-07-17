@@ -79,3 +79,4 @@ venv/
 .openspec-cli/.review-output.md
 .openspec-cli/.last-simulation.json
 .openspec-cli/.fix-prompt.md
+.openspec-cli/.fix-report.md

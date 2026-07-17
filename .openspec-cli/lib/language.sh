@@ -19,10 +19,10 @@ os_load_language() {
 
   case "$OS_ACTIVE_LANGUAGE" in
     es)
-      OS_LANGUAGE_DIRECTIVE="Escribe TODA la salida en español: identificadores de código (variables, funciones, clases, archivos), comentarios de código, mensajes de log y error, mensajes de commit, títulos y descripciones de PR, contenido de tickets de Jira y documentación técnica. Mantén sin traducir las palabras reservadas del lenguaje, las APIs de librerías/frameworks y los nombres de paquetes de terceros."
+      OS_LANGUAGE_DIRECTIVE="Escribe TODA la salida en español: identificadores de código (variables, funciones, clases, archivos), comentarios de código, mensajes de log y error, mensajes de commit, títulos y descripciones de PR, contenido de tickets de Jira y documentación técnica. Incluye los encabezados de sección (p. ej. en enrich: «Ticket enriquecido», «Descripción mejorada», «Criterios de aceptación»; en planes: «Estimación de puntos de historia»). Mantén sin traducir las palabras reservadas del lenguaje, las APIs de librerías/frameworks y los nombres de paquetes de terceros."
       ;;
     *)
-      OS_LANGUAGE_DIRECTIVE="Write ALL output in English: source code identifiers (variables, functions, classes, files), code comments, log and error messages, commit messages, PR titles/descriptions, Jira ticket content, and technical documentation."
+      OS_LANGUAGE_DIRECTIVE="Write ALL output in English: source code identifiers (variables, functions, classes, files), code comments, log and error messages, commit messages, PR titles/descriptions, Jira ticket content, and technical documentation. Section headers must also be in English."
       ;;
   esac
 
