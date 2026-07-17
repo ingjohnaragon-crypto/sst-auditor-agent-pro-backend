@@ -85,9 +85,12 @@ y el ciclo PHVA, según la referencia normativa `.sst-agent-document.md`.
 Cualquier desviación futura del esquema debe pasar primero por actualizar el
 DBML y este documento.
 
-> Este modelo es de **diseño**: no existen aún tablas, migraciones ni endpoints
-> para estas entidades (solo `usuarios` está implementada). Las migraciones se
-> crearán en tickets posteriores tomando este diagrama como fuente de verdad.
+> **Estado de implementación (SP-144):** las tablas `empresas`, `autoevaluaciones` y
+> `calificaciones_estandar` están persistidas vía migración
+> `c3d4e5f6a7b8_crear_tablas_autoevaluacion.py` y expuestas por la API REST bajo
+> `/api/v1`. El catálogo `estandares_minimos` / `catalogos_referencia` llegó en
+> SP-143 (`b2c3d4e5f6a7`). El resto de entidades del ER (peligros, auditorías,
+> planes de mejoramiento, etc.) sigue pendiente de tickets posteriores.
 
 ### Convenciones transversales
 

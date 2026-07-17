@@ -1,7 +1,9 @@
-"""Fixtures de integración: app FastAPI + SQLite async en memoria + usuarios semilla."""
+"""Fixtures de integración: app FastAPI + SQLite async + usuarios y catálogo semilla."""
 
 from collections.abc import AsyncIterator
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from decimal import Decimal
+from uuid import UUID
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -9,7 +11,14 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 from src.domain.models.usuario import RolUsuario, Usuario
 from src.infrastructure.database.base import Base
-from src.infrastructure.database.modelos.usuario_orm import UsuarioORM  # noqa: F401
+from src.infrastructure.database.modelos import (  # noqa: F401 — registra tablas
+    AutoevaluacionORM,
+    CalificacionEstandarORM,
+    CatalogoReferenciaORM,
+    EmpresaORM,
+    EstandarMinimoORM,
+    UsuarioORM,
+)
 from src.infrastructure.database.sesion import obtener_sesion
 from src.infrastructure.repositories.repositorio_usuario_sqlalchemy import (
     RepositorioUsuarioSQLAlchemy,
@@ -25,17 +34,22 @@ CORREO_INACTIVO = "inactivo@empresa.com"
 
 @dataclass(frozen=True)
 class UsuariosSemilla:
-    """Identificadores de los usuarios creados en la BD de prueba."""
-
     correo_admin: str = CORREO_ADMIN
     correo_consulta: str = CORREO_CONSULTA
     correo_inactivo: str = CORREO_INACTIVO
     contrasena: str = CONTRASENA_VALIDA
 
 
+@dataclass(frozen=True)
+class CatalogoSemilla:
+    """IDs del catálogo reducido sembrado para integración (suma 85.00)."""
+
+    estandar_ids: tuple[UUID, ...] = field(default_factory=tuple)
+
+
 @pytest.fixture
 async def cliente_async() -> AsyncIterator[AsyncClient]:
-    """Cliente HTTP async contra la app real con BD aiosqlite compartida (StaticPool)."""
+    """Cliente HTTP async con BD aiosqlite, usuarios y 3 estándares semilla."""
     motor = create_async_engine(
         "sqlite+aiosqlite://",
         connect_args={"check_same_thread": False},
@@ -59,6 +73,7 @@ async def cliente_async() -> AsyncIterator[AsyncClient]:
 
     hash_servicio = HashBcrypt()
     hash_contrasena = await hash_servicio.generar_hash(CONTRASENA_VALIDA)
+    ids_estandares: list[UUID] = []
     async with fabrica() as sesion:
         repo = RepositorioUsuarioSQLAlchemy(sesion)
         await repo.guardar(
@@ -85,10 +100,25 @@ async def cliente_async() -> AsyncIterator[AsyncClient]:
         )
         inactivo.activo = False
         await repo.guardar(inactivo)
+
+        valores = (Decimal("10.00"), Decimal("10.00"), Decimal("65.00"))
+        ciclos = ("PLANEAR", "HACER", "PLANEAR")
+        for i, (valor, ciclo) in enumerate(zip(valores, ciclos, strict=True)):
+            fila = EstandarMinimoORM(
+                ciclo_phva=ciclo,
+                numeral=f"INT-{i + 1}",
+                descripcion=f"Ítem integración {i + 1}",
+                valor_porcentual=valor,
+            )
+            sesion.add(fila)
+            await sesion.flush()
+            ids_estandares.append(fila.id)
         await sesion.commit()
 
+    # Expone IDs en el cliente para tests (atributo auxiliar).
     transporte = ASGITransport(app=app)
     async with AsyncClient(transport=transporte, base_url="http://test") as cliente:
+        cliente.estandar_ids = tuple(ids_estandares)  # type: ignore[attr-defined]
         yield cliente
 
     app.dependency_overrides.clear()
@@ -98,3 +128,8 @@ async def cliente_async() -> AsyncIterator[AsyncClient]:
 @pytest.fixture
 def usuarios_semilla() -> UsuariosSemilla:
     return UsuariosSemilla()
+
+
+@pytest.fixture
+def catalogo_semilla(cliente_async: AsyncClient) -> CatalogoSemilla:
+    return CatalogoSemilla(estandar_ids=cliente_async.estandar_ids)  # type: ignore[attr-defined]
