@@ -55,7 +55,7 @@ Enum nivel_deficiencia {
   "10" [note: 'Muy Alto: incidente muy probable o control nulo']
   "6"  [note: 'Alto: incidentes significativos o eficacia baja']
   "2"  [note: 'Medio: incidentes poco significativos o eficacia moderada']
-  "0"  [note: 'Bajo: sin peligro detectado o riesgo controlado. En la tabla A.1 de GTC 45 este nivel no puntúa (valor «—»); el 0 es convención de aplicación PENDIENTE de validar con el responsable de SST (ver «Decisiones de validación» en data-model.md)']
+  "0"  [note: 'Bajo: sin peligro detectado o riesgo controlado. En la tabla A.1 de GTC 45 este nivel no puntúa (valor «—»); el 0 es convención de aplicación VALIDADA con el responsable de SST el 2026-07-17 (decisión D1 en «Decisiones de validación» de data-model.md)']
 }
 
 // NE — Nivel de Exposición (GTC 45, Anexo A).
@@ -79,7 +79,7 @@ Enum interpretacion_nr {
   "I"   [note: 'Crítico — NR 600-4000: suspender actividades hasta controlar el riesgo']
   "II"  [note: 'NR 150-500: corregir y adoptar medidas de control de inmediato']
   "III" [note: 'NR 40-120: mejorar si es posible; justificar rentabilidad']
-  "IV"  [note: 'NR 20: mantener controles existentes; comprobación periódica']
+  "IV"  [note: 'NR ≤ 20 (incluye NR = 0 cuando ND = 0 — decisión D1): mantener controles existentes; comprobación periódica']
 }
 
 // Aceptabilidad del riesgo según el nivel I–IV (GTC 45, Anexo A, tabla A.3).
@@ -125,16 +125,16 @@ Enum tipo_accion {
   CORRECTIVA
 }
 
-// Valores propuestos (no fijados por la norma) — PENDIENTES de validar con
-// el responsable de SST.
+// Valores propuestos (no fijados por la norma) — validados con el
+// responsable de SST el 2026-07-17 (decisión D6 en data-model.md).
 Enum estado_plan_mejoramiento {
   ABIERTO
   EN_EJECUCION
   CERRADO
 }
 
-// Valores propuestos (no fijados por la norma) — PENDIENTES de validar con
-// el responsable de SST.
+// Valores propuestos (no fijados por la norma) — validados con el
+// responsable de SST el 2026-07-17 (decisión D6 en data-model.md).
 Enum estado_accion_mejora {
   PENDIENTE
   EN_CURSO
@@ -142,8 +142,8 @@ Enum estado_accion_mejora {
   VERIFICADA
 }
 
-// Valores propuestos (no fijados por la norma) — PENDIENTES de validar con
-// el responsable de SST.
+// Valores propuestos (no fijados por la norma) — validados con el
+// responsable de SST el 2026-07-17 (decisión D6 en data-model.md).
 Enum tipo_hallazgo {
   NO_CONFORMIDAD
   OBSERVACION
@@ -260,8 +260,8 @@ Table evaluaciones_riesgo {
   nivel_deficiencia   nivel_deficiencia     [not null, note: 'ND ∈ {10, 6, 2, 0} — ver nota del enum sobre el caso «Bajo»']
   nivel_exposicion    nivel_exposicion      [not null, note: 'NE ∈ {4, 3, 2, 1}']
   nivel_consecuencia  nivel_consecuencia    [not null, note: 'NC ∈ {100, 60, 25, 10}']
-  nivel_probabilidad  smallint              [not null, note: 'DERIVADO: NP = ND × NE (rango 2–40; interpretación: Muy Alto 24-40, Alto 10-20, Medio 6-8, Bajo 2-4). Calculado en dominio, nunca aceptado del cliente']
-  nivel_riesgo        integer               [not null, note: 'DERIVADO: NR = NP × NC (rango 20–4000). Calculado en dominio, nunca aceptado del cliente']
+  nivel_probabilidad  smallint              [not null, note: 'DERIVADO: NP = ND × NE (rango 0–40; NP = 0 cuando ND = 0 — decisión D1; interpretación: Muy Alto 24-40, Alto 10-20, Medio 6-8, Bajo 0-4). Calculado en dominio, nunca aceptado del cliente']
+  nivel_riesgo        integer               [not null, note: 'DERIVADO: NR = NP × NC (rango 0–4000; NR = 0 cuando ND = 0 — decisión D1, interpretación IV). Calculado en dominio, nunca aceptado del cliente']
   interpretacion_nr   interpretacion_nr     [not null]
   aceptabilidad       aceptabilidad_riesgo  [not null]
   fecha_creacion      timestamptz           [not null, default: `now()`]

@@ -117,18 +117,18 @@ DBML y este documento.
 | `nivel_riesgo_arl` | `I \| II \| III \| IV \| V` | Res. 312 (determina tabla de 7, 21 o 60 estándares) |
 | `ciclo_phva` | `PLANEAR \| HACER \| VERIFICAR \| ACTUAR` | D. 1072 (ciclo de mejora continua) |
 | `resultado_calificacion` | `CUMPLE \| NO_CUMPLE \| NO_APLICA` | Res. 312 (calificación por ítem) |
-| `nivel_deficiencia` (ND) | `10 \| 6 \| 2 \| 0` | GTC 45, Anexo A, tabla A.1 (ver decisión D1 sobre el «0») |
+| `nivel_deficiencia` (ND) | `10 \| 6 \| 2 \| 0` | GTC 45, Anexo A, tabla A.1 — nivel «Bajo» = `0`, validado (decisión D1) |
 | `nivel_exposicion` (NE) | `4 \| 3 \| 2 \| 1` | GTC 45, Anexo A |
 | `nivel_consecuencia` (NC) | `100 \| 60 \| 25 \| 10` | GTC 45, Anexo A, tabla A.2 |
-| `interpretacion_nr` | `I (600–4000) \| II (150–500) \| III (40–120) \| IV (20)` | GTC 45, Anexo A, tabla A.3 |
+| `interpretacion_nr` | `I (600–4000) \| II (150–500) \| III (40–120) \| IV (≤ 20, incluye NR = 0)` | GTC 45, Anexo A, tabla A.3 — extensión del nivel IV a NR = 0 por decisión D1 |
 | `aceptabilidad_riesgo` | `NO_ACEPTABLE \| ACEPTABLE_CON_CONTROL \| MEJORABLE \| ACEPTABLE` | GTC 45, Anexo A, tabla A.3 |
 | `clasificacion_peligro` | `BIOLOGICO \| FISICO \| QUIMICO \| PSICOSOCIAL \| BIOMECANICO \| CONDICIONES_SEGURIDAD \| FENOMENOS_NATURALES` | GTC 45 (tabla de peligros) |
 | `tipo_control` | `ELIMINACION \| SUSTITUCION \| INGENIERIA \| ADMINISTRATIVO \| EPP` | GTC 45 / D. 1072 (jerarquía de controles, Anexo B) |
 | `origen_accion` | `AUTOEVALUACION \| AUDITORIA \| INVESTIGACION` | Referencia §4 |
 | `tipo_accion` | `PREVENTIVA \| CORRECTIVA` | Referencia §4 |
-| `estado_plan_mejoramiento` | `ABIERTO \| EN_EJECUCION \| CERRADO` | Propuesto (no normativo — validar, decisión D6) |
-| `estado_accion_mejora` | `PENDIENTE \| EN_CURSO \| COMPLETADA \| VERIFICADA` | Propuesto (no normativo — validar, decisión D6) |
-| `tipo_hallazgo` | `NO_CONFORMIDAD \| OBSERVACION \| OPORTUNIDAD_MEJORA` | Propuesto (no normativo — validar, decisión D6) |
+| `estado_plan_mejoramiento` | `ABIERTO \| EN_EJECUCION \| CERRADO` | No normativo — validado en sesión (decisión D6) |
+| `estado_accion_mejora` | `PENDIENTE \| EN_CURSO \| COMPLETADA \| VERIFICADA` | No normativo — validado en sesión (decisión D6) |
+| `tipo_hallazgo` | `NO_CONFORMIDAD \| OBSERVACION \| OPORTUNIDAD_MEJORA` | No normativo — validado en sesión (decisión D6) |
 
 El enum `RolUsuario` de la entidad existente `Usuario` se documenta arriba y no
 se modifica en este modelo.
@@ -214,12 +214,13 @@ Tabla intermedia **nombrada** de la relación N—N
 | `nivel_deficiencia` | `nivel_deficiencia` | NOT NULL, ND ∈ {10, 6, 2, 0} |
 | `nivel_exposicion` | `nivel_exposicion` | NOT NULL, NE ∈ {4, 3, 2, 1} |
 | `nivel_consecuencia` | `nivel_consecuencia` | NOT NULL, NC ∈ {100, 60, 25, 10} |
-| `nivel_probabilidad` | `SMALLINT` | NOT NULL, **derivado**: `NP = ND × NE` (2–40) |
-| `nivel_riesgo` | `INTEGER` | NOT NULL, **derivado**: `NR = NP × NC` (20–4000) |
-| `interpretacion_nr` | `interpretacion_nr` | NOT NULL (I–IV) |
+| `nivel_probabilidad` | `SMALLINT` | NOT NULL, **derivado**: `NP = ND × NE` (0–40; `0` cuando ND = 0 — decisión D1) |
+| `nivel_riesgo` | `INTEGER` | NOT NULL, **derivado**: `NR = NP × NC` (0–4000; `0` cuando ND = 0 — decisión D1) |
+| `interpretacion_nr` | `interpretacion_nr` | NOT NULL (I–IV; NR = 0 se interpreta como IV) |
 | `aceptabilidad` | `aceptabilidad_riesgo` | NOT NULL |
 
-Interpretación de NP: Muy Alto (24–40), Alto (10–20), Medio (6–8), Bajo (2–4).
+Interpretación de NP: Muy Alto (24–40), Alto (10–20), Medio (6–8), Bajo (0–4;
+el `0` proviene de ND = 0, decisión D1).
 
 #### `controles_riesgo` — GTC 45 / D. 1072 (jerarquía de controles)
 
@@ -314,16 +315,17 @@ esa entidad sería un ticket aparte.
 
 ### Decisiones de validación (acta — SP-183)
 
-**Estado: PENDIENTE de sesión con el responsable de SST.** Las decisiones
-siguientes son la propuesta técnica llevada a la sesión; cada una debe
-confirmarse o ajustarse por escrito aquí (fecha, participantes y decisión
-final por punto). Hasta entonces, el diagrama refleja la propuesta.
+**Estado: VALIDADO.** Sesión de validación realizada el **2026-07-17** con el
+responsable de SST del proyecto, usando la exportación SVG del diagrama
+(SP-182). Los seis puntos de la agenda fueron revisados y confirmados; el
+único punto con decisión explícita de valor fue D1 (ND «Bajo» = `0`). El
+diagrama DBML y esta especificación reflejan el modelo final validado.
 
 | # | Punto de agenda | Propuesta llevada a la sesión | Decisión final |
 |---|---|---|---|
-| D1 | ND nivel «Bajo»: la tabla A.1 de GTC 45 no le asigna valor («—»), pero el ticket define ND ∈ {10, 6, 2, 0} | Modelar `0` como convención de aplicación (opción a), documentado en el enum; alternativa: columna anulable (opción b) | _Pendiente_ |
-| D2 | Cobertura del catálogo de estándares (tablas de 7, 21 y 60 ítems) y umbral del 85 % | Catálogo plano `estandares_minimos` + `requiere_plan_mejora` derivado de `puntaje_total < 85` | _Pendiente_ |
-| D3 | Valores/rangos ND, NE, NC y niveles I–IV vs. práctica real del auditor | Valores exactos de los anexos A.1–A.3 de la referencia | _Pendiente_ |
-| D4 | Tipos y asociaciones de evidencias | Metadatos de archivo + FKs opcionales a `calificaciones_estandar` y `acciones_mejora` (al menos una presente); borrado lógico | _Pendiente_ |
-| D5 | Exclusión de historias clínicas | No se persisten; custodia exclusiva de la IPS (referencia §2.2) | _Pendiente_ |
-| D6 | Ciclo de vida de la autoevaluación (¿una por año por empresa?, ¿se versiona?) y enums de estado propuestos (`estado_plan_mejoramiento`, `estado_accion_mejora`, `tipo_hallazgo`) | Múltiples autoevaluaciones por empresa (histórico por `fecha`), sin versionado; enums de estado propuestos no normativos | _Pendiente_ |
+| D1 | ND nivel «Bajo»: la tabla A.1 de GTC 45 no le asigna valor («—»), pero el ticket define ND ∈ {10, 6, 2, 0} | Modelar `0` como convención de aplicación (opción a), documentado en el enum; alternativa: columna anulable (opción b) | **Confirmada la opción a (2026-07-17): el nivel «Bajo» toma el valor `0`.** La columna `nivel_deficiencia` permanece `NOT NULL`; con ND = 0, NP = ND × NE = 0 y NR = 0, lo que ubica el riesgo en aceptabilidad «Aceptable» sin ramas especiales en el dominio. Se descarta la opción b (columna anulable) |
+| D2 | Cobertura del catálogo de estándares (tablas de 7, 21 y 60 ítems) y umbral del 85 % | Catálogo plano `estandares_minimos` + `requiere_plan_mejora` derivado de `puntaje_total < 85` | **Confirmada sin cambios (2026-07-17)** |
+| D3 | Valores/rangos ND, NE, NC y niveles I–IV vs. práctica real del auditor | Valores exactos de los anexos A.1–A.3 de la referencia | **Confirmada sin cambios (2026-07-17)**; coincide con la práctica del auditor |
+| D4 | Tipos y asociaciones de evidencias | Metadatos de archivo + FKs opcionales a `calificaciones_estandar` y `acciones_mejora` (al menos una presente); borrado lógico | **Confirmada sin cambios (2026-07-17)** |
+| D5 | Exclusión de historias clínicas | No se persisten; custodia exclusiva de la IPS (referencia §2.2) | **Confirmada sin cambios (2026-07-17)** |
+| D6 | Ciclo de vida de la autoevaluación (¿una por año por empresa?, ¿se versiona?) y enums de estado propuestos (`estado_plan_mejoramiento`, `estado_accion_mejora`, `tipo_hallazgo`) | Múltiples autoevaluaciones por empresa (histórico por `fecha`), sin versionado; enums de estado propuestos no normativos | **Confirmada sin cambios (2026-07-17)**: múltiples autoevaluaciones por empresa, sin versionado |
