@@ -153,12 +153,39 @@ estándares mínimos aplica (7, 21 o 60 ítems) — regla de negocio, no de esqu
 
 #### `estandares_minimos` — Res. 312 de 2019 (catálogo)
 
+Catálogo plano de los **60** ítems del Anexo Técnico / Art. 27. Se siembra con
+`poetry run python -m scripts.sembrar_estandares_minimos` (o el orquestador
+`scripts.sembrar_datos`). Idempotente por `numeral`. Las tablas de 7 y 21 ítems
+son subconjuntos de negocio, no seeds aparte.
+
 | Columna | Tipo | Restricciones |
 |---|---|---|
-| `ciclo_phva` | `ciclo_phva` | NOT NULL |
+| `id` | `UUID` | PK |
+| `ciclo_phva` | `ciclo_phva` | NOT NULL (`PLANEAR \| HACER \| VERIFICAR \| ACTUAR`) |
 | `numeral` | `VARCHAR(20)` | NOT NULL, UNIQUE (p. ej. `1.1.1`) |
 | `descripcion` | `TEXT` | NOT NULL |
-| `valor_porcentual` | `NUMERIC(5,2)` | NOT NULL (peso del ítem en la tabla de valores) |
+| `valor_porcentual` | `NUMERIC(5,2)` | NOT NULL (peso del ítem; suma 100) |
+| `fecha_creacion` / `fecha_actualizacion` | `TIMESTAMPTZ` | NOT NULL, `now()` |
+
+#### `catalogos_referencia` — GTC 45 / enums de soporte
+
+Catálogo de **referencia** (no entidad transaccional del ER de evaluación).
+Soporta ND/NE/NC, interpretación NR, aceptabilidad, clasificación de peligro y
+jerarquía de controles. ND «Bajo» = `0` (decisión D1). Seed:
+`poetry run python -m scripts.sembrar_catalogos_gtc45`.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| `id` | `UUID` | PK |
+| `tipo` | `VARCHAR(40)` | NOT NULL (p. ej. `NIVEL_DEFICIENCIA`, `TIPO_CONTROL`) |
+| `codigo` | `VARCHAR(60)` | NOT NULL |
+| `valor_numerico` | `INTEGER` | NULL (ND/NE/NC; null en enums cualitativos) |
+| `etiqueta` | `VARCHAR(120)` | NOT NULL |
+| `descripcion` | `TEXT` | NOT NULL |
+| `orden` | `INTEGER` | NOT NULL, default 0 |
+| `fecha_creacion` / `fecha_actualizacion` | `TIMESTAMPTZ` | NOT NULL |
+
+Unique: `(tipo, codigo)`.
 
 #### `autoevaluaciones` — Res. 312 / D. 1072 (evaluación inicial)
 

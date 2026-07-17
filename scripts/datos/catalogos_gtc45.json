@@ -1,0 +1,262 @@
+{
+  "fuente": "GTC 45:2012 Anexos A/B + decisión D1 (ND Bajo = 0)",
+  "version": "1.0.0",
+  "items": [
+    {
+      "tipo": "NIVEL_DEFICIENCIA",
+      "codigo": "MUY_ALTO",
+      "valor_numerico": 10,
+      "etiqueta": "Muy Alto",
+      "descripcion": "Incidente muy probable o control nulo (GTC 45 Anexo A, tabla A.1).",
+      "orden": 1
+    },
+    {
+      "tipo": "NIVEL_DEFICIENCIA",
+      "codigo": "ALTO",
+      "valor_numerico": 6,
+      "etiqueta": "Alto",
+      "descripcion": "Incidentes significativos o eficacia baja de controles.",
+      "orden": 2
+    },
+    {
+      "tipo": "NIVEL_DEFICIENCIA",
+      "codigo": "MEDIO",
+      "valor_numerico": 2,
+      "etiqueta": "Medio",
+      "descripcion": "Incidentes poco significativos o eficacia moderada.",
+      "orden": 3
+    },
+    {
+      "tipo": "NIVEL_DEFICIENCIA",
+      "codigo": "BAJO",
+      "valor_numerico": 0,
+      "etiqueta": "Bajo",
+      "descripcion": "Sin peligro o controlado. GTC A.1 marca «—»; convención de aplicación D1 = 0.",
+      "orden": 4
+    },
+    {
+      "tipo": "NIVEL_EXPOSICION",
+      "codigo": "CONTINUA",
+      "valor_numerico": 4,
+      "etiqueta": "Continua",
+      "descripcion": "Exposición sin interrupción o tiempos prolongados.",
+      "orden": 1
+    },
+    {
+      "tipo": "NIVEL_EXPOSICION",
+      "codigo": "FRECUENTE",
+      "valor_numerico": 3,
+      "etiqueta": "Frecuente",
+      "descripcion": "Varias veces en tiempos cortos.",
+      "orden": 2
+    },
+    {
+      "tipo": "NIVEL_EXPOSICION",
+      "codigo": "OCASIONAL",
+      "valor_numerico": 2,
+      "etiqueta": "Ocasional",
+      "descripcion": "Alguna vez en periodo corto.",
+      "orden": 3
+    },
+    {
+      "tipo": "NIVEL_EXPOSICION",
+      "codigo": "ESPORADICA",
+      "valor_numerico": 1,
+      "etiqueta": "Esporádica",
+      "descripcion": "Exposición eventual.",
+      "orden": 4
+    },
+    {
+      "tipo": "NIVEL_CONSECUENCIA",
+      "codigo": "MORTAL",
+      "valor_numerico": 100,
+      "etiqueta": "Mortal o Catastrófico",
+      "descripcion": "Muerte(s) (GTC 45 Anexo A, tabla A.2).",
+      "orden": 1
+    },
+    {
+      "tipo": "NIVEL_CONSECUENCIA",
+      "codigo": "MUY_GRAVE",
+      "valor_numerico": 60,
+      "etiqueta": "Muy Grave",
+      "descripcion": "Lesiones graves irreparables (invalidez).",
+      "orden": 2
+    },
+    {
+      "tipo": "NIVEL_CONSECUENCIA",
+      "codigo": "GRAVE",
+      "valor_numerico": 25,
+      "etiqueta": "Grave",
+      "descripcion": "Incapacidad laboral temporal.",
+      "orden": 3
+    },
+    {
+      "tipo": "NIVEL_CONSECUENCIA",
+      "codigo": "LEVE",
+      "valor_numerico": 10,
+      "etiqueta": "Leve",
+      "descripcion": "Sin incapacidad.",
+      "orden": 4
+    },
+    {
+      "tipo": "INTERPRETACION_NR",
+      "codigo": "I",
+      "valor_numerico": null,
+      "etiqueta": "I — No aceptable",
+      "descripcion": "NR entre 600 y 4000 (crítico).",
+      "orden": 1
+    },
+    {
+      "tipo": "INTERPRETACION_NR",
+      "codigo": "II",
+      "valor_numerico": null,
+      "etiqueta": "II — Aceptable con control",
+      "descripcion": "NR entre 150 y 500.",
+      "orden": 2
+    },
+    {
+      "tipo": "INTERPRETACION_NR",
+      "codigo": "III",
+      "valor_numerico": null,
+      "etiqueta": "III — Mejorable",
+      "descripcion": "NR entre 40 y 120.",
+      "orden": 3
+    },
+    {
+      "tipo": "INTERPRETACION_NR",
+      "codigo": "IV",
+      "valor_numerico": null,
+      "etiqueta": "IV — Aceptable",
+      "descripcion": "NR ≤ 20; incluye NR = 0 cuando ND = 0 (D1).",
+      "orden": 4
+    },
+    {
+      "tipo": "ACEPTABILIDAD",
+      "codigo": "NO_ACEPTABLE",
+      "valor_numerico": null,
+      "etiqueta": "No aceptable",
+      "descripcion": "Riesgo no aceptable (interpretación I).",
+      "orden": 1
+    },
+    {
+      "tipo": "ACEPTABILIDAD",
+      "codigo": "ACEPTABLE_CON_CONTROL",
+      "valor_numerico": null,
+      "etiqueta": "Aceptable con control específico",
+      "descripcion": "Interpretación II.",
+      "orden": 2
+    },
+    {
+      "tipo": "ACEPTABILIDAD",
+      "codigo": "MEJORABLE",
+      "valor_numerico": null,
+      "etiqueta": "Mejorable",
+      "descripcion": "Interpretación III.",
+      "orden": 3
+    },
+    {
+      "tipo": "ACEPTABILIDAD",
+      "codigo": "ACEPTABLE",
+      "valor_numerico": null,
+      "etiqueta": "Aceptable",
+      "descripcion": "Interpretación IV.",
+      "orden": 4
+    },
+    {
+      "tipo": "CLASIFICACION_PELIGRO",
+      "codigo": "BIOLOGICO",
+      "valor_numerico": null,
+      "etiqueta": "Biológico",
+      "descripcion": "Clasificación de peligros GTC 45.",
+      "orden": 1
+    },
+    {
+      "tipo": "CLASIFICACION_PELIGRO",
+      "codigo": "FISICO",
+      "valor_numerico": null,
+      "etiqueta": "Físico",
+      "descripcion": "Clasificación de peligros GTC 45.",
+      "orden": 2
+    },
+    {
+      "tipo": "CLASIFICACION_PELIGRO",
+      "codigo": "QUIMICO",
+      "valor_numerico": null,
+      "etiqueta": "Químico",
+      "descripcion": "Clasificación de peligros GTC 45.",
+      "orden": 3
+    },
+    {
+      "tipo": "CLASIFICACION_PELIGRO",
+      "codigo": "PSICOSOCIAL",
+      "valor_numerico": null,
+      "etiqueta": "Psicosocial",
+      "descripcion": "Clasificación de peligros GTC 45.",
+      "orden": 4
+    },
+    {
+      "tipo": "CLASIFICACION_PELIGRO",
+      "codigo": "BIOMECANICO",
+      "valor_numerico": null,
+      "etiqueta": "Biomecánico",
+      "descripcion": "Clasificación de peligros GTC 45.",
+      "orden": 5
+    },
+    {
+      "tipo": "CLASIFICACION_PELIGRO",
+      "codigo": "CONDICIONES_SEGURIDAD",
+      "valor_numerico": null,
+      "etiqueta": "Condiciones de seguridad",
+      "descripcion": "Clasificación de peligros GTC 45.",
+      "orden": 6
+    },
+    {
+      "tipo": "CLASIFICACION_PELIGRO",
+      "codigo": "FENOMENOS_NATURALES",
+      "valor_numerico": null,
+      "etiqueta": "Fenómenos naturales",
+      "descripcion": "Clasificación de peligros GTC 45.",
+      "orden": 7
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "ELIMINACION",
+      "valor_numerico": null,
+      "etiqueta": "Eliminación",
+      "descripcion": "Suprimir el peligro (Anexo B / jerarquía de controles).",
+      "orden": 1
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "SUSTITUCION",
+      "valor_numerico": null,
+      "etiqueta": "Sustitución",
+      "descripcion": "Reemplazar por menor riesgo.",
+      "orden": 2
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "INGENIERIA",
+      "valor_numerico": null,
+      "etiqueta": "Ingeniería",
+      "descripcion": "Controles técnicos en fuente o medio.",
+      "orden": 3
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "ADMINISTRATIVO",
+      "valor_numerico": null,
+      "etiqueta": "Administrativo",
+      "descripcion": "Procedimientos / control de exposición.",
+      "orden": 4
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "EPP",
+      "valor_numerico": null,
+      "etiqueta": "EPP",
+      "descripcion": "Elementos de protección personal (última medida).",
+      "orden": 5
+    }
+  ]
+}

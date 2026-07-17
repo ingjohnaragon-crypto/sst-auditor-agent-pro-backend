@@ -1,0 +1,54 @@
+{
+  "fuente": "fixture de prueba unitaria GTC 45",
+  "version": "test",
+  "items": [
+    {
+      "tipo": "NIVEL_DEFICIENCIA",
+      "codigo": "BAJO",
+      "valor_numerico": 0,
+      "etiqueta": "Bajo",
+      "descripcion": "ND = 0 (D1)",
+      "orden": 4
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "ELIMINACION",
+      "valor_numerico": null,
+      "etiqueta": "Eliminación",
+      "descripcion": "Control 1",
+      "orden": 1
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "SUSTITUCION",
+      "valor_numerico": null,
+      "etiqueta": "Sustitución",
+      "descripcion": "Control 2",
+      "orden": 2
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "INGENIERIA",
+      "valor_numerico": null,
+      "etiqueta": "Ingeniería",
+      "descripcion": "Control 3",
+      "orden": 3
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "ADMINISTRATIVO",
+      "valor_numerico": null,
+      "etiqueta": "Administrativo",
+      "descripcion": "Control 4",
+      "orden": 4
+    },
+    {
+      "tipo": "TIPO_CONTROL",
+      "codigo": "EPP",
+      "valor_numerico": null,
+      "etiqueta": "EPP",
+      "descripcion": "Control 5",
+      "orden": 5
+    }
+  ]
+}
