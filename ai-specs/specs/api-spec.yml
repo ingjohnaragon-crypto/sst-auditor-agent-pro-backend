@@ -138,6 +138,263 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/empresas:
+    post:
+      summary: Crea una empresa
+      tags: [Empresas]
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudCrearEmpresa"
+      responses:
+        "201":
+          description: Empresa creada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaEmpresa"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "409":
+          description: NIT_DUPLICADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    get:
+      summary: Lista empresas
+      tags: [Empresas]
+      security: [{bearerAuth: []}]
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaEmpresa"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/empresas/{id}:
+    get:
+      summary: Obtiene una empresa por id
+      tags: [Empresas]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Empresa
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaEmpresa"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/estandares-minimos:
+    get:
+      summary: Lista el catálogo de estándares mínimos (Res. 0312)
+      tags: [Estándares]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: ciclo_phva
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PLANEAR, HACER, VERIFICAR, ACTUAR]
+      responses:
+        "200":
+          description: Catálogo
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaEstandarMinimo"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/autoevaluaciones:
+    post:
+      summary: Crea una autoevaluación (usuario_id desde el token)
+      tags: [Autoevaluaciones]
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudCrearAutoevaluacion"
+      responses:
+        "201":
+          description: Autoevaluación creada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaAutoevaluacion"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    get:
+      summary: Histórico de autoevaluaciones por empresa
+      tags: [Autoevaluaciones]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: query
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Histórico (sin calificaciones embebidas)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaAutoevaluacion"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/autoevaluaciones/{id}:
+    get:
+      summary: Detalle de autoevaluación con calificaciones
+      tags: [Autoevaluaciones]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Detalle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaAutoevaluacion"
+        "404":
+          description: AUTOEVALUACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/autoevaluaciones/{id}/calificaciones/{estandar_id}:
+    put:
+      summary: Upsert de calificación de un estándar (puntaje derivado en servidor)
+      tags: [Autoevaluaciones]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: estandar_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudCalificarEstandar"
+      responses:
+        "200":
+          description: Calificación guardada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaCalificacionEstandar"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: AUTOEVALUACION_NO_ENCONTRADA / ESTANDAR_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "409":
+          description: AUTOEVALUACION_FINALIZADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/autoevaluaciones/{id}/finalizar:
+    post:
+      summary: Finaliza la autoevaluación (puntaje_total y requiere_plan_mejora)
+      tags: [Autoevaluaciones]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Autoevaluación finalizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaAutoevaluacion"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "409":
+          description: AUTOEVALUACION_INCOMPLETA / AUTOEVALUACION_FINALIZADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -222,6 +479,75 @@ components:
         rol:
           type: string
           enum: [ADMINISTRADOR, AUDITOR_SST, CONSULTA]
+    SolicitudCrearEmpresa:
+      type: object
+      additionalProperties: false
+      required: [razon_social, nit, actividad_economica, nivel_riesgo_arl, numero_trabajadores]
+      properties:
+        razon_social: {type: string}
+        nit: {type: string}
+        actividad_economica: {type: string}
+        nivel_riesgo_arl: {type: string, enum: [I, II, III, IV, V]}
+        numero_trabajadores: {type: integer, exclusiveMinimum: 0}
+    RespuestaEmpresa:
+      type: object
+      required: [id, razon_social, nit, actividad_economica, nivel_riesgo_arl, numero_trabajadores]
+      properties:
+        id: {type: string, format: uuid}
+        razon_social: {type: string}
+        nit: {type: string}
+        actividad_economica: {type: string}
+        nivel_riesgo_arl: {type: string, enum: [I, II, III, IV, V]}
+        numero_trabajadores: {type: integer}
+        fecha_creacion: {type: string, format: date-time}
+        fecha_actualizacion: {type: string, format: date-time}
+    SolicitudCrearAutoevaluacion:
+      type: object
+      additionalProperties: false
+      required: [empresa_id, fecha]
+      properties:
+        empresa_id: {type: string, format: uuid}
+        fecha: {type: string, format: date}
+    SolicitudCalificarEstandar:
+      type: object
+      additionalProperties: false
+      required: [resultado]
+      properties:
+        resultado: {type: string, enum: [CUMPLE, NO_CUMPLE, NO_APLICA]}
+        observaciones: {type: string, nullable: true}
+    RespuestaCalificacionEstandar:
+      type: object
+      required: [estandar_id, resultado, puntaje]
+      properties:
+        estandar_id: {type: string, format: uuid}
+        resultado: {type: string, enum: [CUMPLE, NO_CUMPLE, NO_APLICA]}
+        puntaje: {type: string, description: Decimal serializado}
+        observaciones: {type: string, nullable: true}
+    RespuestaAutoevaluacion:
+      type: object
+      required: [id, empresa_id, usuario_id, fecha, requiere_plan_mejora, calificaciones]
+      properties:
+        id: {type: string, format: uuid}
+        empresa_id: {type: string, format: uuid}
+        usuario_id: {type: string, format: uuid}
+        fecha: {type: string, format: date}
+        puntaje_total: {type: string, nullable: true}
+        requiere_plan_mejora: {type: boolean}
+        calificaciones:
+          type: array
+          items:
+            $ref: "#/components/schemas/RespuestaCalificacionEstandar"
+        fecha_creacion: {type: string, format: date-time}
+        fecha_actualizacion: {type: string, format: date-time}
+    RespuestaEstandarMinimo:
+      type: object
+      required: [id, ciclo_phva, numeral, descripcion, valor_porcentual]
+      properties:
+        id: {type: string, format: uuid}
+        ciclo_phva: {type: string, enum: [PLANEAR, HACER, VERIFICAR, ACTUAR]}
+        numeral: {type: string}
+        descripcion: {type: string}
+        valor_porcentual: {type: string}
     RespuestaError:
       type: object
       description: >

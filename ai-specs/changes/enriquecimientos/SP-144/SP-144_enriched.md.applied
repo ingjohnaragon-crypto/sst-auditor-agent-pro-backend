@@ -1,0 +1,199 @@
+# Ticket enriquecido: SP-144 — SST-HU 2.1: Modelo de Base de Datos para Estándares Mínimos (Res. 0312)
+
+## Descripción original
+<!-- jira-skip -->
+Como arquitecto de datos, quiero diseñar las tablas relacionales para almacenar los estándares mínimos de la Resolución 0312 y calificaciones, para permitir histórico de autoevaluación.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+Implementar la persistencia y la API de la **autoevaluación de estándares mínimos (Res. 0312 de 2019)**, tomando como contrato el modelo ER validado en SP-183 (`docs/diagramas/diagrama_er_sst.dbml` y `ai-specs/specs/data-model.md`).
+
+Contexto ya implementado (NO rehacer):
+
+- El catálogo `estandares_minimos` (60 ítems) y `catalogos_referencia` ya existen: migración `b2c3d4e5f6a7_crear_catalogos_sst.py` y seeds de SP-143 (`scripts/sembrar_estandares_minimos.py`, `scripts/sembrar_datos.py`).
+- La entidad `Usuario` con RBAC (`ADMINISTRADOR | AUDITOR_SST | CONSULTA`) y la autenticación JWT ya están operativas.
+
+Alcance de esta historia:
+
+- **Migración Alembic** que cree las tablas `empresas`, `autoevaluaciones` y `calificaciones_estandar` exactamente como las define el ER validado (tipos, NOT NULL, FKs, índice único `(autoevaluacion_id, estandar_id)`, único `empresas.nit`).
+- **Capa de dominio**: modelos puros `Empresa`, `EstandarMinimo`, `Autoevaluacion` y `CalificacionEstandar`, con la lógica de negocio de calificación:
+  - `puntaje` de una calificación es **derivado**: `CUMPLE` y `NO_APLICA` otorgan el `valor_porcentual` del ítem; `NO_CUMPLE` otorga `0`. Nunca se acepta del cliente.
+  - `puntaje_total` es la suma de los puntajes de los 60 ítems; permanece `NULL` mientras la autoevaluación está en curso y se fija al finalizarla.
+  - `requiere_plan_mejora` es **derivado**: `puntaje_total < 85`.
+  - Una autoevaluación **finalizada es de solo lectura** (modificar una calificación después de finalizar lanza excepción de dominio).
+- **API REST** (`/api/v1`) para el ciclo completo: consultar el catálogo de estándares, crear autoevaluaciones por empresa, calificar cada ítem (upsert), finalizar y consultar el histórico. Incluye un CRUD **mínimo** de `empresas` (crear/listar/detalle) porque toda autoevaluación exige `empresa_id` y aún no existe otro ticket que lo provea.
+- **Seguridad**: todos los endpoints requieren Bearer token. `ADMINISTRADOR` y `AUDITOR_SST` pueden escribir; `CONSULTA` solo lectura (403 en escrituras).
+- **Documentación**: actualizar `ai-specs/specs/api-spec.yml` (nuevos endpoints) y `ai-specs/specs/data-model.md` (marcar las tres tablas como implementadas con su migración).
+
+Fuera de alcance: pantalla Angular (SP-189, repo frontend), `planes_mejoramiento` y demás entidades del ER (tickets posteriores), gestión completa de empresas (solo CRUD mínimo de soporte).
+
+## Criterios de aceptación
+- [ ] Migración Alembic nueva (down_revision `b2c3d4e5f6a7`) crea `empresas`, `autoevaluaciones` y `calificaciones_estandar` conforme al ER validado; `alembic upgrade head` y `alembic downgrade -1` funcionan contra PostgreSQL.
+- [ ] Índice único `(autoevaluacion_id, estandar_id)` en `calificaciones_estandar` e índice único sobre `empresas.nit`.
+- [ ] Modelos de dominio puros (sin SQLAlchemy/FastAPI) con factorías que validan invariantes (`numero_trabajadores > 0`, NIT no vacío, `resultado` ∈ enum).
+- [ ] `puntaje`, `puntaje_total` y `requiere_plan_mejora` se calculan en dominio y se ignoran/rechazan si vienen del cliente.
+- [ ] `PUT` de calificación hace upsert idempotente (recalificar un ítem no crea filas duplicadas).
+- [ ] Finalizar exige los 60 ítems calificados (409 `AUTOEVALUACION_INCOMPLETA` si faltan) y deja la autoevaluación inmutable (409 `AUTOEVALUACION_FINALIZADA` al recalificar).
+- [ ] RBAC: `CONSULTA` recibe 403 (`ACCESO_DENEGADO`) en POST/PUT; los tres roles pueden hacer GET.
+- [ ] Errores con el contrato único `RespuestaError` (`exito`, `codigo`, `mensaje`, `detalle`) y códigos estables: `EMPRESA_NO_ENCONTRADA`, `NIT_DUPLICADO`, `AUTOEVALUACION_NO_ENCONTRADA`, `ESTANDAR_NO_ENCONTRADO`, `AUTOEVALUACION_INCOMPLETA`, `AUTOEVALUACION_FINALIZADA`, `ACCESO_DENEGADO`.
+- [ ] `ai-specs/specs/api-spec.yml` y `ai-specs/specs/data-model.md` actualizados.
+- [ ] Cobertura ≥ 90 %, `ruff` y `mypy --strict` sin errores.
+
+## Campos y endpoints
+Tablas nuevas (tipos y restricciones exactos en `ai-specs/specs/data-model.md`; todas con `id UUID` PK generado en aplicación, `fecha_creacion`/`fecha_actualizacion` TIMESTAMPTZ UTC):
+
+- `empresas`: `razon_social` VARCHAR(200) NOT NULL, `nit` VARCHAR(20) NOT NULL UNIQUE, `actividad_economica` VARCHAR(200) NOT NULL, `nivel_riesgo_arl` VARCHAR(5) NOT NULL (`I..V`), `numero_trabajadores` INTEGER NOT NULL > 0.
+- `autoevaluaciones`: `empresa_id` FK NOT NULL, `usuario_id` FK NOT NULL (evaluador, tomado del token), `fecha` DATE NOT NULL, `puntaje_total` NUMERIC(5,2) NULL, `requiere_plan_mejora` BOOLEAN NOT NULL (derivado, default `false`).
+- `calificaciones_estandar`: `autoevaluacion_id` FK NOT NULL, `estandar_id` FK NOT NULL, `resultado` VARCHAR(20) NOT NULL (`CUMPLE | NO_CUMPLE | NO_APLICA`), `puntaje` NUMERIC(5,2) NOT NULL (derivado), `observaciones` TEXT NULL. Único `(autoevaluacion_id, estandar_id)`.
+
+Endpoints (todos bajo `/api/v1`, Bearer JWT obligatorio; escrituras solo `ADMINISTRADOR`/`AUDITOR_SST`):
+
+- `GET /estandares-minimos` → 200 lista del catálogo; filtro opcional `?ciclo_phva=PLANEAR|HACER|VERIFICAR|ACTUAR`. Respuesta: `id`, `ciclo_phva`, `numeral`, `descripcion`, `valor_porcentual`.
+- `POST /empresas` → 201. Body: `razon_social`, `nit`, `actividad_economica`, `nivel_riesgo_arl`, `numero_trabajadores`. 409 `NIT_DUPLICADO`.
+- `GET /empresas` → 200 lista. `GET /empresas/{id}` → 200 | 404 `EMPRESA_NO_ENCONTRADA`.
+- `POST /autoevaluaciones` → 201. Body: `empresa_id`, `fecha`. El `usuario_id` sale del token; se crea sin calificaciones y con `puntaje_total = null`.
+- `GET /autoevaluaciones?empresa_id=<uuid>` → 200 histórico ordenado por `fecha` desc.
+- `GET /autoevaluaciones/{id}` → 200 detalle con sus calificaciones embebidas | 404.
+- `PUT /autoevaluaciones/{id}/calificaciones/{estandar_id}` → 200 upsert. Body: `resultado`, `observaciones` (opcional). 404 si autoevaluación o estándar no existen; 409 `AUTOEVALUACION_FINALIZADA` si ya se finalizó.
+- `POST /autoevaluaciones/{id}/finalizar` → 200 con `puntaje_total` y `requiere_plan_mejora` calculados. 409 `AUTOEVALUACION_INCOMPLETA` si faltan ítems por calificar.
+
+## Archivos a crear o modificar
+- `alembic/versions/<rev>_crear_tablas_autoevaluacion.py` — Infrastructure — Create
+- `src/domain/models/empresa.py` — Domain — Create
+- `src/domain/models/estandar_minimo.py` — Domain — Create
+- `src/domain/models/autoevaluacion.py` — Domain — Create (incluye `CalificacionEstandar` y lógica de puntaje/finalización)
+- `src/domain/exceptions/autoevaluacion.py` — Domain — Create (excepciones con `codigo` y `http_status`)
+- `src/domain/repositories/repositorio_empresa.py` — Domain — Create
+- `src/domain/repositories/repositorio_estandar_minimo.py` — Domain — Create
+- `src/domain/repositories/repositorio_autoevaluacion.py` — Domain — Create
+- `src/application/dto/solicitud_crear_empresa.py`, `respuesta_empresa.py` — Application — Create
+- `src/application/dto/solicitud_crear_autoevaluacion.py`, `respuesta_autoevaluacion.py` — Application — Create
+- `src/application/dto/solicitud_calificar_estandar.py`, `respuesta_calificacion_estandar.py` — Application — Create
+- `src/application/dto/respuesta_estandar_minimo.py` — Application — Create
+- `src/application/mappers/mapper_empresa.py`, `mapper_autoevaluacion.py`, `mapper_estandar_minimo.py` — Application — Create
+- `src/application/services/servicio_empresas.py` — Application — Create
+- `src/application/services/servicio_autoevaluaciones.py` — Application — Create
+- `src/infrastructure/database/modelos/empresa_orm.py`, `autoevaluacion_orm.py`, `calificacion_estandar_orm.py` — Infrastructure — Create
+- `src/infrastructure/repositories/repositorio_empresa_sqlalchemy.py`, `repositorio_estandar_minimo_sqlalchemy.py`, `repositorio_autoevaluacion_sqlalchemy.py` — Infrastructure — Create
+- `src/presentation/routers/empresas_router.py`, `autoevaluaciones_router.py`, `estandares_router.py` — Presentation — Create
+- `src/presentation/dependencies/` (factorías `Depends()` de los nuevos servicios + guard de rol escritor) — Presentation — Create/Modify
+- `src/main.py` — Presentation — Modify (registrar routers)
+- `ai-specs/specs/api-spec.yml` — Docs — Modify
+- `ai-specs/specs/data-model.md` — Docs — Modify
+- `tests/...` — Tests — Create (ver casos abajo)
+
+## Casos de prueba unitarios
+- Dominio: `CalificacionEstandar` deriva `puntaje` = `valor_porcentual` con `CUMPLE`/`NO_APLICA` y `0` con `NO_CUMPLE`.
+- Dominio: `Autoevaluacion.finalizar` suma `puntaje_total`; `requiere_plan_mejora = True` con 84.99 y `False` con 85.00 (borde exacto).
+- Dominio: finalizar con menos de 60 ítems lanza `AutoevaluacionIncompletaError`; recalificar tras finalizar lanza `AutoevaluacionFinalizadaError`.
+- Dominio: `Empresa.crear` rechaza `numero_trabajadores <= 0` y `nivel_riesgo_arl` fuera de `I..V`.
+- Servicio (mocks): crear autoevaluación con `empresa_id` inexistente → `EmpresaNoEncontradaError`; calificar `estandar_id` inexistente → `EstandarNoEncontradoError`; upsert reutiliza la calificación existente.
+- Integración (httpx + BD de prueba): flujo feliz completo (crear empresa → crear autoevaluación → calificar 60 ítems → finalizar → consultar histórico).
+- Integración: 401 sin token; 403 con rol `CONSULTA` en POST/PUT; 409 `NIT_DUPLICADO`; 422 con `resultado` inválido; 404 en recursos inexistentes; unicidad `(autoevaluacion_id, estandar_id)` no genera duplicados al recalificar.
+- Migración: upgrade/downgrade reversibles en la BD de integración.
+
+## Requisitos no funcionales
+- Seguridad: Bearer JWT en todos los endpoints; RBAC por rol (escrituras solo `ADMINISTRADOR`/`AUDITOR_SST`); los campos derivados jamás se aceptan del cliente; errores siempre con `RespuestaError`.
+- Arquitectura: dominio puro (sin SQLAlchemy/FastAPI); ORM solo en `infrastructure/`; inyección vía `Depends()`; esquema solo por Alembic (`create_all` reservado a tests).
+- Rendimiento: SQLAlchemy 2.x async; el detalle de autoevaluación carga calificaciones con `selectinload` (sin N+1); índices FK en `autoevaluaciones.empresa_id` y `calificaciones_estandar.autoevaluacion_id`.
+- Consistencia: calificar y finalizar dentro de una transacción; timestamps en UTC (TIMESTAMPTZ).
+- Calidad: type hints completos, `mypy --strict`, `ruff`, cobertura ≥ 90 %.
+
+## Puntos de historia
+<!-- STORY_POINTS:8 -->
+**8** — migración de 3 tablas + 4 agregados de dominio con lógica derivada + 8 endpoints con RBAC y suite de integración; el catálogo y la autenticación ya existen.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-187 -->
+### Subtarea: SP-187 — Diseñar tabla de estándares y estado de evaluaciones
+
+#### Descripción original
+<!-- jira-skip -->
+Modelar estructura para guardar resultados puntuales de autoevaluación.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Crear la capa de persistencia de la autoevaluación 0312 según el ER validado (SP-183). El catálogo `estandares_minimos` ya existe (SP-143): esta subtarea agrega las tablas transaccionales.
+
+- Migración Alembic (down_revision `b2c3d4e5f6a7`) con `empresas`, `autoevaluaciones` y `calificaciones_estandar`; tipos, NOT NULL, FKs, único `empresas.nit` y único `(autoevaluacion_id, estandar_id)` exactamente como el ER; `downgrade` completo.
+- Modelos ORM en `src/infrastructure/database/modelos/` (`empresa_orm.py`, `autoevaluacion_orm.py`, `calificacion_estandar_orm.py`) con relaciones SQLAlchemy 2.x async.
+- Modelos de dominio puros (`Empresa`, `Autoevaluacion`, `CalificacionEstandar`, `EstandarMinimo`) con factorías e invariantes: puntaje derivado por resultado, `puntaje_total` al finalizar, `requiere_plan_mejora = puntaje_total < 85`, inmutabilidad tras finalizar.
+- Interfaces de repositorio en `src/domain/repositories/` e implementaciones SQLAlchemy en `src/infrastructure/repositories/` (mapean ORM ↔ dominio; nunca exponen ORM).
+- Actualizar `ai-specs/specs/data-model.md` marcando las tablas como implementadas con su migración.
+
+#### Criterios de aceptación
+- [ ] `alembic upgrade head` crea las 3 tablas con FKs e índices únicos; `alembic downgrade -1` las revierte.
+- [ ] Modelos de dominio sin imports de SQLAlchemy/FastAPI; invariantes cubiertas por tests unitarios (umbral 85 con casos borde, inmutabilidad tras finalizar, autoevaluación incompleta).
+- [ ] Repositorios devuelven modelos de dominio; test de integración persiste y recupera una autoevaluación con calificaciones.
+- [ ] `data-model.md` actualizado; `mypy --strict` y `ruff` limpios.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — migración + ORM + dominio con lógica derivada + repositorios; sin endpoints.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-187 -->
+
+<!-- SUBTASK:SP-188 -->
+### Subtarea: SP-188 — Desarrollar API REST CRUD para autoevaluación 0312
+
+#### Descripción original
+<!-- jira-skip -->
+Programar endpoints para obtener y actualizar el estado de cada ítem de control.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Exponer la API REST de autoevaluación sobre la persistencia de SP-187, bajo `/api/v1`, con Bearer JWT y RBAC (escrituras solo `ADMINISTRADOR`/`AUDITOR_SST`; `CONSULTA` solo GET → 403 `ACCESO_DENEGADO`).
+
+- `GET /estandares-minimos` (filtro opcional `?ciclo_phva=`) — catálogo para pintar la matriz de diagnóstico.
+- `POST /empresas`, `GET /empresas`, `GET /empresas/{id}` — CRUD mínimo de soporte (409 `NIT_DUPLICADO`).
+- `POST /autoevaluaciones` (`empresa_id`, `fecha`; evaluador desde el token) → 201.
+- `GET /autoevaluaciones?empresa_id=` — histórico desc por fecha; `GET /autoevaluaciones/{id}` — detalle con calificaciones.
+- `PUT /autoevaluaciones/{id}/calificaciones/{estandar_id}` (`resultado`, `observaciones?`) — upsert idempotente; `puntaje` derivado en dominio; 409 `AUTOEVALUACION_FINALIZADA` si ya se cerró.
+- `POST /autoevaluaciones/{id}/finalizar` — calcula `puntaje_total` y `requiere_plan_mejora`; 409 `AUTOEVALUACION_INCOMPLETA` si faltan ítems.
+- Servicios (`servicio_empresas`, `servicio_autoevaluaciones`), DTOs Pydantic v2, mappers, routers finos y factorías `Depends()`; errores vía handlers globales con `RespuestaError`.
+- Actualizar `ai-specs/specs/api-spec.yml` con todos los endpoints y esquemas nuevos.
+
+#### Criterios de aceptación
+- [ ] Los 8 endpoints responden con los códigos definidos (201/200, 401, 403, 404, 409, 422) y el contrato `RespuestaError`.
+- [ ] Upsert de calificación no duplica filas al recalificar; finalizar exige los 60 ítems y deja la autoevaluación de solo lectura.
+- [ ] Tests de integración httpx cubren flujo feliz completo, RBAC (403 `CONSULTA`), 401 sin token, 404, 409 y 422; cobertura ≥ 90 %.
+- [ ] `api-spec.yml` actualizado; Swagger `/docs` refleja los endpoints.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — 8 endpoints con RBAC, upsert y transición de estado, más suite de integración; la persistencia llega hecha de SP-187.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-188 -->
+
+<!-- SUBTASK:SP-189 -->
+### Subtarea: SP-189 — Crear pantalla responsiva de diagnóstico en Angular
+
+#### Descripción original
+<!-- jira-skip -->
+Desarrollar UI para evaluar los estándares de la norma con soporte móvil.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Construir en el **repositorio frontend Angular** la pantalla de diagnóstico de estándares mínimos, consumiendo la API de SP-188 (`/api/v1`, Bearer JWT).
+
+- Vista de diagnóstico: selector de empresa (`GET /empresas`), creación de autoevaluación (`POST /autoevaluaciones`) y matriz de los 60 ítems agrupados por ciclo PHVA (`GET /estandares-minimos`), mostrando `numeral`, `descripcion` y `valor_porcentual`.
+- Calificación por ítem con selector `CUMPLE | NO_CUMPLE | NO_APLICA` y campo de observaciones; cada cambio invoca `PUT /autoevaluaciones/{id}/calificaciones/{estandar_id}` y refleja el puntaje devuelto.
+- Barra de avance (ítems calificados / 60) y botón «Finalizar» (`POST /autoevaluaciones/{id}/finalizar`) que muestra `puntaje_total` y alerta si `requiere_plan_mejora`; deshabilitado hasta completar los 60 ítems y bloqueo de edición tras finalizar.
+- Vista de histórico por empresa (`GET /autoevaluaciones?empresa_id=`) con acceso al detalle en solo lectura.
+- Responsive (móvil ≥ 360 px): la matriz colapsa a tarjetas/acordeón por ciclo PHVA en pantallas pequeñas.
+- Manejo de errores con el contrato `RespuestaError` (toast con `mensaje`; ocultar acciones de escritura para rol `CONSULTA`).
+
+#### Criterios de aceptación
+- [ ] Pantalla lista los 60 ítems agrupados por PHVA y permite calificar cada uno con persistencia inmediata vía API.
+- [ ] Avance visible, finalización bloqueada hasta completar los ítems y resultado (`puntaje_total`, `requiere_plan_mejora`) mostrado al finalizar; edición bloqueada después.
+- [ ] Histórico por empresa navegable con detalle en solo lectura.
+- [ ] Usable en móvil (≥ 360 px) y escritorio; rol `CONSULTA` sin controles de escritura.
+- [ ] Errores del API mostrados con su `mensaje`; tests unitarios de componentes y servicios según estándares del repo frontend.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — matriz interactiva de 60 ítems con estado, responsive, RBAC en UI e integración con 8 endpoints.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-189 -->
