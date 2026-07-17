@@ -1,6 +1,7 @@
 """Pruebas del seed idempotente de estándares mínimos Res. 312."""
 
 from collections.abc import AsyncIterator
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -15,6 +16,9 @@ from src.infrastructure.database.base import Base
 from src.infrastructure.database.modelos.estandar_minimo_orm import EstandarMinimoORM
 
 FIXTURE_MINIMO = Path(__file__).resolve().parents[2] / "fixtures" / "estandares_minimos_minimo.json"
+FIXTURE_OFICIAL = (
+    Path(__file__).resolve().parents[3] / "scripts" / "datos" / "estandares_minimos_res312.json"
+)
 
 
 @pytest.fixture
@@ -61,3 +65,13 @@ def test_should_fallar_when_fixture_ausente_o_invalido(tmp_path: Path) -> None:
     invalido.write_text("{", encoding="utf-8")
     with pytest.raises(RuntimeError, match="inválido"):
         cargar_items_fixture(invalido)
+
+
+def test_should_validar_fixture_oficial_res312_when_cargar_items() -> None:
+    items = cargar_items_fixture(FIXTURE_OFICIAL)
+    numerales = [str(item["numeral"]) for item in items]
+    suma = sum(Decimal(str(item["valor_porcentual"])) for item in items)
+
+    assert len(items) == 60
+    assert len(set(numerales)) == 60
+    assert suma == Decimal("100.00")

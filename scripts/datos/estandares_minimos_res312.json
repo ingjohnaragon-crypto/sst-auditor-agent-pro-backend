@@ -6,19 +6,19 @@
     {
       "numeral": "1.1.1",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Responsable del Sistema de Gestion de Seguridad y Salud en el Trabajo SG-SST",
+      "descripcion": "Responsable del Sistema de Gestión de Seguridad y Salud en el Trabajo SG-SST",
       "valor_porcentual": 0.5
     },
     {
       "numeral": "1.1.2",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Responsabilidades en el Sistema de Gestion de Seguridad y Salud en el Trabajo – SG-SST",
+      "descripcion": "Responsabilidades en el Sistema de Gestión de Seguridad y Salud en el Trabajo – SG-SST",
       "valor_porcentual": 0.5
     },
     {
       "numeral": "1.1.3",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Asignacion de recursos para el Sistema de Gestion de Seguridad y Salud en el Trabajo – SG-SST",
+      "descripcion": "Asignación de recursos para el Sistema de Gestión de Seguridad y Salud en el Trabajo – SG-SST",
       "valor_porcentual": 0.5
     },
     {
@@ -30,7 +30,7 @@
     {
       "numeral": "1.1.5",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Identificacion de trabajadores de alto riesgo y cotizacion de pension especial",
+      "descripcion": "Identificación de trabajadores de alto riesgo y cotizacion de pension especial",
       "valor_porcentual": 0.5
     },
     {
@@ -42,7 +42,7 @@
     {
       "numeral": "1.1.7",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Capacitacion COPASST",
+      "descripcion": "Capacitación COPASST",
       "valor_porcentual": 0.5
     },
     {
@@ -54,25 +54,25 @@
     {
       "numeral": "1.2.1",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Programa Capacitacion promocion y prevencion PyP",
+      "descripcion": "Programa Capacitación promoción y prevención PyP",
       "valor_porcentual": 2.0
     },
     {
       "numeral": "1.2.2",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Induccion y Reinduccion en Sistema de Gestion de Seguridad y Salud en el Trabajo SG-SST, actividades de Promocion y Prevencion PyP",
+      "descripcion": "Inducción y Reinduccion en Sistema de Gestión de Seguridad y Salud en el Trabajo SG-SST, actividades de Promoción y Prevención PyP",
       "valor_porcentual": 2.0
     },
     {
       "numeral": "1.2.3",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Responsables del Sistema de Gestion de Seguridad y Salud en el Trabajo SG-SST con curso virtual de 50 horas",
+      "descripcion": "Responsables del Sistema de Gestión de Seguridad y Salud en el Trabajo SG-SST con curso virtual de 50 horas",
       "valor_porcentual": 2.0
     },
     {
       "numeral": "2.1.1",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Politica del Sistema de Gestion de Seguridad y Salud en el Trabajo SG-SST firmada, fechada y comunicada al COPASST",
+      "descripcion": "Política del Sistema de Gestión de Seguridad y Salud en el Trabajo SG-SST firmada, fechada y comunicada al COPASST",
       "valor_porcentual": 1.0
     },
     {
@@ -84,7 +84,7 @@
     {
       "numeral": "2.3.1",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Evaluacion e identificacion de prioridades",
+      "descripcion": "Evaluación e identificación de prioridades",
       "valor_porcentual": 1.0
     },
     {
@@ -96,7 +96,7 @@
     {
       "numeral": "2.5.1",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Archivo o retencion documental del Sistema de Gestion de Seguridad y Salud en el Trabajo SG-SST",
+      "descripcion": "Archivo o retencion documental del Sistema de Gestión de Seguridad y Salud en el Trabajo SG-SST",
       "valor_porcentual": 2.0
     },
     {
@@ -114,49 +114,49 @@
     {
       "numeral": "2.8.1",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Mecanismos de comunicacion, auto reporte en Sistema de Gestion de Seguridad y Salud en el Trabajo SG-SST",
+      "descripcion": "Mecanismos de comunicación, auto reporte en Sistema de Gestión de Seguridad y Salud en el Trabajo SG-SST",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "2.9.1",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Identificacion, evaluacion, para adquisicion de productos y servicios en Sistema de Gestion de Seguridad y Salud en el Trabajo SG-SST",
+      "descripcion": "Identificación, evaluación, para adquisicion de productos y servicios en Sistema de Gestión de Seguridad y Salud en el Trabajo SG-SST",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "2.10.1",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Evaluacion y seleccion de proveedores y contratistas",
+      "descripcion": "Evaluación y seleccion de proveedores y contratistas",
       "valor_porcentual": 2.0
     },
     {
       "numeral": "2.11.1",
       "ciclo_phva": "PLANEAR",
-      "descripcion": "Evaluacion del impacto de cambios internos y externos en el Sistema de Gestion de Seguridad y Salud en el Trabajo SG-SST",
+      "descripcion": "Evaluación del impacto de cambios internos y externos en el Sistema de Gestión de Seguridad y Salud en el Trabajo SG-SST",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "3.1.1",
       "ciclo_phva": "HACER",
-      "descripcion": "Descripcion sociodemografica – Diagnostico de condiciones de salud",
+      "descripcion": "Descripción sociodemografica – Diagnostico de condiciones de salud",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "3.1.2",
       "ciclo_phva": "HACER",
-      "descripcion": "Actividades de Promocion y Prevencion en Salud",
+      "descripcion": "Actividades de Promoción y Prevención en Salud",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "3.1.3",
       "ciclo_phva": "HACER",
-      "descripcion": "Informacion al medico de los perfiles de cargo",
+      "descripcion": "Información al médico de los perfiles de cargo",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "3.1.4",
       "ciclo_phva": "HACER",
-      "descripcion": "Realizacion de Evaluaciones Medicas Ocupacionales -Peligros- Periodicidad- Comunicacion al Trabajador",
+      "descripcion": "Realizacion de Evaluaciones Medicas Ocupacionales -Peligros- Periodicidad- Comunicación al Trabajador",
       "valor_porcentual": 1.0
     },
     {
@@ -168,7 +168,7 @@
     {
       "numeral": "3.1.6",
       "ciclo_phva": "HACER",
-      "descripcion": "Restricciones y recomendaciones medico laborales",
+      "descripcion": "Restricciones y recomendaciones médico laborales",
       "valor_porcentual": 1.0
     },
     {
@@ -198,7 +198,7 @@
     {
       "numeral": "3.2.2",
       "ciclo_phva": "HACER",
-      "descripcion": "Investigacion de incidentes, accidentes y enfermedades laborales",
+      "descripcion": "Investigación de incidentes, accidentes y enfermedades laborales",
       "valor_porcentual": 2.0
     },
     {
@@ -210,55 +210,55 @@
     {
       "numeral": "3.3.1",
       "ciclo_phva": "HACER",
-      "descripcion": "Medicion de la frecuencia de la accidentalidad",
+      "descripcion": "Medición de la frecuencia de la accidentalidad",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "3.3.2",
       "ciclo_phva": "HACER",
-      "descripcion": "Medicion de la severidad de la accidentalidad",
+      "descripcion": "Medición de la severidad de la accidentalidad",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "3.3.3",
       "ciclo_phva": "HACER",
-      "descripcion": "Medicion de la mortalidad por Accidente de Trabajo",
+      "descripcion": "Medición de la mortalidad por Accidente de Trabajo",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "3.3.4",
       "ciclo_phva": "HACER",
-      "descripcion": "Medicion de la prevalencia de Enfermedad Laboral",
+      "descripcion": "Medición de la prevalencia de Enfermedad Laboral",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "3.3.5",
       "ciclo_phva": "HACER",
-      "descripcion": "Medicion de la incidencia de Enfermedad Laboral",
+      "descripcion": "Medición de la incidencia de Enfermedad Laboral",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "3.3.6",
       "ciclo_phva": "HACER",
-      "descripcion": "Medicion del ausentismo por causa medica",
+      "descripcion": "Medición del ausentismo por causa médica",
       "valor_porcentual": 1.0
     },
     {
       "numeral": "4.1.1",
       "ciclo_phva": "HACER",
-      "descripcion": "Metodologia para la identificacion de peligros, evaluacion y valoracion de los riesgos",
+      "descripcion": "Metodologia para la identificación de peligros, evaluación y valoracion de los riesgos",
       "valor_porcentual": 4.0
     },
     {
       "numeral": "4.1.2",
       "ciclo_phva": "HACER",
-      "descripcion": "Identificacion de peligros con participacion de todos los niveles de la empresa",
+      "descripcion": "Identificación de peligros con participación de todos los niveles de la empresa",
       "valor_porcentual": 4.0
     },
     {
       "numeral": "4.1.3",
       "ciclo_phva": "HACER",
-      "descripcion": "Identificacion de sustancias catalogadas como carcinogenas o con toxicidad aguda",
+      "descripcion": "Identificación de sustancias catalogadas como carcinogenas o con toxicidad aguda",
       "valor_porcentual": 3.0
     },
     {
@@ -270,13 +270,13 @@
     {
       "numeral": "4.2.1",
       "ciclo_phva": "HACER",
-      "descripcion": "Implementacion de medidas de prevencion y control de peligros/riesgos identificados",
+      "descripcion": "Implementacion de medidas de prevención y control de peligros/riesgos identificados",
       "valor_porcentual": 2.5
     },
     {
       "numeral": "4.2.2",
       "ciclo_phva": "HACER",
-      "descripcion": "Verificacion de aplicacion de medidas de prevencion y control por parte de los trabajadores",
+      "descripcion": "Verificación de aplicacion de medidas de prevención y control por parte de los trabajadores",
       "valor_porcentual": 2.5
     },
     {
@@ -288,49 +288,49 @@
     {
       "numeral": "4.2.4",
       "ciclo_phva": "HACER",
-      "descripcion": "Realizacion de inspecciones sistematicas a las instalaciones, maquinaria o equipos con la participacion del COPASST",
+      "descripcion": "Realizacion de inspecciones sistematicas a las instalaciones, maquinaria o equipos con la participación del COPASST",
       "valor_porcentual": 2.5
     },
     {
       "numeral": "4.2.5",
       "ciclo_phva": "HACER",
-      "descripcion": "Mantenimiento periodico de instalaciones, equipos, maquinas, herramientas",
+      "descripcion": "Mantenimiento periódico de instalaciones, equipos, maquinas, herramientas",
       "valor_porcentual": 2.5
     },
     {
       "numeral": "4.2.6",
       "ciclo_phva": "HACER",
-      "descripcion": "Entrega de Elementos de Proteccion Personal EPP, se verifica con contratistas y subcontratistas",
+      "descripcion": "Entrega de Elementos de Protección Personal EPP, se verifica con contratistas y subcontratistas",
       "valor_porcentual": 2.5
     },
     {
       "numeral": "5.1.1",
       "ciclo_phva": "HACER",
-      "descripcion": "Se cuenta con el Plan de Prevencion, Preparacion y Respuesta ante emergencias",
+      "descripcion": "Se cuenta con el Plan de Prevención, Preparacion y Respuesta ante emergencias",
       "valor_porcentual": 5.0
     },
     {
       "numeral": "5.1.2",
       "ciclo_phva": "HACER",
-      "descripcion": "Brigada de prevencion conformada, capacitada y dotada",
+      "descripcion": "Brigada de prevención conformada, capacitada y dotada",
       "valor_porcentual": 5.0
     },
     {
       "numeral": "6.1.1",
       "ciclo_phva": "VERIFICAR",
-      "descripcion": "Definicion de indicadores del SG-SST de acuerdo con las condiciones de la empresa",
+      "descripcion": "Definición de indicadores del SG-SST de acuerdo con las condiciones de la empresa",
       "valor_porcentual": 1.25
     },
     {
       "numeral": "6.1.2",
       "ciclo_phva": "VERIFICAR",
-      "descripcion": "La empresa adelanta auditoria por lo menos una vez al ano",
+      "descripcion": "La empresa adelanta auditoría por lo menos una vez al ano",
       "valor_porcentual": 1.25
     },
     {
       "numeral": "6.1.3",
       "ciclo_phva": "VERIFICAR",
-      "descripcion": "Revision anual de la alta direccion resultados de la auditoria",
+      "descripcion": "Revision anual de la alta direccion resultados de la auditoría",
       "valor_porcentual": 1.25
     },
     {
@@ -342,7 +342,7 @@
     {
       "numeral": "7.1.1",
       "ciclo_phva": "ACTUAR",
-      "descripcion": "Definicion de acciones preventivas y correctivas con base en los resultados del SG-SST",
+      "descripcion": "Definición de acciones preventivas y correctivas con base en los resultados del SG-SST",
       "valor_porcentual": 2.5
     },
     {

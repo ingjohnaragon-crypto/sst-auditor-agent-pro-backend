@@ -41,27 +41,34 @@ async def sembrar_datos() -> None:
     """Ejecuta los seeds de catálogos (y admin opcional) en una sesión."""
     fabrica = obtener_fabrica_sesiones()
     async with fabrica() as sesion:
-        creados_e, omitidos_e = await sembrar_estandares_minimos(sesion)
-        logger.info(
-            "Estándares: creados=%s omitidos=%s",
-            creados_e,
-            omitidos_e,
-        )
-        creados_c, omitidos_c = await sembrar_catalogos_gtc45(sesion)
-        logger.info(
-            "Catálogos GTC 45: creados=%s omitidos=%s",
-            creados_c,
-            omitidos_c,
-        )
-        if hay_credenciales_admin():
-            creado_admin = await crear_usuario_admin(sesion)
+        try:
+            creados_e, omitidos_e = await sembrar_estandares_minimos(sesion)
             logger.info(
-                "Administrador: %s",
-                "creado" if creado_admin else "ya existía / omitido",
+                "Estándares: creados=%s omitidos=%s",
+                creados_e,
+                omitidos_e,
             )
-        else:
-            logger.info("ADMIN_INICIAL_* no definidas; se omite el seed de administrador")
-        await sesion.commit()
+            creados_c, omitidos_c = await sembrar_catalogos_gtc45(sesion)
+            logger.info(
+                "Catálogos GTC 45: creados=%s omitidos=%s",
+                creados_c,
+                omitidos_c,
+            )
+            if hay_credenciales_admin():
+                creado_admin = await crear_usuario_admin(sesion)
+                logger.info(
+                    "Administrador: %s",
+                    "creado" if creado_admin else "ya existía / omitido",
+                )
+            else:
+                logger.info("ADMIN_INICIAL_* no definidas; se omite el seed de administrador")
+            await sesion.commit()
+        except Exception as exc:
+            await sesion.rollback()
+            raise RuntimeError(
+                f"Falló el orquestador sembrar_datos: {exc}. "
+                "¿Ejecutaste `poetry run alembic upgrade head`?"
+            ) from exc
 
 
 async def principal() -> None:
