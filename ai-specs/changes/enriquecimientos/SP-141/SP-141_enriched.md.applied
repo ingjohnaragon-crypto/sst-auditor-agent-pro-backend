@@ -1,0 +1,245 @@
+# Enriched Ticket: SP-141 — Configurar PostgreSQL y Alembic para migraciones
+
+## Original Description
+
+Alistar infraestructura de base de datos e histórico de cambios de esquema.
+
+## Enhanced Description
+
+> **Contexto de estado actual (muy importante para el desarrollador):** gran parte del
+> alcance nominal de esta HU ya fue entregado como prerequisito de SP-140 (autenticación
+> JWT). Hoy ya existen y funcionan:
+>
+> - `src/infrastructure/config/settings.py` — `Settings` (Pydantic Settings) con
+>   `url_base_datos` obligatoria (fail-fast, sin default).
+> - `src/infrastructure/database/sesion.py` — motor async (`create_async_engine`),
+>   fábrica de sesiones (`async_sessionmaker`) y dependencia `obtener_sesion()` con
+>   commit/rollback por petición.
+> - `src/infrastructure/database/base.py` — `Base` declarativa.
+> - `alembic.ini` + `alembic/env.py` — entorno async que resuelve la URL desde
+>   `URL_BASE_DATOS` (sin exigir `JWT_SECRETO`), con `target_metadata = Base.metadata`
+>   e importación explícita de los modelos ORM.
+> - `alembic/versions/a1b2c3d4e5f6_crear_tabla_usuarios.py` — migración base que crea
+>   la tabla `usuarios` con índice único en `correo`.
+>
+> **Esta HU NO debe reimplementar nada de lo anterior.** Su alcance real es cerrar las
+> brechas restantes de la infraestructura de base de datos.
+
+Como equipo de desarrollo, necesitamos completar la infraestructura de PostgreSQL para
+que la conexión sea robusta y configurable en producción, el entorno local sea
+reproducible sin instalación manual de PostgreSQL, y el flujo de migraciones de Alembic
+sea preciso y verificable. El alcance concreto es:
+
+1. **Pool de conexión configurable (SP-178).** Hoy el motor se crea sin parámetros de
+   pool (`create_async_engine(url)`), heredando los defaults de SQLAlchemy sin
+   `pool_pre_ping` (las conexiones caídas por reinicio de la BD o timeout del firewall
+   producen errores en la primera petición). Se deben exponer como variables de entorno
+   tipadas en `Settings`: tamaño del pool, desborde máximo, pre-ping, reciclaje de
+   conexiones y eco de SQL para depuración, y pasarlas al motor en `obtener_motor()`.
+
+2. **Entorno local reproducible.** Crear `docker-compose.yml` en la raíz con un servicio
+   `postgres` (imagen `postgres:16-alpine`), volumen nombrado para persistencia,
+   healthcheck y variables alineadas con el `URL_BASE_DATOS` de ejemplo
+   (`sst_auditor` / puerto 5432). Un desarrollador nuevo debe poder ejecutar
+   `docker compose up -d` + `alembic upgrade head` y tener el backend operativo.
+
+3. **Precisión del autogenerate (SP-179).** El `context.configure(...)` de
+   `alembic/env.py` no pasa `compare_type=True` ni `compare_server_default=True`, por lo
+   que `alembic revision --autogenerate` no detecta cambios de tipo de columna ni de
+   `server_default`. Se deben habilitar ambos flags en los tres puntos de configuración
+   (offline y online).
+
+4. **Verificación del ciclo de migración (SP-180).** La migración base ya existe; falta
+   verificar contra un PostgreSQL real (el del compose) que `alembic upgrade head`,
+   `alembic downgrade base` y re-upgrade funcionan, y que un `--autogenerate` posterior
+   con el esquema al día produce una migración vacía (sin deriva entre ORM y BD).
+
+Esta HU no agrega endpoints ni cambia el esquema de datos: la tabla `usuarios` y su
+migración quedan intactas.
+
+## Acceptance Criteria
+
+- [ ] `Settings` expone `bd_pool_tamano` (default 5), `bd_pool_max_extra` (default 10), `bd_pool_pre_ping` (default `True`), `bd_pool_reciclar_segundos` (default 1800) y `bd_echo_sql` (default `False`), todas con type hints y validación de valores positivos donde aplique.
+- [ ] `obtener_motor()` crea el motor con `pool_size`, `max_overflow`, `pool_pre_ping`, `pool_recycle` y `echo` tomados de `Settings`; sin variables definidas se aplican los defaults anteriores.
+- [ ] `.env.example` documenta las nuevas variables (comentadas, con sus defaults) en la sección «Base de datos».
+- [ ] Existe `docker-compose.yml` con servicio `postgres:16-alpine`, healthcheck (`pg_isready`), volumen nombrado y credenciales/BD coherentes con el `URL_BASE_DATOS` de ejemplo.
+- [ ] `alembic/env.py` configura `compare_type=True` y `compare_server_default=True` tanto en modo offline como online.
+- [ ] Con la BD del compose levantada: `alembic upgrade head` aplica `a1b2c3d4e5f6`, `alembic downgrade base` la revierte limpiamente y `alembic upgrade head` la re-aplica.
+- [ ] Con el esquema en `head`, `alembic revision --autogenerate -m "verificacion"` genera una migración con `upgrade()`/`downgrade()` vacíos (se descarta tras la verificación, no se commitea).
+- [ ] La suite completa pasa (`pytest --cov`) manteniendo el umbral de cobertura del 90 %; Ruff y mypy (strict) sin errores.
+- [ ] El README documenta el flujo de arranque local: `cp .env.example .env` → `docker compose up -d` → `alembic upgrade head` → seed admin → `uvicorn`.
+
+## Fields & Endpoints
+
+**Esta HU no crea ni modifica endpoints HTTP.** El API spec no cambia.
+
+Nuevas variables de entorno / campos de `Settings`:
+
+| Variable de entorno | Campo en `Settings` | Tipo | Default | Uso en el motor |
+|---|---|---|---|---|
+| `BD_POOL_TAMANO` | `bd_pool_tamano` | `int` (> 0) | `5` | `pool_size` |
+| `BD_POOL_MAX_EXTRA` | `bd_pool_max_extra` | `int` (>= 0) | `10` | `max_overflow` |
+| `BD_POOL_PRE_PING` | `bd_pool_pre_ping` | `bool` | `true` | `pool_pre_ping` |
+| `BD_POOL_RECICLAR_SEGUNDOS` | `bd_pool_reciclar_segundos` | `int` (> 0) | `1800` | `pool_recycle` |
+| `BD_ECHO_SQL` | `bd_echo_sql` | `bool` | `false` | `echo` |
+
+Variables ya existentes que no cambian: `URL_BASE_DATOS` (obligatoria, driver
+`postgresql+asyncpg`).
+
+Servicio Docker (solo desarrollo local, no producción):
+
+| Clave | Valor |
+|---|---|
+| Imagen | `postgres:16-alpine` |
+| Puerto | `5432:5432` |
+| `POSTGRES_DB` | `sst_auditor` |
+| `POSTGRES_USER` / `POSTGRES_PASSWORD` | coherentes con el ejemplo de `.env.example` |
+| Healthcheck | `pg_isready -U <usuario> -d sst_auditor` |
+| Volumen | nombrado (p. ej. `datos_postgres:/var/lib/postgresql/data`) |
+
+## Files to Create or Modify
+
+| File | Layer | Action |
+|---|---|---|
+| `src/infrastructure/config/settings.py` | Infrastructure | Modify — agregar los 5 campos de pool con validadores |
+| `src/infrastructure/database/sesion.py` | Infrastructure | Modify — pasar parámetros de pool a `create_async_engine` en `obtener_motor()` |
+| `alembic/env.py` | Infrastructure | Modify — `compare_type=True` y `compare_server_default=True` en `context.configure(...)` (offline y online) |
+| `docker-compose.yml` | Infrastructure | Create — servicio PostgreSQL local con healthcheck y volumen |
+| `.env.example` | Infrastructure | Modify — documentar las nuevas variables de pool |
+| `README.md` | Documentación | Modify — flujo de arranque local con Docker + Alembic |
+| `tests/infrastructure/test_settings.py` | Tests | Modify — defaults y validación de los nuevos campos |
+| `tests/unit/infrastructure/test_sesion.py` | Tests | Modify — verificar que el motor recibe la configuración de pool |
+
+No se crean archivos en `domain/`, `application/` ni `presentation/`: es una HU
+exclusivamente de infraestructura. No se crea ninguna migración nueva
+(`alembic/versions/` queda igual).
+
+## Unit Test Cases
+
+- **Happy path — defaults de pool**: `test_should_usar_defaults_de_pool_when_no_hay_variables_de_entorno` — `Settings` sin vars de pool devuelve 5 / 10 / `True` / 1800 / `False`.
+- **Happy path — override por entorno**: `test_should_leer_configuracion_de_pool_when_variables_definidas` — con `BD_POOL_TAMANO=20`, etc., los campos reflejan los valores del entorno.
+- **Validación**: `test_should_fallar_when_bd_pool_tamano_no_es_positivo` — `BD_POOL_TAMANO=0` o negativo lanza `ValidationError` (fail-fast al arranque).
+- **Validación**: `test_should_fallar_when_bd_pool_max_extra_es_negativo` — `BD_POOL_MAX_EXTRA=-1` lanza `ValidationError`.
+- **Motor**: `test_should_crear_motor_con_parametros_de_pool_when_settings_configurados` — con `create_async_engine` parcheado (`unittest.mock.patch`), `obtener_motor()` lo invoca con `pool_size`, `max_overflow`, `pool_pre_ping`, `pool_recycle` y `echo` correctos (limpiar la caché `lru_cache` en el arrange).
+- **Edge case — caché**: `test_should_reusar_motor_when_se_invoca_dos_veces` — `obtener_motor()` sigue devolviendo la misma instancia (comportamiento `lru_cache` no se rompe con los nuevos parámetros).
+- **Verificación de integración (manual/CI, no unit)**: ciclo `upgrade head` → `downgrade base` → `upgrade head` contra el PostgreSQL del compose, y `--autogenerate` vacío con esquema al día.
+
+## Non-Functional Requirements
+
+- **Seguridad**: ninguna credencial versionada — `alembic.ini` mantiene `sqlalchemy.url` vacío y la URL solo llega por entorno; las credenciales del `docker-compose.yml` son exclusivamente de desarrollo local y no se reutilizan en otros entornos; `.env` sigue en `.gitignore`.
+- **Resiliencia**: `pool_pre_ping=True` por defecto para descartar conexiones muertas antes de usarlas; `pool_recycle=1800` evita conexiones cerradas por timeouts intermedios (firewalls/proxies).
+- **Fail-fast**: configuración de pool inválida (valores no positivos) impide el arranque con `ValidationError`, igual que ya ocurre con `URL_BASE_DATOS` y `JWT_SECRETO` ausentes.
+- **Rendimiento**: defaults conservadores (5+10 conexiones) adecuados para una instancia; los valores son ajustables por entorno sin cambios de código.
+- **Calidad**: type hints en todas las firmas, mypy strict y Ruff sin errores, cobertura ≥ 90 % (`pytest --cov`), docstrings y mensajes en español conforme a la convención del proyecto.
+- **Operación**: el esquema de producción se aplica solo vía `alembic upgrade head`; `Base.metadata.create_all()` sigue reservado a pruebas de integración.
+
+## Subtasks
+
+<!-- SUBTASK:SP-178 -->
+### Subtask: SP-178 — Instalar y configurar conexión a PostgreSQL
+
+#### Original Description
+Definir variables de entorno y pool de conexión SQLAlchemy hacia PostgreSQL.
+
+#### Enhanced Description
+La conexión base ya existe (SP-140): `Settings.url_base_datos` obligatoria,
+`obtener_motor()` / `obtener_fabrica_sesiones()` / `obtener_sesion()` en
+`src/infrastructure/database/sesion.py`, y `asyncpg` + `sqlalchemy[asyncio]` ya en
+`pyproject.toml` / `requirements.txt`. **No instalar dependencias ni recrear la sesión.**
+
+El trabajo restante es:
+
+1. Agregar a `Settings` (`src/infrastructure/config/settings.py`) los campos
+   `bd_pool_tamano: int = 5`, `bd_pool_max_extra: int = 10`,
+   `bd_pool_pre_ping: bool = True`, `bd_pool_reciclar_segundos: int = 1800` y
+   `bd_echo_sql: bool = False`, con `field_validator` que rechace valores no positivos
+   en `bd_pool_tamano` / `bd_pool_reciclar_segundos` y negativos en `bd_pool_max_extra`.
+2. En `obtener_motor()`, pasar `pool_size`, `max_overflow`, `pool_pre_ping`,
+   `pool_recycle` y `echo` desde `get_settings()` a `create_async_engine`, conservando
+   el `lru_cache`.
+3. Crear `docker-compose.yml` en la raíz con el servicio `postgres:16-alpine`
+   (puerto 5432, `POSTGRES_DB=sst_auditor`, healthcheck `pg_isready`, volumen nombrado),
+   coherente con el `URL_BASE_DATOS` de ejemplo.
+4. Documentar las nuevas variables en `.env.example` (comentadas, con defaults) y el
+   flujo de arranque local en el README.
+5. Actualizar `tests/infrastructure/test_settings.py` y
+   `tests/unit/infrastructure/test_sesion.py` según los casos de la HU.
+
+#### Acceptance Criteria
+- [ ] Los 5 campos de pool existen en `Settings` con defaults 5 / 10 / `True` / 1800 / `False` y validación fail-fast de rangos.
+- [ ] `obtener_motor()` traslada los 5 valores al `create_async_engine` (verificado por test unitario con mock).
+- [ ] `docker compose up -d` levanta PostgreSQL 16 con healthcheck saludable y datos persistentes entre reinicios.
+- [ ] `.env.example` y README actualizados; ninguna credencial nueva versionada fuera del compose de desarrollo.
+- [ ] Ruff, mypy strict y `pytest --cov` (≥ 90 %) en verde.
+<!-- /SUBTASK:SP-178 -->
+
+<!-- SUBTASK:SP-179 -->
+### Subtask: SP-179 — Inicializar Alembic y configurar entorno de migraciones
+
+#### Original Description
+Configurar alembic.ini y el script env.py para detectar modelos automáticamente.
+
+#### Enhanced Description
+**Alembic ya está inicializado y operativo** (entregado con SP-140): `alembic.ini` con
+`sqlalchemy.url` vacío (la URL la resuelve el entorno), y `alembic/env.py` en modo async
+que carga `.env`, lee `URL_BASE_DATOS` sin exigir `JWT_SECRETO`, usa
+`target_metadata = Base.metadata` e importa `UsuarioORM` para registrar la tabla.
+**No re-ejecutar `alembic init` ni reescribir el entorno.**
+
+El trabajo restante es afinar la precisión del autogenerate:
+
+1. En `alembic/env.py`, agregar `compare_type=True` y `compare_server_default=True` a
+   las llamadas `context.configure(...)` de `run_migrations_offline()` y de
+   `ejecutar_migraciones()` (ruta online). Sin estos flags, cambios de tipo de columna o
+   de `server_default` pasan inadvertidos en futuras migraciones autogeneradas.
+2. Verificar la convención para modelos futuros: todo nuevo modelo ORM en
+   `src/infrastructure/database/modelos/` debe exportarse en el `__init__.py` del
+   paquete e importarse en `env.py` (patrón ya establecido con `UsuarioORM`); dejar esta
+   regla documentada en un comentario del `env.py` si aún no es evidente.
+3. Verificar contra la BD del compose que, con el esquema en `head`,
+   `alembic revision --autogenerate -m "verificacion"` produce una migración con
+   `upgrade()`/`downgrade()` vacíos (evidencia de que ORM y BD no tienen deriva);
+   eliminar el archivo generado tras la verificación.
+
+#### Acceptance Criteria
+- [ ] `compare_type=True` y `compare_server_default=True` presentes en la configuración offline y online de `alembic/env.py`.
+- [ ] `alembic revision --autogenerate` con esquema al día genera una migración vacía (verificado y descartado, sin commit del archivo de prueba).
+- [ ] `alembic upgrade head` y el modo offline (`alembic upgrade head --sql`) siguen funcionando tras el cambio.
+- [ ] Convención de registro de nuevos modelos ORM documentada en `env.py`.
+<!-- /SUBTASK:SP-179 -->
+
+<!-- SUBTASK:SP-180 -->
+### Subtask: SP-180 — Crear migración base inicial
+
+#### Original Description
+Generar y aplicar la primera migración con las tablas fundamentales del sistema.
+
+#### Enhanced Description
+**La migración base ya existe**: `alembic/versions/a1b2c3d4e5f6_crear_tabla_usuarios.py`
+(entregada con SP-140) crea la tabla `usuarios` con PK UUID, índice único en `correo`,
+`activo` con `server_default=true` y timestamps `TIMESTAMPTZ` con `server_default=now()`,
+más su `downgrade()` completo. **No generar una nueva migración inicial ni modificar la
+existente** (ya pudo haberse aplicado en otros entornos; las migraciones aplicadas son
+inmutables).
+
+El trabajo restante es la verificación formal del ciclo de vida contra un PostgreSQL
+real (el del `docker-compose.yml` de SP-178):
+
+1. Con la BD limpia: `alembic upgrade head` aplica `a1b2c3d4e5f6` sin errores;
+   `alembic current` reporta `a1b2c3d4e5f6 (head)` y la tabla `usuarios` existe con el
+   índice único `ix_usuarios_correo`.
+2. `alembic downgrade base` revierte limpiamente (tabla e índice eliminados, solo queda
+   `alembic_version`); `alembic upgrade head` re-aplica sin errores (ciclo idempotente).
+3. Ejecutar `python -m scripts.crear_usuario_admin` sobre el esquema migrado para
+   confirmar que el seed del administrador funciona end-to-end con la BD real.
+4. Confirmar que `ai-specs/specs/data-model.md` sigue reflejando fielmente el esquema
+   aplicado (ya documenta la tabla `usuarios` y la migración; solo ajustar si la
+   verificación revela alguna discrepancia).
+
+#### Acceptance Criteria
+- [ ] `alembic upgrade head` sobre BD limpia crea `usuarios` + `ix_usuarios_correo` y deja `alembic current` en `a1b2c3d4e5f6 (head)`.
+- [ ] Ciclo `downgrade base` → `upgrade head` ejecuta sin errores ni residuos de esquema.
+- [ ] Seed de administrador (`scripts/crear_usuario_admin.py`) funciona sobre el esquema migrado.
+- [ ] `ai-specs/specs/data-model.md` coincide con el esquema real (sin cambios o con la corrección detectada).
+- [ ] No se agregan ni modifican archivos en `alembic/versions/`.
+<!-- /SUBTASK:SP-180 -->

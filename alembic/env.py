@@ -10,6 +10,11 @@ from dotenv import load_dotenv
 from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import create_async_engine
 from src.infrastructure.database.base import Base
+
+# Convención de registro de modelos: todo nuevo modelo ORM en
+# src/infrastructure/database/modelos/ debe exportarse en el __init__.py del
+# paquete e importarse aquí para que Base.metadata lo registre y el
+# autogenerate lo detecte.
 from src.infrastructure.database.modelos import UsuarioORM  # noqa: F401 — registra la tabla
 
 # Carga .env para desarrollo local; en CI/prod las vars ya vienen del entorno.
@@ -39,6 +44,8 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
+        compare_type=True,
+        compare_server_default=True,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -46,7 +53,12 @@ def run_migrations_offline() -> None:
 
 def ejecutar_migraciones(conexion: Connection) -> None:
     """Configura el contexto sobre una conexión síncrona y ejecuta las migraciones."""
-    context.configure(connection=conexion, target_metadata=target_metadata)
+    context.configure(
+        connection=conexion,
+        target_metadata=target_metadata,
+        compare_type=True,
+        compare_server_default=True,
+    )
     with context.begin_transaction():
         context.run_migrations()
 
