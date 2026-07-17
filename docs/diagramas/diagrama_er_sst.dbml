@@ -1,0 +1,395 @@
+// ============================================================================
+// Diagrama Entidad-Relación — Dominio SST (SP-142)
+// ============================================================================
+// Fuente de verdad para las migraciones Alembic y entidades de dominio de los
+// tickets siguientes. Referencia normativa: .sst-agent-document.md (raíz del
+// repo) — Decreto 1072 de 2015, Resolución 312 de 2019, GTC 45:2012.
+//
+// Convenciones transversales:
+// - PK `id` UUID generada en aplicación (uuid4), igual que `usuarios`.
+// - `fecha_creacion` y `fecha_actualizacion` TIMESTAMPTZ en UTC en toda tabla.
+// - Nombres de tablas y columnas en snake_case y en español.
+// - Campos derivados (nivel_probabilidad, nivel_riesgo, requiere_plan_mejora)
+//   se calculan en dominio; nunca se aceptan del cliente.
+// - Borrado lógico en `evidencias` (activo + fecha_eliminacion): conservación
+//   documental 20 años tras el cese laboral (D. 1072, Art. 2.2.4.6.13).
+// - Las historias clínicas NO se modelan: custodia exclusiva de la IPS
+//   (referencia normativa §2.2).
+// ============================================================================
+
+Project sst_auditor_agent_pro {
+  database_type: 'PostgreSQL'
+  Note: 'Modelo ER del dominio SST: estándares mínimos (Res. 312 de 2019), gestión de peligros y riesgos (GTC 45:2012, anexos A y B) y ciclo PHVA (D. 1072 de 2015).'
+}
+
+// ----------------------------------------------------------------------------
+// Enums
+// ----------------------------------------------------------------------------
+
+// Clasificación de riesgo laboral ARL. Junto con numero_trabajadores determina
+// la tabla de estándares mínimos aplicable (7, 21 o 60 ítems — Res. 312 de 2019).
+Enum nivel_riesgo_arl {
+  "I"
+  "II"
+  "III"
+  "IV"
+  "V"
+}
+
+// Ciclo de mejora continua del SG-SST (D. 1072 de 2015).
+Enum ciclo_phva {
+  PLANEAR
+  HACER
+  VERIFICAR
+  ACTUAR
+}
+
+// Calificación de cada estándar mínimo en la autoevaluación (Res. 312 de 2019).
+Enum resultado_calificacion {
+  CUMPLE
+  NO_CUMPLE
+  NO_APLICA
+}
+
+Enum nivel_deficiencia {
+  "10" [note: 'Muy Alto: incidente muy probable o control nulo']
+  "6"  [note: 'Alto: incidentes significativos o eficacia baja']
+  "2"  [note: 'Medio: incidentes poco significativos o eficacia moderada']
+  "0"  [note: 'Bajo: sin peligro detectado o riesgo controlado. En la tabla A.1 de GTC 45 este nivel no puntúa (valor «—»); el 0 es convención de aplicación PENDIENTE de validar con el responsable de SST (ver «Decisiones de validación» en data-model.md)']
+}
+
+// NE — Nivel de Exposición (GTC 45, Anexo A).
+Enum nivel_exposicion {
+  "4" [note: 'Continua: sin interrupción o varias veces con tiempo prolongado']
+  "3" [note: 'Frecuente: varias veces durante la jornada, tiempos cortos']
+  "2" [note: 'Ocasional: alguna vez durante la jornada, periodo corto']
+  "1" [note: 'Esporádica: de manera eventual']
+}
+
+// NC — Nivel de Consecuencia (GTC 45, Anexo A, tabla A.2).
+Enum nivel_consecuencia {
+  "100" [note: 'Mortal o Catastrófico: muerte(s)']
+  "60"  [note: 'Muy Grave: lesiones graves irreparables (invalidez)']
+  "25"  [note: 'Grave: lesiones con incapacidad laboral temporal']
+  "10"  [note: 'Leve: lesiones sin incapacidad']
+}
+
+// Interpretación del Nivel de Riesgo NR = NP × NC (GTC 45, Anexo A, tabla A.3).
+Enum interpretacion_nr {
+  "I"   [note: 'Crítico — NR 600-4000: suspender actividades hasta controlar el riesgo']
+  "II"  [note: 'NR 150-500: corregir y adoptar medidas de control de inmediato']
+  "III" [note: 'NR 40-120: mejorar si es posible; justificar rentabilidad']
+  "IV"  [note: 'NR 20: mantener controles existentes; comprobación periódica']
+}
+
+// Aceptabilidad del riesgo según el nivel I–IV (GTC 45, Anexo A, tabla A.3).
+Enum aceptabilidad_riesgo {
+  NO_ACEPTABLE           [note: 'Nivel I']
+  ACEPTABLE_CON_CONTROL  [note: 'Nivel II: no aceptable o aceptable con control específico']
+  MEJORABLE              [note: 'Nivel III']
+  ACEPTABLE              [note: 'Nivel IV']
+}
+
+// Clasificación de peligros según la tabla de peligros de la GTC 45:2012.
+Enum clasificacion_peligro {
+  BIOLOGICO
+  FISICO
+  QUIMICO
+  PSICOSOCIAL
+  BIOMECANICO
+  CONDICIONES_SEGURIDAD
+  FENOMENOS_NATURALES
+}
+
+// Jerarquía de controles en orden de prioridad (GTC 45 y D. 1072 de 2015,
+// Anexo B de la referencia).
+Enum tipo_control {
+  ELIMINACION     [note: '1. Suprimir el peligro modificando diseño o proceso']
+  SUSTITUCION     [note: '2. Reemplazar el peligro por otro de riesgo menor o nulo']
+  INGENIERIA      [note: '3. Medidas técnicas sobre la fuente o el medio']
+  ADMINISTRATIVO  [note: '4. Reducir tiempo de exposición o normar la ejecución']
+  EPP             [note: '5. Última medida, complementaria — nunca solución aislada']
+}
+
+// Fuente que origina la acción de mejora (referencia normativa §4:
+// auditorías, investigaciones y revisión de dirección).
+Enum origen_accion {
+  AUTOEVALUACION
+  AUDITORIA
+  INVESTIGACION
+}
+
+// Tipo de acción de mejora (referencia normativa §4).
+Enum tipo_accion {
+  PREVENTIVA
+  CORRECTIVA
+}
+
+// Valores propuestos (no fijados por la norma) — PENDIENTES de validar con
+// el responsable de SST.
+Enum estado_plan_mejoramiento {
+  ABIERTO
+  EN_EJECUCION
+  CERRADO
+}
+
+// Valores propuestos (no fijados por la norma) — PENDIENTES de validar con
+// el responsable de SST.
+Enum estado_accion_mejora {
+  PENDIENTE
+  EN_CURSO
+  COMPLETADA
+  VERIFICADA
+}
+
+// Valores propuestos (no fijados por la norma) — PENDIENTES de validar con
+// el responsable de SST.
+Enum tipo_hallazgo {
+  NO_CONFORMIDAD
+  OBSERVACION
+  OPORTUNIDAD_MEJORA
+}
+
+// ----------------------------------------------------------------------------
+// Gestión de usuarios (existente — se integra sin rediseñar)
+// ----------------------------------------------------------------------------
+
+Table usuarios {
+  id                  uuid          [pk, note: 'Generado en aplicación (uuid4)']
+  nombre_completo     varchar(150)  [not null]
+  correo              varchar(254)  [not null, unique, note: 'Almacenado en minúsculas']
+  hash_contrasena     varchar(72)   [not null, note: 'Hash bcrypt (costo 12); nunca expuesto en respuestas']
+  rol                 varchar(30)   [not null, note: 'ADMINISTRADOR | AUDITOR_SST | CONSULTA (enum RolUsuario en dominio)']
+  activo              boolean       [not null, default: true]
+  fecha_creacion      timestamptz   [not null, default: `now()`]
+  fecha_actualizacion timestamptz   [not null, default: `now()`]
+
+  Note: 'Entidad EXISTENTE (SP-140, migración a1b2c3d4e5f6) — se integra al diagrama tal cual, sin rediseñar. Participa como: evaluador (autoevaluaciones.usuario_id), cargador de evidencias (evidencias.usuario_id), auditor (auditorias.auditor_id) y responsable (acciones_mejora.responsable_id).'
+}
+
+// ----------------------------------------------------------------------------
+// Empresa y estándares mínimos (Res. 312 de 2019 — ciclo Planear/Verificar)
+// ----------------------------------------------------------------------------
+
+Table empresas {
+  id                   uuid             [pk, note: 'Generado en aplicación (uuid4)']
+  razon_social         varchar(200)     [not null]
+  nit                  varchar(20)      [not null, unique]
+  actividad_economica  varchar(200)     [not null]
+  nivel_riesgo_arl     nivel_riesgo_arl [not null]
+  numero_trabajadores  integer          [not null, note: 'Mayor que 0']
+  fecha_creacion       timestamptz      [not null, default: `now()`]
+  fecha_actualizacion  timestamptz      [not null, default: `now()`]
+
+  Note: 'Res. 312 de 2019: el nivel de riesgo ARL y el número de trabajadores determinan qué tabla de estándares mínimos aplica (7, 21 o 60 estándares). La resolución del subconjunto aplicable es regla de negocio, no de esquema.'
+}
+
+Table estandares_minimos {
+  id                  uuid          [pk, note: 'Generado en aplicación (uuid4)']
+  ciclo_phva          ciclo_phva    [not null]
+  numeral             varchar(20)   [not null, unique, note: 'Numeral del estándar en la Res. 312 (p. ej. 1.1.1)']
+  descripcion         text          [not null]
+  valor_porcentual    numeric(5,2)  [not null, note: 'Peso porcentual del ítem en la tabla de valores']
+  fecha_creacion      timestamptz   [not null, default: `now()`]
+  fecha_actualizacion timestamptz   [not null, default: `now()`]
+
+  Note: 'Catálogo plano de estándares mínimos (Res. 312 de 2019, tabla de valores). Soporta las tres tablas (7, 21 y 60 ítems) sin cambio de esquema.'
+}
+
+Table autoevaluaciones {
+  id                    uuid          [pk, note: 'Generado en aplicación (uuid4)']
+  empresa_id            uuid          [not null]
+  usuario_id            uuid          [not null, note: 'Usuario que realiza la autoevaluación']
+  fecha                 date          [not null]
+  puntaje_total         numeric(5,2)  [note: 'Suma de puntajes de las calificaciones; NULL mientras esté en curso']
+  requiere_plan_mejora  boolean       [not null, default: false, note: 'DERIVADO: puntaje_total < 85. Obliga a plan de mejoramiento con reporte a la ARL']
+  fecha_creacion        timestamptz   [not null, default: `now()`]
+  fecha_actualizacion   timestamptz   [not null, default: `now()`]
+
+  Note: 'Evaluación inicial / autoevaluación de estándares mínimos (Res. 312 de 2019; D. 1072 — línea base del SG-SST, referencia §1). Si el puntaje total es inferior al 85 % es obligatorio el plan de mejoramiento con reporte a la ARL (referencia §4).'
+}
+
+Table calificaciones_estandar {
+  id                  uuid                    [pk, note: 'Generado en aplicación (uuid4)']
+  autoevaluacion_id   uuid                    [not null]
+  estandar_id         uuid                    [not null]
+  resultado           resultado_calificacion  [not null]
+  puntaje             numeric(5,2)            [not null, note: 'CUMPLE y NO_APLICA otorgan el valor porcentual del ítem; NO_CUMPLE otorga 0']
+  observaciones       text
+  fecha_creacion      timestamptz             [not null, default: `now()`]
+  fecha_actualizacion timestamptz             [not null, default: `now()`]
+
+  indexes {
+    (autoevaluacion_id, estandar_id) [unique, name: 'uq_calificacion_autoevaluacion_estandar']
+  }
+
+  Note: 'Tabla intermedia NOMBRADA de la relación N—N autoevaluaciones ↔ estandares_minimos (Res. 312 de 2019: calificación cumple / no cumple / no aplica por ítem).'
+}
+
+// ----------------------------------------------------------------------------
+// Gestión de peligros y riesgos (GTC 45:2012 — ciclo Hacer)
+// ----------------------------------------------------------------------------
+
+Table procesos_actividades {
+  id                  uuid          [pk, note: 'Generado en aplicación (uuid4)']
+  empresa_id          uuid          [not null]
+  nombre              varchar(150)  [not null]
+  es_rutinaria        boolean       [not null]
+  zona_lugar          varchar(150)
+  fecha_creacion      timestamptz   [not null, default: `now()`]
+  fecha_actualizacion timestamptz   [not null, default: `now()`]
+
+  Note: 'GTC 45 §2.1 (paso 1): clasificación de procesos, actividades y tareas rutinarias y no rutinarias.'
+}
+
+Table peligros {
+  id                    uuid                   [pk, note: 'Generado en aplicación (uuid4)']
+  proceso_actividad_id  uuid                   [not null]
+  clasificacion         clasificacion_peligro  [not null]
+  descripcion           text                   [not null]
+  efectos_posibles      text
+  fecha_creacion        timestamptz            [not null, default: `now()`]
+  fecha_actualizacion   timestamptz            [not null, default: `now()`]
+
+  Note: 'GTC 45 §2.1 (paso 2): identificación sistemática de fuentes, situaciones o actos con potencial de daño, clasificados según la tabla de peligros de la GTC 45.'
+}
+
+Table evaluaciones_riesgo {
+  id                  uuid                  [pk, note: 'Generado en aplicación (uuid4)']
+  peligro_id          uuid                  [not null]
+  nivel_deficiencia   nivel_deficiencia     [not null, note: 'ND ∈ {10, 6, 2, 0} — ver nota del enum sobre el caso «Bajo»']
+  nivel_exposicion    nivel_exposicion      [not null, note: 'NE ∈ {4, 3, 2, 1}']
+  nivel_consecuencia  nivel_consecuencia    [not null, note: 'NC ∈ {100, 60, 25, 10}']
+  nivel_probabilidad  smallint              [not null, note: 'DERIVADO: NP = ND × NE (rango 2–40; interpretación: Muy Alto 24-40, Alto 10-20, Medio 6-8, Bajo 2-4). Calculado en dominio, nunca aceptado del cliente']
+  nivel_riesgo        integer               [not null, note: 'DERIVADO: NR = NP × NC (rango 20–4000). Calculado en dominio, nunca aceptado del cliente']
+  interpretacion_nr   interpretacion_nr     [not null]
+  aceptabilidad       aceptabilidad_riesgo  [not null]
+  fecha_creacion      timestamptz           [not null, default: `now()`]
+  fecha_actualizacion timestamptz           [not null, default: `now()`]
+
+  Note: 'GTC 45 §2.1 (paso 3) y Anexo A: evaluación del riesgo con los valores discretos de las tablas A.1–A.3. NR = NP × NC con NP = ND × NE.'
+}
+
+Table controles_riesgo {
+  id                    uuid          [pk, note: 'Generado en aplicación (uuid4)']
+  evaluacion_riesgo_id  uuid          [not null]
+  tipo                  tipo_control  [not null]
+  descripcion           text          [not null]
+  fecha_creacion        timestamptz   [not null, default: `now()`]
+  fecha_actualizacion   timestamptz   [not null, default: `now()`]
+
+  Note: 'GTC 45 §2.1 (paso 4) y D. 1072: jerarquía de controles (Anexo B de la referencia). Priorizar siempre fuente y medio sobre el individuo; EPP nunca como solución aislada.'
+}
+
+// ----------------------------------------------------------------------------
+// Verificar: auditoría interna anual (referencia §3)
+// ----------------------------------------------------------------------------
+
+Table auditorias {
+  id                  uuid          [pk, note: 'Generado en aplicación (uuid4)']
+  empresa_id          uuid          [not null]
+  auditor_id          uuid          [not null, note: 'Usuario que ejecuta la auditoría (rol AUDITOR_SST)']
+  fecha               date          [not null]
+  alcance             text          [not null]
+  fecha_creacion      timestamptz   [not null, default: `now()`]
+  fecha_actualizacion timestamptz   [not null, default: `now()`]
+
+  Note: 'Referencia §3 (Verificar): auditoría anual interna, planificada con el COPASST.'
+}
+
+Table hallazgos {
+  id                  uuid           [pk, note: 'Generado en aplicación (uuid4)']
+  auditoria_id        uuid           [not null]
+  tipo                tipo_hallazgo  [not null]
+  descripcion         text           [not null]
+  fecha_creacion      timestamptz    [not null, default: `now()`]
+  fecha_actualizacion timestamptz    [not null, default: `now()`]
+
+  Note: 'Referencia §3: resultado de la auditoría interna. Alimenta acciones de mejora vía plan de mejoramiento (origen AUDITORIA).'
+}
+
+// ----------------------------------------------------------------------------
+// Actuar: plan de mejoramiento y acciones (referencia §4)
+// ----------------------------------------------------------------------------
+
+Table planes_mejoramiento {
+  id                  uuid                      [pk, note: 'Generado en aplicación (uuid4)']
+  empresa_id          uuid                      [not null]
+  autoevaluacion_id   uuid                      [note: 'FK opcional: presente cuando el plan lo origina una autoevaluación con puntaje < 85 %']
+  estado              estado_plan_mejoramiento  [not null, default: 'ABIERTO']
+  reportado_arl       boolean                   [not null, default: false, note: 'Reporte a la ARL obligatorio si la autoevaluación es inferior al 85 % (referencia §4)']
+  fecha_creacion      timestamptz               [not null, default: `now()`]
+  fecha_actualizacion timestamptz               [not null, default: `now()`]
+
+  Note: 'Referencia §4 (Actuar) y Res. 312: plan de mejoramiento documentado; reporte a la ARL obligatorio si la autoevaluación de estándares mínimos es inferior al 85 %.'
+}
+
+Table acciones_mejora {
+  id                    uuid                  [pk, note: 'Generado en aplicación (uuid4)']
+  plan_mejoramiento_id  uuid                  [not null]
+  responsable_id        uuid                  [not null, note: 'Usuario responsable de ejecutar la acción']
+  origen                origen_accion         [not null]
+  tipo                  tipo_accion           [not null]
+  descripcion           text                  [not null]
+  fecha_limite          date                  [not null]
+  estado                estado_accion_mejora  [not null, default: 'PENDIENTE']
+  fecha_creacion        timestamptz           [not null, default: `now()`]
+  fecha_actualizacion   timestamptz           [not null, default: `now()`]
+
+  Note: 'Referencia §4 (Actuar): acciones preventivas y correctivas basadas en auditorías, investigaciones y revisión de dirección, agrupadas en el plan de mejoramiento.'
+}
+
+// ----------------------------------------------------------------------------
+// Evidencias documentales (D. 1072, Art. 2.2.4.6.13)
+// ----------------------------------------------------------------------------
+
+Table evidencias {
+  id                       uuid          [pk, note: 'Generado en aplicación (uuid4)']
+  calificacion_estandar_id uuid          [note: 'FK opcional: evidencia de una calificación de estándar']
+  accion_mejora_id         uuid          [note: 'FK opcional: evidencia de una acción de mejora']
+  usuario_id               uuid          [not null, note: 'Usuario que carga la evidencia']
+  nombre_archivo           varchar(255)  [not null]
+  tipo_mime                varchar(100)  [not null]
+  ruta_almacenamiento      varchar(500)  [not null]
+  fecha_carga              timestamptz   [not null]
+  activo                   boolean       [not null, default: true, note: 'Borrado lógico: nunca borrado físico']
+  fecha_eliminacion        timestamptz   [note: 'NULL mientras la evidencia esté activa']
+  fecha_creacion           timestamptz   [not null, default: `now()`]
+  fecha_actualizacion      timestamptz   [not null, default: `now()`]
+
+  Note: 'D. 1072, Art. 2.2.4.6.13: conservación documental 20 años tras el cese laboral — solo borrado lógico (activo + fecha_eliminacion), nunca físico. REGLA (CHECK en implementación): al menos una de las dos FK opcionales (calificacion_estandar_id, accion_mejora_id) debe estar presente. Sin contenido clínico: las historias clínicas son custodia exclusiva de la IPS (referencia §2.2).'
+}
+
+// ----------------------------------------------------------------------------
+// Relaciones (cardinalidad explícita: > = N—1)
+// ----------------------------------------------------------------------------
+
+// empresas 1—N
+Ref: autoevaluaciones.empresa_id > empresas.id
+Ref: procesos_actividades.empresa_id > empresas.id
+Ref: auditorias.empresa_id > empresas.id
+Ref: planes_mejoramiento.empresa_id > empresas.id
+
+// autoevaluaciones N—N estandares_minimos vía calificaciones_estandar
+Ref: calificaciones_estandar.autoevaluacion_id > autoevaluaciones.id
+Ref: calificaciones_estandar.estandar_id > estandares_minimos.id
+
+// cadena GTC 45: proceso → peligro → evaluación → control
+Ref: peligros.proceso_actividad_id > procesos_actividades.id
+Ref: evaluaciones_riesgo.peligro_id > peligros.id
+Ref: controles_riesgo.evaluacion_riesgo_id > evaluaciones_riesgo.id
+
+// verificar / actuar
+Ref: hallazgos.auditoria_id > auditorias.id
+Ref: planes_mejoramiento.autoevaluacion_id > autoevaluaciones.id
+Ref: acciones_mejora.plan_mejoramiento_id > planes_mejoramiento.id
+
+// evidencias (FKs opcionales excluyentes-no-vacías: al menos una presente)
+Ref: evidencias.calificacion_estandar_id > calificaciones_estandar.id
+Ref: evidencias.accion_mejora_id > acciones_mejora.id
+
+// participación de usuarios (entidad existente, sin modificar)
+Ref: autoevaluaciones.usuario_id > usuarios.id
+Ref: evidencias.usuario_id > usuarios.id
+Ref: auditorias.auditor_id > usuarios.id
+Ref: acciones_mejora.responsable_id > usuarios.id
