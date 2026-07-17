@@ -1,0 +1,22 @@
+# PostgreSQL local para desarrollo — credenciales alineadas con .env.example.
+# Solo para entorno local; nunca reutilizar estas credenciales en otros entornos.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sst_auditor_postgres
+    environment:
+      POSTGRES_DB: sst_auditor
+      POSTGRES_USER: usuario
+      POSTGRES_PASSWORD: contrasena
+    ports:
+      - "5432:5432"
+    volumes:
+      - datos_postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U usuario -d sst_auditor"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  datos_postgres:

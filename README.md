@@ -23,7 +23,9 @@ estructurada según el ciclo PHVA (Planear, Hacer, Verificar, Actuar).
 | Dependencias | Poetry (grupos `main` y `dev`, lock versionado) |
 | Tests | pytest + pytest-cov (gate de cobertura: 90%) |
 | Calidad | ruff (lint + format) + mypy (modo estricto) + pre-commit |
-| Persistencia | SQLAlchemy asíncrono (planificado — aún no implementado) |
+| Persistencia | SQLAlchemy 2.x asíncrono + PostgreSQL 16 (asyncpg) |
+| Migraciones | Alembic (entorno async; `alembic upgrade head`) |
+| BD local | Docker Compose (`postgres:16-alpine` con healthcheck y volumen) |
 
 Las versiones exactas están fijadas en [`poetry.lock`](./poetry.lock).
 [`requirements.txt`](./requirements.txt) es un **artefacto generado** con
@@ -43,18 +45,35 @@ poetry install
 # 2. Activar los hooks de calidad (una sola vez por clon)
 poetry run pre-commit install
 
-# 3. Configurar variables de entorno (opcional — hay defaults)
+# 3. Configurar variables de entorno (URL_BASE_DATOS y JWT_SECRETO son obligatorias)
 cp .env.example .env
 
-# 4. Levantar la aplicación
+# 4. Levantar PostgreSQL local (Docker Compose v2; espera al healthcheck)
+docker compose up -d
+
+# 5. Aplicar las migraciones de esquema
+poetry run alembic upgrade head
+
+# 6. Crear el usuario administrador inicial (idempotente; usa ADMIN_INICIAL_* del .env)
+poetry run python -m scripts.crear_usuario_admin
+
+# 7. Levantar la aplicación
 poetry run uvicorn src.main:app --reload
 # → http://127.0.0.1:8000/health       (prueba de vida)
 # → http://127.0.0.1:8000/api/v1/ping  (conectividad con el frontend)
 # → http://127.0.0.1:8000/docs         (Swagger UI)
 
-# 5. Ejecutar la suite de tests
+# 8. Ejecutar la suite de tests
 poetry run pytest
 ```
+
+> **Base de datos local:** el [`docker-compose.yml`](./docker-compose.yml) levanta
+> PostgreSQL 16 con credenciales alineadas al `URL_BASE_DATOS` de `.env.example`
+> (usuario `usuario`, BD `sst_auditor`, puerto 5432) — copiar el `.env.example`
+> basta para conectar sin editar nada. Los datos persisten en el volumen nombrado
+> `datos_postgres` (sobreviven a `docker compose down`; borrar con `down -v`).
+> Las variables de pool `BD_POOL_*` son opcionales y traen defaults seguros
+> (ver `.env.example`). El esquema se aplica **solo** con `alembic upgrade head`.
 
 > Si se conserva el flujo con pip, `pip install -r requirements.txt` sigue
 > funcionando; tras cambiar dependencias, regenerar el archivo con
@@ -140,6 +159,12 @@ src/
 | `API_PREFIX` | Prefijo de los endpoints de dominio | `/api/v1` |
 | `LOG_LEVEL` | Nivel de log del backend | `INFO` |
 | `ORIGENES_CORS` | Orígenes permitidos por CORS (JSON array) | `["http://localhost:4200"]` |
+| `URL_BASE_DATOS` | URL async de PostgreSQL (driver `asyncpg`) | — (obligatoria, fail-fast) |
+| `BD_POOL_TAMANO` | Tamaño base del pool de conexiones (> 0) | `5` |
+| `BD_POOL_MAX_EXTRA` | Conexiones extra sobre el pool (>= 0) | `10` |
+| `BD_POOL_PRE_PING` | Verificar conexión antes de usarla | `true` |
+| `BD_POOL_RECICLAR_SEGUNDOS` | Segundos antes de reciclar una conexión (> 0) | `1800` |
+| `BD_ECHO_SQL` | Loguear el SQL emitido (depuración) | `false` |
 
 Se accede vía inyección de dependencias con
 `Depends(get_settings)` (ver `src/presentation/routers/health_router.py`
