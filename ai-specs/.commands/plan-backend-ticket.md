@@ -22,12 +22,21 @@ off to a developer for autonomous implementation.
 1. Adopt the role defined in the active stack agent
 2. Analyze the ticket: identify affected layers (Domain, Application, Presentation, Infrastructure)
 3. Propose the implementation plan following the output format below
-4. Save the plan at `ai-specs/changes/planes/<ticket-id>/<ticket-id>_backend.md`
-5. **Do not write any implementation code — plan only**
+4. **Always estimate Story Points** (Fibonacci: 1, 2, 3, 5, 8, 13) for the HU and for each mapped subtask
+5. Save the plan at `ai-specs/changes/planes/<ticket-id>/<ticket-id>_backend.md`
+6. **Do not write any implementation code — plan only**
+
+## Language
+
+Write the entire plan (including section headers) in the Active Language from the prompt.
+When Active Language is Spanish, use headers like `# Plan de implementación backend: …`,
+`## 1. Resumen`, `## Estimación de puntos de historia`, etc. Do not leave English headers
+when the active language is `es`.
 
 ## Output format
 
-Save a markdown file at `ai-specs/changes/planes/<ticket-id>/<ticket-id>_backend.md` with this structure:
+Save a markdown file at `ai-specs/changes/planes/<ticket-id>/<ticket-id>_backend.md` with this structure
+(English labels below — translate headers when Active Language is not English):
 
 ---
 
@@ -36,6 +45,22 @@ Save a markdown file at `ai-specs/changes/planes/<ticket-id>/<ticket-id>_backend
 ### `## 1. Overview`
 Brief description of the feature and relevant architecture principles.
 State the active stack.
+
+### `## Story Points Estimate` / `## Estimación de puntos de historia` (mandatory)
+Always include this section — never omit it.
+
+```markdown
+<!-- STORY_POINTS:<N> -->
+- **HU total**: <N> (Fibonacci: 1, 2, 3, 5, 8, 13)
+- **Justification**: one short paragraph (complexity, uncertainty, testing effort)
+- **Subtasks** (if any):
+  | Subtask | Points | Note |
+  |---|---|---|
+  | SP-XXX | 2 | … |
+<!-- /STORY_POINTS -->
+```
+
+If the ticket already has story points in Jira, confirm or propose an adjustment with rationale.
 
 ### `## 2. Architecture Context`
 - Active stack: `<stack>` (`<label>`)
