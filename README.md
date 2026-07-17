@@ -54,16 +54,20 @@ docker compose up -d
 # 5. Aplicar las migraciones de esquema
 poetry run alembic upgrade head
 
-# 6. Crear el usuario administrador inicial (idempotente; usa ADMIN_INICIAL_* del .env)
+# 6. Sembrar catálogos SST (Res. 312 + GTC 45; idempotente)
+#    Si ADMIN_INICIAL_* están en .env, también crea el admin.
+poetry run python -m scripts.sembrar_datos
+
+# 7. (Opcional) Solo admin, si no usaste el orquestador anterior
 poetry run python -m scripts.crear_usuario_admin
 
-# 7. Levantar la aplicación
+# 8. Levantar la aplicación
 poetry run uvicorn src.main:app --reload
 # → http://127.0.0.1:8000/health       (prueba de vida)
 # → http://127.0.0.1:8000/api/v1/ping  (conectividad con el frontend)
 # → http://127.0.0.1:8000/docs         (Swagger UI)
 
-# 8. Ejecutar la suite de tests
+# 9. Ejecutar la suite de tests
 poetry run pytest
 ```
 

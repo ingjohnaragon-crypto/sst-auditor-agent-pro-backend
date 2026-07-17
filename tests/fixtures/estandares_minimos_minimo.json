@@ -1,0 +1,18 @@
+{
+  "fuente": "fixture de prueba unitaria",
+  "version": "test",
+  "items": [
+    {
+      "numeral": "1.1.1",
+      "ciclo_phva": "PLANEAR",
+      "descripcion": "Ítem de prueba A",
+      "valor_porcentual": 0.5
+    },
+    {
+      "numeral": "7.1.1",
+      "ciclo_phva": "ACTUAR",
+      "descripcion": "Ítem de prueba B",
+      "valor_porcentual": 2.5
+    }
+  ]
+}

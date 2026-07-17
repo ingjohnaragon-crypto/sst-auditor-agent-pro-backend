@@ -15,7 +15,11 @@ from src.infrastructure.database.base import Base
 # src/infrastructure/database/modelos/ debe exportarse en el __init__.py del
 # paquete e importarse aquí para que Base.metadata lo registre y el
 # autogenerate lo detecte.
-from src.infrastructure.database.modelos import UsuarioORM  # noqa: F401 — registra la tabla
+from src.infrastructure.database.modelos import (  # noqa: F401 — registra las tablas
+    CatalogoReferenciaORM,
+    EstandarMinimoORM,
+    UsuarioORM,
+)
 
 # Carga .env para desarrollo local; en CI/prod las vars ya vienen del entorno.
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")

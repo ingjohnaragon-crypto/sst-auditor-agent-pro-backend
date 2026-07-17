@@ -25,7 +25,8 @@ repos:
         name: mypy (strict, config del proyecto)
         # Hook local (no mirrors-mypy) para ejecutar con el entorno del proyecto:
         # usa la config strict de pyproject.toml y ve las dependencias reales.
-        entry: poetry run mypy
+        # `py -m poetry` evita depender de un `poetry` en PATH (p. ej. Git Bash en Windows).
+        entry: py -m poetry run mypy
         language: system
         types: [python]
         pass_filenames: false
