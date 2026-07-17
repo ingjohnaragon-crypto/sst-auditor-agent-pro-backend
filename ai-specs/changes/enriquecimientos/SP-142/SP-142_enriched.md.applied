@@ -1,0 +1,171 @@
+# Ticket enriquecido: SP-142 — Diseñar diagrama Entidad-Relación completo SST
+
+## Descripción original
+<!-- jira-skip -->
+Planificar mapeo relacional de estándares mínimos
+<!-- /jira-skip -->
+
+## Descripción mejorada
+Diseñar el diagrama Entidad-Relación (ER) completo del dominio SST del backend, que servirá de contrato para todas las migraciones Alembic y entidades de dominio de los tickets siguientes. El modelo debe cubrir los estándares mínimos (Resolución 312 de 2019), la gestión de peligros y riesgos (GTC 45) y el ciclo PHVA, partiendo de la referencia normativa `.sst-agent-document.md` (raíz del repo).
+
+Alcance del modelado (mínimo obligatorio):
+
+- **Gestión de usuarios (ya existente)**: entidad `Usuario` con enum `RolUsuario` — se integra al diagrama tal como está en `ai-specs/specs/data-model.md`, sin rediseñarla.
+- **Empresa**: razón social, NIT, actividad económica, nivel de riesgo ARL (I–V), número de trabajadores. Determina qué tabla de estándares mínimos aplica (7, 21 o 60 estándares según Res. 312).
+- **Estándares mínimos (Res. 312)**: catálogo `EstandarMinimo` (ciclo PHVA, numeral, descripción, valor porcentual del ítem) y `Autoevaluacion` con sus `CalificacionEstandar` (cumple / no cumple / no aplica + puntaje). El puntaje total < 85 % obliga a `PlanMejoramiento` con reporte a la ARL.
+- **Gestión de riesgos (GTC 45)**: `ProcesoActividad` (rutinaria / no rutinaria), `Peligro` (clasificación GTC 45), `EvaluacionRiesgo` con los valores discretos de las tablas del anexo A: ND ∈ {10, 6, 2, 0}, NE ∈ {4, 3, 2, 1}, NC ∈ {100, 60, 25, 10}, NP = ND × NE, NR = NP × NC, nivel de riesgo I–IV y aceptabilidad.
+- **Jerarquía de controles**: `ControlRiesgo` con enum de tipo (ELIMINACION, SUSTITUCION, INGENIERIA, ADMINISTRATIVO, EPP) asociado a cada evaluación de riesgo.
+- **Evidencias**: `Evidencia` (archivo adjunto con metadatos: nombre, tipo MIME, ruta de almacenamiento, fecha de carga, usuario que la carga) asociable a calificaciones de estándares y a acciones de mejora.
+- **Verificar / Actuar**: `Auditoria` interna anual, `Hallazgo`, `AccionMejora` (preventiva / correctiva) dentro del `PlanMejoramiento`.
+
+Entregables:
+
+- Diagrama ER en formato fuente versionable (DBML de dbdiagram.io) + exportación PNG/SVG, comiteados en el repo.
+- Actualización de `ai-specs/specs/data-model.md` con la lista de entidades, enums y relaciones acordadas.
+- Acta breve de validación con el responsable de SST (puede ser un apartado «Decisiones» dentro del mismo documento).
+
+Este ticket es de **diseño y documentación**: no crea tablas, migraciones ni endpoints. Las migraciones Alembic se implementarán en tickets posteriores tomando este diagrama como fuente de verdad.
+
+## Criterios de aceptación
+- [ ] El diagrama incluye todas las entidades del alcance: Usuario (existente), Empresa, EstandarMinimo, Autoevaluacion, CalificacionEstandar, PlanMejoramiento, AccionMejora, ProcesoActividad, Peligro, EvaluacionRiesgo, ControlRiesgo, Evidencia, Auditoria, Hallazgo.
+- [ ] Toda entidad tiene PK `UUID`, y las relaciones muestran cardinalidad explícita (1—N, N—N con tabla intermedia nombrada).
+- [ ] Los enums y rangos coinciden exactamente con las tablas de `.sst-agent-document.md`: ND, NE, NC, niveles de riesgo I–IV, aceptabilidad y jerarquía de controles.
+- [ ] Los nombres de tablas y columnas están en `snake_case` y en español, coherentes con la tabla `usuarios` existente.
+- [ ] Toda entidad incluye `fecha_creacion` y `fecha_actualizacion` (`TIMESTAMPTZ`, UTC), siguiendo el patrón de `usuarios`.
+- [ ] El modelo registra qué usuario carga cada evidencia y qué usuario realiza cada autoevaluación (FK a `usuarios`).
+- [ ] La fuente DBML y la exportación PNG/SVG están comiteadas en el repo.
+- [ ] `ai-specs/specs/data-model.md` queda actualizado con las entidades y relaciones del diagrama.
+- [ ] El responsable de SST validó el modelo y las decisiones quedaron registradas por escrito.
+
+## Campos y endpoints
+Este ticket no expone endpoints (es de diseño). Campos clave por entidad nueva:
+
+- `empresas`: `id`, `razon_social`, `nit` (único), `actividad_economica`, `nivel_riesgo_arl` (I–V), `numero_trabajadores`.
+- `estandares_minimos`: `id`, `ciclo_phva` (PLANEAR | HACER | VERIFICAR | ACTUAR), `numeral`, `descripcion`, `valor_porcentual`.
+- `autoevaluaciones`: `id`, `empresa_id` (FK), `usuario_id` (FK, quien evalúa), `fecha`, `puntaje_total`, `requiere_plan_mejora` (bool, derivado de puntaje < 85).
+- `calificaciones_estandar`: `id`, `autoevaluacion_id` (FK), `estandar_id` (FK), `resultado` (CUMPLE | NO_CUMPLE | NO_APLICA), `puntaje`, `observaciones`.
+- `procesos_actividades`: `id`, `empresa_id` (FK), `nombre`, `es_rutinaria` (bool), `zona_lugar`.
+- `peligros`: `id`, `proceso_actividad_id` (FK), `clasificacion` (según GTC 45), `descripcion`, `efectos_posibles`.
+- `evaluaciones_riesgo`: `id`, `peligro_id` (FK), `nivel_deficiencia` (10 | 6 | 2 | 0), `nivel_exposicion` (4 | 3 | 2 | 1), `nivel_consecuencia` (100 | 60 | 25 | 10), `nivel_probabilidad` (calculado), `nivel_riesgo` (calculado), `interpretacion_nr` (I | II | III | IV), `aceptabilidad`.
+- `controles_riesgo`: `id`, `evaluacion_riesgo_id` (FK), `tipo` (ELIMINACION | SUSTITUCION | INGENIERIA | ADMINISTRATIVO | EPP), `descripcion`.
+- `evidencias`: `id`, `calificacion_estandar_id` (FK opcional), `accion_mejora_id` (FK opcional), `usuario_id` (FK, quien carga), `nombre_archivo`, `tipo_mime`, `ruta_almacenamiento`, `fecha_carga`.
+- `auditorias`: `id`, `empresa_id` (FK), `fecha`, `alcance`, `auditor_id` (FK a usuarios).
+- `hallazgos`: `id`, `auditoria_id` (FK), `descripcion`, `tipo`.
+- `planes_mejoramiento` / `acciones_mejora`: `id`, origen (AUTOEVALUACION | AUDITORIA | INVESTIGACION), `tipo` (PREVENTIVA | CORRECTIVA), `responsable_id` (FK), `fecha_limite`, `estado`.
+
+## Archivos a crear o modificar
+- `docs/diagramas/diagrama_er_sst.dbml` — Documentación — Crear (fuente DBML del diagrama)
+- `docs/diagramas/diagrama_er_sst.png` — Documentación — Crear (exportación para revisión con stakeholders)
+- `ai-specs/specs/data-model.md` — Documentación — Modificar (agregar entidades, enums y relaciones del modelo SST)
+
+## Casos de prueba unitarios
+No aplica pruebas de código (ticket de diseño). Verificaciones de calidad del entregable:
+
+- El DBML compila sin errores en dbdiagram.io (o pgModeler abre el archivo sin advertencias).
+- Cada FK del diagrama apunta a una PK existente; no hay entidades huérfanas ni relaciones sin cardinalidad.
+- Los valores de los enums coinciden con las tablas del anexo A y B de `.sst-agent-document.md` (revisión cruzada manual).
+- `ai-specs/specs/data-model.md` referencia todas las entidades del DBML (sin desincronización entre ambos artefactos).
+
+## Requisitos no funcionales
+- **Trazabilidad normativa**: cada entidad debe citar en el diagrama (nota o comentario DBML) el numeral o anexo normativo que la origina (Res. 312, GTC 45, Decreto 1072).
+- **Conservación documental**: el modelo debe permitir conservar registros de salud y mediciones 20 años tras el cese laboral (D. 1072, Art. 2.2.4.6.13) — prever borrado lógico (`activo`/`fecha_eliminacion`), nunca borrado físico de evidencias.
+- **Datos sensibles**: las historias clínicas NO se modelan como entidad persistida — su custodia es exclusiva de la IPS (sección 2.2 de la referencia); solo se modelan metadatos de evaluaciones ocupacionales si se requieren, sin contenido clínico.
+- **Convenciones**: nombres en español y `snake_case`; PKs `UUID` generadas en aplicación; timestamps `TIMESTAMPTZ` en UTC — todo coherente con la tabla `usuarios` existente.
+- **Extensibilidad**: el catálogo de estándares mínimos debe soportar las tres tablas de la Res. 312 (7, 21 y 60 ítems) sin cambio de esquema.
+
+## Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — Modelado de ~14 entidades con reglas normativas (GTC 45 + Res. 312), diagramación y sesión de validación; sin código ni migraciones.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-181 -->
+### Subtarea: SP-181 — Levantar entidades y relaciones del dominio SST
+
+#### Descripción original
+<!-- jira-skip -->
+Identificar todas las entidades necesarias (usuarios, estándares, riesgos, evidencias) y sus relaciones.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Levantar el inventario de entidades, atributos, enums y relaciones a partir de la referencia normativa `.sst-agent-document.md` y del modelo existente en `ai-specs/specs/data-model.md`.
+
+- Recorrer las cuatro fases PHVA del documento y extraer los conceptos persistibles: estándares mínimos y autoevaluación (Res. 312), procesos/peligros/evaluaciones de riesgo (GTC 45, anexo A), jerarquía de controles (anexo B), auditorías, hallazgos, planes de mejoramiento y evidencias.
+- Para cada entidad, definir: nombre de tabla (`snake_case`, español), atributos con tipo, obligatoriedad, enums con sus valores exactos (ND, NE, NC, interpretación I–IV, tipos de control) y relaciones con cardinalidad.
+- Integrar la entidad `Usuario` existente sin modificarla: identificar dónde participa (autor de autoevaluaciones, cargador de evidencias, auditor, responsable de acciones).
+- Documentar el resultado como lista estructurada en un borrador (puede ser una sección nueva de `ai-specs/specs/data-model.md`) que sirva de insumo directo a SP-182.
+
+#### Criterios de aceptación
+- [ ] Inventario escrito con las ~14 entidades, sus atributos, tipos y obligatoriedad.
+- [ ] Todos los enums listados con los valores exactos de las tablas de `.sst-agent-document.md` (ND, NE, NC, niveles I–IV, jerarquía de controles, ciclo PHVA).
+- [ ] Cada relación tiene cardinalidad definida y las N—N tienen tabla intermedia nombrada.
+- [ ] Las decisiones de exclusión están documentadas (p. ej. historias clínicas fuera del modelo por custodia de la IPS).
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Análisis normativo detallado (GTC 45 + Res. 312) y definición de atributos/enums; sin herramienta de diagramado aún.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-181 -->
+
+<!-- SUBTASK:SP-182 -->
+### Subtarea: SP-182 — Construir diagrama ER en herramienta de modelado
+
+#### Descripción original
+<!-- jira-skip -->
+Diagramar el modelo relacional completo usando una herramienta como dbdiagram o pgModeler.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Transcribir el inventario de SP-181 a un diagrama ER en dbdiagram.io usando sintaxis DBML (preferida por ser texto versionable; pgModeler es alternativa aceptable si se comitea el `.dbm`).
+
+- Crear `docs/diagramas/diagrama_er_sst.dbml` con todas las entidades, PKs `UUID`, FKs, índices únicos (p. ej. `nit` de empresa) y enums como `Enum` de DBML.
+- Agregar una nota (`Note`) por tabla citando el origen normativo (numeral de la Res. 312, anexo de la GTC 45 o artículo del D. 1072).
+- Incluir la tabla `usuarios` existente con sus columnas actuales para que el diagrama sea completo.
+- Exportar a `docs/diagramas/diagrama_er_sst.png` (o SVG) para la revisión con stakeholders de SP-183.
+- Verificar que el DBML compila sin errores antes de comitear.
+
+#### Criterios de aceptación
+- [ ] `docs/diagramas/diagrama_er_sst.dbml` comiteado y compilable en dbdiagram.io sin errores.
+- [ ] Exportación PNG/SVG comiteada junto a la fuente.
+- [ ] Todas las entidades y relaciones del inventario de SP-181 están representadas; ninguna FK apunta a una tabla inexistente.
+- [ ] Cada tabla incluye nota con su origen normativo.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — Transcripción mecánica del inventario a DBML + exportación; la complejidad de análisis ya se absorbió en SP-181.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-182 -->
+
+<!-- SUBTASK:SP-183 -->
+### Subtarea: SP-183 — Validar el modelo con stakeholders del proyecto
+
+#### Descripción original
+<!-- jira-skip -->
+Revisar el diagrama ER con el responsable de SST para confirmar reglas de negocio.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Sesión de validación del diagrama ER con el responsable de SST, usando la exportación PNG/SVG de SP-182.
+
+Agenda mínima de la sesión (puntos que deben confirmarse explícitamente):
+
+- Que el catálogo de estándares mínimos cubre las tres tablas de la Res. 312 (7, 21 y 60 ítems) y la regla del umbral del 85 % para el plan de mejoramiento.
+- Que los valores y rangos de ND/NE/NC y los niveles I–IV coinciden con la práctica real del auditor (GTC 45).
+- Qué tipos de evidencia se cargan en la operación real (formatos, tamaños esperados) y a qué entidades deben poder asociarse.
+- Confirmar la exclusión de historias clínicas del modelo (custodia de la IPS).
+- Ciclo de vida de la autoevaluación: ¿una por año por empresa, o múltiples? ¿Se versionan?
+
+Tras la sesión: registrar decisiones y ajustes en una sección «Decisiones de validación» de `ai-specs/specs/data-model.md`, aplicar los cambios acordados al DBML y re-exportar la imagen.
+
+#### Criterios de aceptación
+- [ ] Sesión realizada con el responsable de SST y los cinco puntos de la agenda confirmados.
+- [ ] Decisiones y ajustes registrados por escrito en `ai-specs/specs/data-model.md` (sección «Decisiones de validación»).
+- [ ] DBML y exportación actualizados con los ajustes acordados y re-comiteados.
+- [ ] `ai-specs/specs/data-model.md` actualizado con el modelo final validado (cierre del entregable de SP-142).
+
+#### Puntos de historia
+<!-- STORY_POINTS:1 -->
+**1** — Sesión de revisión + registro de decisiones y ajustes menores al diagrama.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-183 -->
