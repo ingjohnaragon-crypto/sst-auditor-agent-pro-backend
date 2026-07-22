@@ -1,0 +1,196 @@
+# Ticket enriquecido: SP-145 — SST-HU 2.2: Persistencia de Matriz de Riesgos y Peligros (GTC 45)
+
+## Descripción original
+<!-- jira-skip -->
+As data analyst, model relational tables for GTC 45 hazards to register hazards, consequence levels and numeric indices solidly.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+Implementar la persistencia y la API de la **matriz de peligros y riesgos (GTC 45:2012 §2.1 y Anexo A)**, tomando como contrato el modelo ER validado en SP-183 (`docs/diagramas/diagrama_er_sst.dbml` y `ai-specs/specs/data-model.md`).
+
+Contexto ya implementado (NO rehacer):
+
+- Catálogo `catalogos_referencia` (ND/NE/NC, clasificación de peligro, tipo de control, interpretación NR, aceptabilidad) y seeds GTC 45: migración `b2c3d4e5f6a7` / SP-143. ND «Bajo» = `0` (decisión D1).
+- Tablas `empresas`, `autoevaluaciones`, `calificaciones_estandar`: migración `c3d4e5f6a7b8` / SP-144. Toda matriz cuelga de `empresa_id`.
+- Autenticación JWT y RBAC (`ADMINISTRADOR | AUDITOR_SST | CONSULTA`) operativos.
+
+Alcance de esta historia:
+
+- **Migración Alembic** (down_revision `c3d4e5f6a7b8`) que cree `procesos_actividades`, `peligros`, `evaluaciones_riesgo` y `controles_riesgo` exactamente como el ER (tipos, NOT NULL, FKs, timestamps UTC).
+- **Capa de dominio** pura: `ProcesoActividad`, `Peligro`, `EvaluacionRiesgo`, `ControlRiesgo`, con invariantes Anexo A:
+  - Entrada de evaluación: solo `nivel_deficiencia` ∈ {10, 6, 2, 0}, `nivel_exposicion` ∈ {4, 3, 2, 1}, `nivel_consecuencia` ∈ {100, 60, 25, 10}.
+  - Derivados **nunca** del cliente: `nivel_probabilidad` = `ND × NE` (0–40); `nivel_riesgo` = `NP × NC` (0–4000); si ND = 0 → NP = 0, NR = 0.
+  - `interpretacion_nr`: I (600–4000), II (150–500), III (40–120), IV (≤ 20, incluye NR = 0).
+  - `aceptabilidad` según tabla A.3 mapeada a `NO_ACEPTABLE | ACEPTABLE_CON_CONTROL | MEJORABLE | ACEPTABLE`.
+- **API REST** (`/api/v1`) para el ciclo: procesos por empresa → peligros → evaluación ND/NE/NC → controles (jerarquía Anexo B). Incluye vista agregada opcional para la planilla.
+- **Seguridad**: Bearer JWT; escrituras solo `ADMINISTRADOR`/`AUDITOR_SST`; `CONSULTA` solo GET (403 `ACCESO_DENEGADO`).
+- **Documentación**: actualizar `api-spec.yml` y marcar las 4 tablas como implementadas en `data-model.md`.
+
+Fuera de alcance: pantalla Angular (SP-192, repo `sst-auditor-agent-pro-frontend`), auditorías/hallazgos/planes de mejora (HUs posteriores), cambiar decisión D1 (ND Bajo = 0).
+
+## Criterios de aceptación
+- [ ] Migración Alembic nueva (down_revision `c3d4e5f6a7b8`) crea las 4 tablas conforme al ER; `alembic upgrade head` y `alembic downgrade -1` funcionan contra PostgreSQL.
+- [ ] FKs: `procesos_actividades.empresa_id` → `empresas`; `peligros.proceso_actividad_id` → `procesos_actividades`; `evaluaciones_riesgo.peligro_id` → `peligros`; `controles_riesgo.evaluacion_riesgo_id` → `evaluaciones_riesgo`.
+- [ ] Modelos de dominio puros (sin SQLAlchemy/FastAPI) con factorías que validan ND/NE/NC y calculan NP, NR, interpretación y aceptabilidad.
+- [ ] Campos derivados se ignoran/rechazan si vienen en el body de escritura (422 o strip documentado); la respuesta siempre los incluye calculados.
+- [ ] Caso D1: ND = 0 → NP = 0, NR = 0, `interpretacion_nr` = IV.
+- [ ] RBAC: `CONSULTA` recibe 403 (`ACCESO_DENEGADO`) en POST/PUT/PATCH/DELETE; los tres roles pueden hacer GET.
+- [ ] Errores con `RespuestaError` y códigos estables: `EMPRESA_NO_ENCONTRADA`, `PROCESO_NO_ENCONTRADO`, `PELIGRO_NO_ENCONTRADO`, `EVALUACION_NO_ENCONTRADA`, `CONTROL_NO_ENCONTRADO`, `VALOR_GTC_INVALIDO`, `ACCESO_DENEGADO`.
+- [ ] `ai-specs/specs/api-spec.yml` y `ai-specs/specs/data-model.md` actualizados.
+- [ ] Cobertura ≥ 90 %, `ruff` y `mypy --strict` sin errores.
+
+## Campos y endpoints
+Tablas nuevas (detalle en `data-model.md`; todas con `id UUID` PK en aplicación, `fecha_creacion`/`fecha_actualizacion` TIMESTAMPTZ UTC):
+
+- `procesos_actividades`: `empresa_id` FK NOT NULL, `nombre` VARCHAR(150) NOT NULL, `es_rutinaria` BOOLEAN NOT NULL, `zona_lugar` VARCHAR(150) NULL.
+- `peligros`: `proceso_actividad_id` FK NOT NULL, `clasificacion` NOT NULL (`BIOLOGICO | FISICO | QUIMICO | PSICOSOCIAL | BIOMECANICO | CONDICIONES_SEGURIDAD | FENOMENOS_NATURALES`), `descripcion` TEXT NOT NULL, `efectos_posibles` TEXT NULL.
+- `evaluaciones_riesgo`: `peligro_id` FK NOT NULL, `nivel_deficiencia`, `nivel_exposicion`, `nivel_consecuencia` NOT NULL (conjuntos discretos), `nivel_probabilidad` SMALLINT NOT NULL (derivado), `nivel_riesgo` INTEGER NOT NULL (derivado), `interpretacion_nr` NOT NULL, `aceptabilidad` NOT NULL. Relación 1—1 con peligro (una evaluación vigente por peligro; PUT reemplaza).
+- `controles_riesgo`: `evaluacion_riesgo_id` FK NOT NULL, `tipo` NOT NULL (`ELIMINACION | SUSTITUCION | INGENIERIA | ADMINISTRATIVO | EPP`), `descripcion` TEXT NOT NULL.
+
+Endpoints (todos bajo `/api/v1`, Bearer JWT; escrituras solo `ADMINISTRADOR`/`AUDITOR_SST`):
+
+- `GET /empresas/{empresa_id}/procesos-actividades` → 200 lista | 404 `EMPRESA_NO_ENCONTRADA`.
+- `POST /empresas/{empresa_id}/procesos-actividades` → 201. Body: `nombre`, `es_rutinaria`, `zona_lugar?`.
+- `GET /procesos-actividades/{id}` → 200 | 404. `PATCH` → 200. `DELETE` → 204 (cascada o 409 según política FK documentada).
+- `GET /procesos-actividades/{id}/peligros` → 200. `POST` → 201. Body: `clasificacion`, `descripcion`, `efectos_posibles?`.
+- `GET /peligros/{id}` → 200 | 404. `PATCH` → 200. `DELETE` → 204.
+- `GET /peligros/{id}/evaluacion` → 200 | 404. `PUT /peligros/{id}/evaluacion` → 200/201. Body solo: `nivel_deficiencia`, `nivel_exposicion`, `nivel_consecuencia`. Respuesta incluye NP, NR, `interpretacion_nr`, `aceptabilidad`. 422 `VALOR_GTC_INVALIDO` si fuera de conjunto.
+- `GET /evaluaciones-riesgo/{id}/controles` → 200. `POST` → 201. Body: `tipo`, `descripcion`.
+- `PATCH /controles-riesgo/{id}` → 200. `DELETE` → 204.
+- `GET /empresas/{empresa_id}/matriz-riesgos` → 200 vista agregada (procesos → peligros → evaluación → controles) para la planilla Angular.
+
+## Archivos a crear o modificar
+- `alembic/versions/<rev>_crear_tablas_matriz_gtc45.py` — Infrastructure — Create (down_revision `c3d4e5f6a7b8`)
+- `src/domain/models/proceso_actividad.py` — Domain — Create
+- `src/domain/models/peligro.py` — Domain — Create
+- `src/domain/models/evaluacion_riesgo.py` — Domain — Create (cálculo NP/NR/interpretación/aceptabilidad)
+- `src/domain/models/control_riesgo.py` — Domain — Create
+- `src/domain/exceptions/matriz_riesgo.py` — Domain — Create (`codigo`, `http_status`)
+- `src/domain/repositories/repositorio_proceso_actividad.py` — Domain — Create
+- `src/domain/repositories/repositorio_peligro.py` — Domain — Create
+- `src/domain/repositories/repositorio_evaluacion_riesgo.py` — Domain — Create
+- `src/domain/repositories/repositorio_control_riesgo.py` — Domain — Create
+- `src/application/dto/` (solicitudes/respuestas proceso, peligro, evaluación, control, matriz agregada) — Application — Create
+- `src/application/mappers/mapper_matriz_riesgo.py` — Application — Create
+- `src/application/services/servicio_matriz_riesgos.py` — Application — Create
+- `src/infrastructure/database/modelos/proceso_actividad_orm.py`, `peligro_orm.py`, `evaluacion_riesgo_orm.py`, `control_riesgo_orm.py` — Infrastructure — Create
+- `src/infrastructure/repositories/repositorio_*_sqlalchemy.py` (matriz) — Infrastructure — Create
+- `src/presentation/routers/matriz_riesgos_router.py` (o routers por recurso) — Presentation — Create
+- `src/presentation/dependencies/` — Presentation — Modify (factorías + guard escritor)
+- `src/presentation/routers/__init__.py`, `src/main.py` — Presentation — Modify (registrar router)
+- `ai-specs/specs/api-spec.yml` — Docs — Modify
+- `ai-specs/specs/data-model.md` — Docs — Modify
+- `tests/...` — Tests — Create (ver casos abajo)
+
+## Casos de prueba unitarios
+- Dominio: `EvaluacionRiesgo.crear(ND=10, NE=4, NC=100)` → NP=40, NR=4000, interpretación I, aceptabilidad `NO_ACEPTABLE` (según mapa A.3 del dominio).
+- Dominio: ND=0, NE=4, NC=100 → NP=0, NR=0, interpretación IV (decisión D1).
+- Dominio: bordes A.3 — NR=600 → I; NR=500 → II; NR=120 → III; NR=20 → IV; NR=40 → III.
+- Dominio: ND/NE/NC fuera de conjunto lanza `ValorGtcInvalidoError`.
+- Dominio: `ProcesoActividad.crear` rechaza `nombre` vacío; `ControlRiesgo.crear` rechaza `tipo` inválido.
+- Servicio (mocks): empresa inexistente → `EmpresaNoEncontradaError`; peligro inexistente al PUT evaluación → `PeligroNoEncontradoError`; body con derivados no altera el cálculo.
+- Integración (httpx + BD): flujo feliz (crear proceso → peligro → evaluación → controles → `GET matriz-riesgos`).
+- Integración: 401 sin token; 403 `CONSULTA` en POST/PUT; 404 recursos; 422 ND inválido; DELETE/cascada según política.
+- Migración: upgrade/downgrade reversibles en BD de integración.
+
+## Requisitos no funcionales
+- Seguridad: Bearer JWT; RBAC por rol; derivados jamás aceptados del cliente; errores siempre `RespuestaError`.
+- Arquitectura: dominio puro; ORM solo en `infrastructure/`; inyección `Depends()`; esquema solo por Alembic.
+- Rendimiento: SQLAlchemy 2.x async; vista `matriz-riesgos` con `selectinload`/joinedload (sin N+1); índices en FKs.
+- Consistencia: PUT evaluación y POST control en transacción; timestamps UTC.
+- Calidad: type hints, `mypy --strict`, `ruff`, cobertura ≥ 90 %.
+- Normativo: no divergir de GTC 45 Anexo A ni de decisión D1 documentada en `.sst-agent-document.md`.
+
+## Puntos de historia
+<!-- STORY_POINTS:13 -->
+**13** — migración 4 tablas + dominio Anexo A (derivados D1) + API anidada RBAC + coordinación con planilla Angular; catálogos y empresas ya existen.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-190 -->
+### Subtarea: SP-190 — Modelar tablas para procesos actividades y peligros GTC 45
+
+#### Descripción original
+<!-- jira-skip -->
+Hierarchical process tables
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Crear la capa de persistencia de la matriz GTC 45 según el ER validado. El catálogo `catalogos_referencia` y `empresas` ya existen (SP-143 / SP-144).
+
+- Migración Alembic (down_revision `c3d4e5f6a7b8`) con `procesos_actividades`, `peligros`, `evaluaciones_riesgo` y `controles_riesgo`; tipos, NOT NULL, FKs y timestamps exactamente como el ER; `downgrade` completo.
+- Modelos ORM en `src/infrastructure/database/modelos/` con relaciones SQLAlchemy 2.x async (empresa → procesos → peligros → evaluación → controles).
+- Modelos de dominio puros con factorías e invariantes: cálculo de `nivel_probabilidad`, `nivel_riesgo`, `interpretacion_nr` y `aceptabilidad`; caso ND = 0 (D1).
+- Interfaces de repositorio en `src/domain/repositories/` e implementaciones SQLAlchemy (mapean ORM ↔ dominio; nunca exponen ORM).
+- Actualizar `ai-specs/specs/data-model.md` marcando las 4 tablas como implementadas con su migración.
+
+#### Criterios de aceptación
+- [ ] `alembic upgrade head` crea las 4 tablas con FKs; `alembic downgrade -1` las revierte.
+- [ ] Dominio sin imports de SQLAlchemy/FastAPI; tests unitarios cubren NP/NR, D1 (ND=0→IV) y bordes A.3.
+- [ ] Repositorios devuelven dominio; test de integración persiste y recupera proceso + peligro + evaluación + control.
+- [ ] `data-model.md` actualizado; `mypy --strict` y `ruff` limpios.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — migración 4 tablas + ORM + dominio con cálculo Anexo A + repositorios; sin endpoints.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-190 -->
+
+<!-- SUBTASK:SP-191 -->
+### Subtarea: SP-191 — Desarrollar endpoints de persistencia de Matriz GTC 45
+
+#### Descripción original
+<!-- jira-skip -->
+API store hazards with ND/NE/NC
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Exponer la API REST de la matriz sobre la persistencia de SP-190, bajo `/api/v1`, con Bearer JWT y RBAC (escrituras solo `ADMINISTRADOR`/`AUDITOR_SST`; `CONSULTA` solo GET → 403 `ACCESO_DENEGADO`).
+
+- Endpoints listados en la HU (procesos, peligros, evaluación PUT con solo ND/NE/NC, controles, `GET .../matriz-riesgos`).
+- Servicios (`servicio_matriz_riesgos`), DTOs Pydantic v2 sin campos derivados en input de escritura, mappers, routers finos y factorías `Depends()`.
+- Errores vía handlers globales con `RespuestaError` y códigos de la HU.
+- Actualizar `ai-specs/specs/api-spec.yml` con todos los endpoints y esquemas nuevos.
+
+#### Criterios de aceptación
+- [ ] Endpoints responden 201/200/204, 401, 403, 404, 422 con contrato `RespuestaError`.
+- [ ] PUT evaluación no acepta derivados del cliente; respuesta los incluye calculados.
+- [ ] Tests httpx: flujo feliz matriz completa, RBAC `CONSULTA`, 401, 404, 422 ND inválido; cobertura ≥ 90 %.
+- [ ] `api-spec.yml` actualizado; Swagger `/docs` refleja los endpoints.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — CRUD anidado RBAC + vista agregada + suite de integración; persistencia llega de SP-190.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-191 -->
+
+<!-- SUBTASK:SP-192 -->
+### Subtarea: SP-192 — Crear planilla interactiva editable en Angular
+
+#### Descripción original
+<!-- jira-skip -->
+Frontend grid UI
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Construir en el **repositorio frontend Angular** (`sst-auditor-agent-pro-frontend`) la planilla editable de matriz GTC 45, consumiendo la API de SP-191 (`/api/v1`, Bearer JWT).
+
+- Selector de empresa y carga vía `GET /empresas/{id}/matriz-riesgos` (o carga jerárquica).
+- Filas editables: proceso (`nombre`, `es_rutinaria`, `zona_lugar`), peligro (`clasificacion`, `descripcion`, `efectos_posibles`), evaluación (selectores ND/NE/NC; NP, NR, interpretación y aceptabilidad **solo lectura** desde la respuesta API).
+- Controles: alta/edición/baja por tipo de jerarquía (Anexo B); aviso si EPP sería el único control.
+- Persistencia alineada al design system existente; manejo de `RespuestaError` (toast con `mensaje`).
+- Responsive (≥ 360 px): en móvil, filas como tarjetas/acordeón por proceso.
+- Rol `CONSULTA`: ocultar acciones de escritura.
+
+#### Criterios de aceptación
+- [ ] Planilla permite crear/editar procesos, peligros, evaluación ND/NE/NC y controles vía API.
+- [ ] NP/NR/aceptabilidad se muestran desde el backend; el cliente no recalcula con lógica divergente.
+- [ ] Usable en móvil y escritorio; `CONSULTA` sin controles de escritura.
+- [ ] Errores API con `mensaje` visible; tests unitarios según estándares del repo frontend.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — grilla jerárquica editable, RBAC en UI e integración con API de matriz.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-192 -->

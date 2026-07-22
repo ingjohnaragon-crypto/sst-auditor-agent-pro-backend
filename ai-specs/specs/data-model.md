@@ -85,11 +85,18 @@ y el ciclo PHVA, según la referencia normativa `.sst-agent-document.md`.
 Cualquier desviación futura del esquema debe pasar primero por actualizar el
 DBML y este documento.
 
+> **Estado de implementación (SP-145):** las tablas `procesos_actividades`,
+> `peligros`, `evaluaciones_riesgo` y `controles_riesgo` están persistidas vía
+> migración `d4e5f6a7b8c9_crear_tablas_matriz_gtc45.py` (FKs con `ON DELETE
+> CASCADE` en la cadena proceso→peligro→evaluación→controles) y expuestas por la
+> API REST bajo `/api/v1` (incluye `GET .../matriz-riesgos`). NP/NR/
+> interpretación/aceptabilidad se calculan en dominio (Anexo A, decisión D1).
+>
 > **Estado de implementación (SP-144):** las tablas `empresas`, `autoevaluaciones` y
 > `calificaciones_estandar` están persistidas vía migración
 > `c3d4e5f6a7b8_crear_tablas_autoevaluacion.py` y expuestas por la API REST bajo
 > `/api/v1`. El catálogo `estandares_minimos` / `catalogos_referencia` llegó en
-> SP-143 (`b2c3d4e5f6a7`). El resto de entidades del ER (peligros, auditorías,
+> SP-143 (`b2c3d4e5f6a7`). El resto de entidades del ER (auditorías, hallazgos,
 > planes de mejoramiento, etc.) sigue pendiente de tickets posteriores.
 
 ### Convenciones transversales
