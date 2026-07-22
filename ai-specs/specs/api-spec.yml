@@ -395,6 +395,400 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/empresas/{empresa_id}/matriz-riesgos:
+    get:
+      summary: Vista agregada de la matriz GTC 45
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Matriz jerárquica procesos→peligros→evaluación→controles
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaMatrizRiesgos"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/empresas/{empresa_id}/procesos-actividades:
+    get:
+      summary: Lista procesos/actividades de una empresa
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Lista de procesos
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaProcesoActividad"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    post:
+      summary: Crea un proceso/actividad
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudCrearProcesoActividad"
+      responses:
+        "201":
+          description: Proceso creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaProcesoActividad"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/procesos-actividades/{id}:
+    get:
+      summary: Obtiene un proceso/actividad
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Detalle del proceso
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaProcesoActividad"
+        "404":
+          description: PROCESO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    patch:
+      summary: Actualiza un proceso/actividad
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudActualizarProcesoActividad"
+      responses:
+        "200":
+          description: Proceso actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaProcesoActividad"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    delete:
+      summary: Elimina un proceso (CASCADE a peligros/evaluación/controles)
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Eliminado
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/procesos-actividades/{id}/peligros:
+    get:
+      summary: Lista peligros de un proceso
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Lista de peligros
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaPeligro"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    post:
+      summary: Crea un peligro
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudCrearPeligro"
+      responses:
+        "201":
+          description: Peligro creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaPeligro"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/peligros/{id}:
+    get:
+      summary: Obtiene un peligro
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Detalle del peligro
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaPeligro"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    patch:
+      summary: Actualiza un peligro
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudActualizarPeligro"
+      responses:
+        "200":
+          description: Peligro actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaPeligro"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    delete:
+      summary: Elimina un peligro (CASCADE a evaluación/controles)
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Eliminado
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/peligros/{id}/evaluacion:
+    get:
+      summary: Obtiene la evaluación de un peligro
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Evaluación con derivados NP/NR
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaEvaluacionRiesgo"
+        "404":
+          description: EVALUACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    put:
+      summary: Crea o reemplaza la evaluación (solo ND/NE/NC en body)
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudUpsertEvaluacion"
+      responses:
+        "200":
+          description: Evaluación actualizada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaEvaluacionRiesgo"
+        "201":
+          description: Evaluación creada
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaEvaluacionRiesgo"
+        "422":
+          description: VALOR_GTC_INVALIDO / extra fields
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/evaluaciones-riesgo/{id}/controles:
+    get:
+      summary: Lista controles de una evaluación
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Lista de controles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaControlRiesgo"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    post:
+      summary: Agrega un control
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudCrearControl"
+      responses:
+        "201":
+          description: Control creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaControlRiesgo"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/controles-riesgo/{id}:
+    patch:
+      summary: Actualiza un control
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudActualizarControl"
+      responses:
+        "200":
+          description: Control actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaControlRiesgo"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    delete:
+      summary: Elimina un control
+      tags: [Matriz de riesgos GTC 45]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Eliminado
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -548,6 +942,147 @@ components:
         numeral: {type: string}
         descripcion: {type: string}
         valor_porcentual: {type: string}
+    SolicitudCrearProcesoActividad:
+      type: object
+      additionalProperties: false
+      required: [nombre, es_rutinaria]
+      properties:
+        nombre: {type: string, maxLength: 150}
+        es_rutinaria: {type: boolean}
+        zona_lugar: {type: string, nullable: true, maxLength: 150}
+    SolicitudActualizarProcesoActividad:
+      type: object
+      additionalProperties: false
+      properties:
+        nombre: {type: string, maxLength: 150}
+        es_rutinaria: {type: boolean}
+        zona_lugar: {type: string, nullable: true, maxLength: 150}
+    RespuestaProcesoActividad:
+      type: object
+      required: [id, empresa_id, nombre, es_rutinaria]
+      properties:
+        id: {type: string, format: uuid}
+        empresa_id: {type: string, format: uuid}
+        nombre: {type: string}
+        es_rutinaria: {type: boolean}
+        zona_lugar: {type: string, nullable: true}
+        fecha_creacion: {type: string, format: date-time}
+        fecha_actualizacion: {type: string, format: date-time}
+    SolicitudCrearPeligro:
+      type: object
+      additionalProperties: false
+      required: [clasificacion, descripcion]
+      properties:
+        clasificacion:
+          type: string
+          enum: [BIOLOGICO, FISICO, QUIMICO, PSICOSOCIAL, BIOMECANICO, CONDICIONES_SEGURIDAD, FENOMENOS_NATURALES]
+        descripcion: {type: string}
+        efectos_posibles: {type: string, nullable: true}
+    SolicitudActualizarPeligro:
+      type: object
+      additionalProperties: false
+      properties:
+        clasificacion:
+          type: string
+          enum: [BIOLOGICO, FISICO, QUIMICO, PSICOSOCIAL, BIOMECANICO, CONDICIONES_SEGURIDAD, FENOMENOS_NATURALES]
+        descripcion: {type: string}
+        efectos_posibles: {type: string, nullable: true}
+    RespuestaPeligro:
+      type: object
+      required: [id, proceso_actividad_id, clasificacion, descripcion]
+      properties:
+        id: {type: string, format: uuid}
+        proceso_actividad_id: {type: string, format: uuid}
+        clasificacion: {type: string}
+        descripcion: {type: string}
+        efectos_posibles: {type: string, nullable: true}
+        fecha_creacion: {type: string, format: date-time}
+        fecha_actualizacion: {type: string, format: date-time}
+    SolicitudUpsertEvaluacion:
+      type: object
+      additionalProperties: false
+      required: [nivel_deficiencia, nivel_exposicion, nivel_consecuencia]
+      properties:
+        nivel_deficiencia: {type: integer, enum: [10, 6, 2, 0]}
+        nivel_exposicion: {type: integer, enum: [4, 3, 2, 1]}
+        nivel_consecuencia: {type: integer, enum: [100, 60, 25, 10]}
+    RespuestaEvaluacionRiesgo:
+      type: object
+      required:
+        - id
+        - peligro_id
+        - nivel_deficiencia
+        - nivel_exposicion
+        - nivel_consecuencia
+        - nivel_probabilidad
+        - nivel_riesgo
+        - interpretacion_nr
+        - aceptabilidad
+      properties:
+        id: {type: string, format: uuid}
+        peligro_id: {type: string, format: uuid}
+        nivel_deficiencia: {type: integer}
+        nivel_exposicion: {type: integer}
+        nivel_consecuencia: {type: integer}
+        nivel_probabilidad: {type: integer, description: Derivado NP = ND × NE}
+        nivel_riesgo: {type: integer, description: Derivado NR = NP × NC}
+        interpretacion_nr: {type: string, enum: [I, II, III, IV]}
+        aceptabilidad:
+          type: string
+          enum: [NO_ACEPTABLE, ACEPTABLE_CON_CONTROL, MEJORABLE, ACEPTABLE]
+        fecha_creacion: {type: string, format: date-time}
+        fecha_actualizacion: {type: string, format: date-time}
+    SolicitudCrearControl:
+      type: object
+      additionalProperties: false
+      required: [tipo, descripcion]
+      properties:
+        tipo: {type: string, enum: [ELIMINACION, SUSTITUCION, INGENIERIA, ADMINISTRATIVO, EPP]}
+        descripcion: {type: string}
+    SolicitudActualizarControl:
+      type: object
+      additionalProperties: false
+      properties:
+        tipo: {type: string, enum: [ELIMINACION, SUSTITUCION, INGENIERIA, ADMINISTRATIVO, EPP]}
+        descripcion: {type: string}
+    RespuestaControlRiesgo:
+      type: object
+      required: [id, evaluacion_riesgo_id, tipo, descripcion]
+      properties:
+        id: {type: string, format: uuid}
+        evaluacion_riesgo_id: {type: string, format: uuid}
+        tipo: {type: string}
+        descripcion: {type: string}
+        fecha_creacion: {type: string, format: date-time}
+        fecha_actualizacion: {type: string, format: date-time}
+    RespuestaPeligroMatriz:
+      type: object
+      required: [peligro, controles]
+      properties:
+        peligro: {$ref: "#/components/schemas/RespuestaPeligro"}
+        evaluacion:
+          oneOf:
+            - $ref: "#/components/schemas/RespuestaEvaluacionRiesgo"
+            - type: "null"
+        controles:
+          type: array
+          items: {$ref: "#/components/schemas/RespuestaControlRiesgo"}
+    RespuestaProcesoMatriz:
+      type: object
+      required: [proceso, peligros]
+      properties:
+        proceso: {$ref: "#/components/schemas/RespuestaProcesoActividad"}
+        peligros:
+          type: array
+          items: {$ref: "#/components/schemas/RespuestaPeligroMatriz"}
+    RespuestaMatrizRiesgos:
+      type: object
+      required: [empresa_id, procesos]
+      properties:
+        empresa_id: {type: string, format: uuid}
+        procesos:
+          type: array
+          items: {$ref: "#/components/schemas/RespuestaProcesoMatriz"}
     RespuestaError:
       type: object
       description: >
