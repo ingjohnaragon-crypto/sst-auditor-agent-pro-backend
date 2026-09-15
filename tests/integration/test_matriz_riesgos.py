@@ -190,3 +190,141 @@ async def test_should_devolver_401_when_sin_token(
         f"/api/v1/empresas/{uuid4()}/matriz-riesgos",
     )
     assert resp.status_code == 401
+
+
+async def test_should_crud_anidado_matriz_when_datos_validos(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+) -> None:
+    """Cubre listar/obtener/actualizar/eliminar de procesos, peligros y controles."""
+    token = await obtener_token(cliente_async, usuarios_semilla)
+    headers = bearer(token)
+    empresa_id = await _crear_empresa(cliente_async, headers)
+
+    listado_empresas = await cliente_async.get("/api/v1/empresas", headers=headers)
+    assert listado_empresas.status_code == 200
+    assert any(e["id"] == empresa_id for e in listado_empresas.json())
+
+    proceso = await cliente_async.post(
+        f"/api/v1/empresas/{empresa_id}/procesos-actividades",
+        headers=headers,
+        json={"nombre": "Pintura", "es_rutinaria": False, "zona_lugar": "Cabina"},
+    )
+    assert proceso.status_code == 201, proceso.text
+    proceso_id = proceso.json()["id"]
+
+    listado = await cliente_async.get(
+        f"/api/v1/empresas/{empresa_id}/procesos-actividades",
+        headers=headers,
+    )
+    assert listado.status_code == 200
+    assert len(listado.json()) == 1
+
+    detalle = await cliente_async.get(
+        f"/api/v1/procesos-actividades/{proceso_id}",
+        headers=headers,
+    )
+    assert detalle.status_code == 200
+    assert detalle.json()["nombre"] == "Pintura"
+
+    actualizado = await cliente_async.patch(
+        f"/api/v1/procesos-actividades/{proceso_id}",
+        headers=headers,
+        json={"nombre": "Pintura industrial", "es_rutinaria": True, "zona_lugar": None},
+    )
+    assert actualizado.status_code == 200
+    assert actualizado.json()["nombre"] == "Pintura industrial"
+    assert actualizado.json()["zona_lugar"] is None
+
+    peligro = await cliente_async.post(
+        f"/api/v1/procesos-actividades/{proceso_id}/peligros",
+        headers=headers,
+        json={
+            "clasificacion": "QUIMICO",
+            "descripcion": "Vapores de solvente",
+            "efectos_posibles": "Irritación",
+        },
+    )
+    assert peligro.status_code == 201, peligro.text
+    peligro_id = peligro.json()["id"]
+
+    peligros = await cliente_async.get(
+        f"/api/v1/procesos-actividades/{proceso_id}/peligros",
+        headers=headers,
+    )
+    assert peligros.status_code == 200
+    assert len(peligros.json()) == 1
+
+    peligro_get = await cliente_async.get(
+        f"/api/v1/peligros/{peligro_id}",
+        headers=headers,
+    )
+    assert peligro_get.status_code == 200
+
+    peligro_patch = await cliente_async.patch(
+        f"/api/v1/peligros/{peligro_id}",
+        headers=headers,
+        json={"descripcion": "Vapores de isocianato", "efectos_posibles": None},
+    )
+    assert peligro_patch.status_code == 200
+    assert peligro_patch.json()["descripcion"] == "Vapores de isocianato"
+
+    evaluacion = await cliente_async.put(
+        f"/api/v1/peligros/{peligro_id}/evaluacion",
+        headers=headers,
+        json={
+            "nivel_deficiencia": 2,
+            "nivel_exposicion": 2,
+            "nivel_consecuencia": 25,
+        },
+    )
+    assert evaluacion.status_code == 201, evaluacion.text
+    evaluacion_id = evaluacion.json()["id"]
+
+    evaluacion_get = await cliente_async.get(
+        f"/api/v1/peligros/{peligro_id}/evaluacion",
+        headers=headers,
+    )
+    assert evaluacion_get.status_code == 200
+    assert evaluacion_get.json()["nivel_riesgo"] == 100
+
+    control = await cliente_async.post(
+        f"/api/v1/evaluaciones-riesgo/{evaluacion_id}/controles",
+        headers=headers,
+        json={"tipo": "EPP", "descripcion": "Respirador"},
+    )
+    assert control.status_code == 201, control.text
+    control_id = control.json()["id"]
+
+    controles = await cliente_async.get(
+        f"/api/v1/evaluaciones-riesgo/{evaluacion_id}/controles",
+        headers=headers,
+    )
+    assert controles.status_code == 200
+    assert len(controles.json()) == 1
+
+    control_patch = await cliente_async.patch(
+        f"/api/v1/controles-riesgo/{control_id}",
+        headers=headers,
+        json={"tipo": "ADMINISTRATIVO", "descripcion": "Rotación de personal"},
+    )
+    assert control_patch.status_code == 200
+    assert control_patch.json()["tipo"] == "ADMINISTRATIVO"
+
+    borrado_control = await cliente_async.delete(
+        f"/api/v1/controles-riesgo/{control_id}",
+        headers=headers,
+    )
+    assert borrado_control.status_code == 204
+
+    borrado_peligro = await cliente_async.delete(
+        f"/api/v1/peligros/{peligro_id}",
+        headers=headers,
+    )
+    assert borrado_peligro.status_code == 204
+
+    borrado_proceso = await cliente_async.delete(
+        f"/api/v1/procesos-actividades/{proceso_id}",
+        headers=headers,
+    )
+    assert borrado_proceso.status_code == 204
