@@ -120,18 +120,114 @@ async def test_should_rechazar_escritura_when_rol_consulta(
     usuarios_semilla: UsuariosSemilla,
 ) -> None:
     admin = await obtener_token(cliente_async, usuarios_semilla)
-    empresa_id = await _crear_empresa(cliente_async, bearer(admin))
+    headers_admin = bearer(admin)
+    empresa_id = await _crear_empresa(cliente_async, headers_admin)
+    proceso = await cliente_async.post(
+        f"/api/v1/empresas/{empresa_id}/procesos-actividades",
+        headers=headers_admin,
+        json={"nombre": "Base", "es_rutinaria": True},
+    )
+    assert proceso.status_code == 201, proceso.text
+    proceso_id = proceso.json()["id"]
+    peligro = await cliente_async.post(
+        f"/api/v1/procesos-actividades/{proceso_id}/peligros",
+        headers=headers_admin,
+        json={"clasificacion": "FISICO", "descripcion": "Ruido"},
+    )
+    assert peligro.status_code == 201, peligro.text
+    peligro_id = peligro.json()["id"]
 
     consulta = await obtener_token(
         cliente_async, usuarios_semilla, correo=usuarios_semilla.correo_consulta
     )
-    resp = await cliente_async.post(
+    headers_consulta = bearer(consulta)
+
+    post_proceso = await cliente_async.post(
         f"/api/v1/empresas/{empresa_id}/procesos-actividades",
-        headers=bearer(consulta),
+        headers=headers_consulta,
         json={"nombre": "X", "es_rutinaria": False},
     )
-    assert resp.status_code == 403
-    assert resp.json()["codigo"] == "ACCESO_DENEGADO"
+    assert post_proceso.status_code == 403
+    assert post_proceso.json()["codigo"] == "ACCESO_DENEGADO"
+
+    put_eval = await cliente_async.put(
+        f"/api/v1/peligros/{peligro_id}/evaluacion",
+        headers=headers_consulta,
+        json={
+            "nivel_deficiencia": 2,
+            "nivel_exposicion": 2,
+            "nivel_consecuencia": 10,
+        },
+    )
+    assert put_eval.status_code == 403
+    assert put_eval.json()["codigo"] == "ACCESO_DENEGADO"
+
+    delete_proceso = await cliente_async.delete(
+        f"/api/v1/procesos-actividades/{proceso_id}",
+        headers=headers_consulta,
+    )
+    assert delete_proceso.status_code == 403
+    assert delete_proceso.json()["codigo"] == "ACCESO_DENEGADO"
+
+
+async def test_should_devolver_404_when_recursos_inexistentes(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+) -> None:
+    token = await obtener_token(cliente_async, usuarios_semilla)
+    headers = bearer(token)
+    fantasma = uuid4()
+
+    matriz = await cliente_async.get(
+        f"/api/v1/empresas/{fantasma}/matriz-riesgos",
+        headers=headers,
+    )
+    assert matriz.status_code == 404
+    assert matriz.json()["codigo"] == "EMPRESA_NO_ENCONTRADA"
+
+    proceso = await cliente_async.get(
+        f"/api/v1/procesos-actividades/{fantasma}",
+        headers=headers,
+    )
+    assert proceso.status_code == 404
+    assert proceso.json()["codigo"] == "PROCESO_NO_ENCONTRADO"
+
+    peligro = await cliente_async.get(f"/api/v1/peligros/{fantasma}", headers=headers)
+    assert peligro.status_code == 404
+    assert peligro.json()["codigo"] == "PELIGRO_NO_ENCONTRADO"
+
+    control = await cliente_async.patch(
+        f"/api/v1/controles-riesgo/{fantasma}",
+        headers=headers,
+        json={"descripcion": "X"},
+    )
+    assert control.status_code == 404
+    assert control.json()["codigo"] == "CONTROL_NO_ENCONTRADO"
+
+    delete_control = await cliente_async.delete(
+        f"/api/v1/controles-riesgo/{fantasma}",
+        headers=headers,
+    )
+    assert delete_control.status_code == 404
+    assert delete_control.json()["codigo"] == "CONTROL_NO_ENCONTRADO"
+
+    empresa_id = await _crear_empresa(cliente_async, headers)
+    proceso_real = await cliente_async.post(
+        f"/api/v1/empresas/{empresa_id}/procesos-actividades",
+        headers=headers,
+        json={"nombre": "Sin eval", "es_rutinaria": True},
+    )
+    peligro_real = await cliente_async.post(
+        f"/api/v1/procesos-actividades/{proceso_real.json()['id']}/peligros",
+        headers=headers,
+        json={"clasificacion": "QUIMICO", "descripcion": "Sin evaluación"},
+    )
+    evaluacion = await cliente_async.get(
+        f"/api/v1/peligros/{peligro_real.json()['id']}/evaluacion",
+        headers=headers,
+    )
+    assert evaluacion.status_code == 404
+    assert evaluacion.json()["codigo"] == "EVALUACION_NO_ENCONTRADA"
 
 
 async def test_should_devolver_422_when_nd_invalido(
