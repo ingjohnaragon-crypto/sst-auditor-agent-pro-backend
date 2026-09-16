@@ -85,11 +85,19 @@ y el ciclo PHVA, según la referencia normativa `.sst-agent-document.md`.
 Cualquier desviación futura del esquema debe pasar primero por actualizar el
 DBML y este documento.
 
+> **Estado de implementación (SP-145):** las tablas `procesos_actividades`,
+> `peligros`, `evaluaciones_riesgo` y `controles_riesgo` están persistidas vía
+> migración `d4e5f6a7b8c9_crear_tablas_matriz_gtc45.py` (FKs con `ON DELETE
+> CASCADE` en la cadena proceso→peligro→evaluación→controles; `UNIQUE(peligro_id)`
+> impone 1—1 peligro↔evaluación) y expuestas por la API REST bajo `/api/v1`
+> (incluye `GET .../matriz-riesgos`). NP/NR/interpretación/aceptabilidad se
+> calculan en dominio (Anexo A, decisión D1).
+>
 > **Estado de implementación (SP-144):** las tablas `empresas`, `autoevaluaciones` y
 > `calificaciones_estandar` están persistidas vía migración
 > `c3d4e5f6a7b8_crear_tablas_autoevaluacion.py` y expuestas por la API REST bajo
 > `/api/v1`. El catálogo `estandares_minimos` / `catalogos_referencia` llegó en
-> SP-143 (`b2c3d4e5f6a7`). El resto de entidades del ER (peligros, auditorías,
+> SP-143 (`b2c3d4e5f6a7`). El resto de entidades del ER (auditorías, hallazgos,
 > planes de mejoramiento, etc.) sigue pendiente de tickets posteriores.
 
 ### Convenciones transversales
@@ -240,7 +248,7 @@ Tabla intermedia **nombrada** de la relación N—N
 
 | Columna | Tipo | Restricciones |
 |---|---|---|
-| `peligro_id` | `UUID` | NOT NULL, FK → `peligros.id` |
+| `peligro_id` | `UUID` | NOT NULL, FK → `peligros.id`, **UNIQUE** (1—1 con el peligro) |
 | `nivel_deficiencia` | `nivel_deficiencia` | NOT NULL, ND ∈ {10, 6, 2, 0} |
 | `nivel_exposicion` | `nivel_exposicion` | NOT NULL, NE ∈ {4, 3, 2, 1} |
 | `nivel_consecuencia` | `nivel_consecuencia` | NOT NULL, NC ∈ {100, 60, 25, 10} |
@@ -328,7 +336,7 @@ borrado físico (conservación 20 años tras el cese laboral).
 | `empresas` → `planes_mejoramiento` | 1—N |
 | `autoevaluaciones` ↔ `estandares_minimos` | N—N vía `calificaciones_estandar` (tabla intermedia nombrada) |
 | `procesos_actividades` → `peligros` | 1—N |
-| `peligros` → `evaluaciones_riesgo` | 1—N |
+| `peligros` → `evaluaciones_riesgo` | 1—1 (`UNIQUE peligro_id`) |
 | `evaluaciones_riesgo` → `controles_riesgo` | 1—N |
 | `auditorias` → `hallazgos` | 1—N |
 | `autoevaluaciones` → `planes_mejoramiento` | 1—N (FK opcional en el plan) |

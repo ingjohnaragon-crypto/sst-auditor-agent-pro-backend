@@ -39,6 +39,9 @@ addopts = "--cov=src --cov-report=term-missing --cov-report=html --cov-fail-unde
 
 [tool.coverage.run]
 source = ["src"]
+# SQLAlchemy asyncio ejecuta partes del stack en greenlets; sin esto CI
+# subreporta cobertura (p. ej. 88% local-equivalente ~92%).
+concurrency = ["greenlet", "thread"]
 
 [tool.coverage.report]
 fail_under = 90

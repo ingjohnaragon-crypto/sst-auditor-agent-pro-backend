@@ -256,7 +256,7 @@ Table peligros {
 
 Table evaluaciones_riesgo {
   id                  uuid                  [pk, note: 'Generado en aplicación (uuid4)']
-  peligro_id          uuid                  [not null]
+  peligro_id          uuid                  [not null, unique, note: '1—1 con peligros (UNIQUE)']
   nivel_deficiencia   nivel_deficiencia     [not null, note: 'ND ∈ {10, 6, 2, 0} — ver nota del enum sobre el caso «Bajo»']
   nivel_exposicion    nivel_exposicion      [not null, note: 'NE ∈ {4, 3, 2, 1}']
   nivel_consecuencia  nivel_consecuencia    [not null, note: 'NC ∈ {100, 60, 25, 10}']
@@ -376,7 +376,7 @@ Ref: calificaciones_estandar.estandar_id > estandares_minimos.id
 
 // cadena GTC 45: proceso → peligro → evaluación → control
 Ref: peligros.proceso_actividad_id > procesos_actividades.id
-Ref: evaluaciones_riesgo.peligro_id > peligros.id
+Ref: evaluaciones_riesgo.peligro_id - peligros.id
 Ref: controles_riesgo.evaluacion_riesgo_id > evaluaciones_riesgo.id
 
 // verificar / actuar
