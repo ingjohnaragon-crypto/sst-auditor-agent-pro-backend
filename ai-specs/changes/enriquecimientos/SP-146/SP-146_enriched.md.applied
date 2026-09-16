@@ -1,0 +1,184 @@
+# Ticket enriquecido: SP-146 — Programar utilidades de cálculos estadísticos SST
+
+## Descripción original
+<!-- jira-skip -->
+Escribir lógica para procesar tasas de accidentalidad y metas anuales.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+Implementar utilidades puras y reutilizables de dominio para calcular indicadores de accidentalidad y evaluar metas anuales del SG-SST. El alcance comprende:
+
+- Tasa de frecuencia:
+  `número de accidentes de trabajo × factor / horas trabajadas`.
+- Tasa de severidad:
+  `(días de incapacidad + días cargados) × factor / horas trabajadas`.
+- El factor de normalización será configurable y tendrá como valor predeterminado `240000`.
+- Proyección lineal de un valor acumulado al cierre del año:
+  `valor acumulado / períodos transcurridos × períodos totales`.
+- Comparación de la proyección contra una meta, considerando si el indicador debe minimizarse o maximizarse.
+
+Todos los cálculos deberán usar `Decimal`, redondeo `ROUND_HALF_UP` a dos decimales y validaciones explícitas. No se utilizará `float` para evitar errores binarios. Las utilidades no dependerán de FastAPI, Pydantic, SQLAlchemy ni infraestructura.
+
+La comparación de metas devolverá un resultado tipado con:
+
+- valor proyectado;
+- valor objetivo;
+- sentido de la meta (`MINIMIZAR` o `MAXIMIZAR`);
+- indicador booleano de cumplimiento;
+- desviación absoluta con signo (`valor proyectado - meta`);
+- desviación porcentual respecto de la meta, o `None` cuando la meta sea cero.
+
+Una meta `MINIMIZAR` se cumple cuando el valor proyectado es menor o igual a la meta. Una meta `MAXIMIZAR` se cumple cuando el valor proyectado es mayor o igual a la meta.
+
+## Criterios de aceptación
+- [ ] Existe un módulo común de utilidades matemáticas sin dependencias de frameworks.
+- [ ] La tasa de frecuencia aplica la fórmula definida y usa `240000` como factor predeterminado.
+- [ ] La tasa de severidad suma días de incapacidad y días cargados antes de normalizar.
+- [ ] Las funciones aceptan un factor positivo configurable.
+- [ ] Los resultados monetarios/estadísticos se representan con `Decimal` y se redondean a dos decimales mediante `ROUND_HALF_UP`.
+- [ ] Se rechazan numeradores negativos, denominadores menores o iguales a cero, factores menores o iguales a cero y períodos fuera del rango permitido.
+- [ ] La proyección anual exige `1 <= períodos transcurridos <= períodos totales` y `períodos totales > 0`.
+- [ ] La comparación soporta metas de minimización y maximización, incluyendo una meta igual a cero sin dividir por cero.
+- [ ] Los errores de entrada usan una excepción de dominio tipada con mensaje en español.
+- [ ] Las funciones son deterministas, no realizan I/O y no modifican estado global.
+- [ ] La cobertura de las nuevas líneas es igual o superior al 90 % y la cobertura global del repositorio no baja del umbral configurado.
+- [ ] `ruff check src tests`, `mypy src` y `pytest` finalizan correctamente.
+
+## Campos y endpoints
+No se crean endpoints ni tablas en este ticket. La funcionalidad se expone inicialmente como API Python de dominio.
+
+- `calcular_tasa_frecuencia(numero_accidentes: int, horas_trabajadas: Decimal, factor: Decimal = Decimal("240000")) -> Decimal`
+  - `numero_accidentes`: entero mayor o igual a cero.
+  - `horas_trabajadas`: valor estrictamente positivo.
+  - `factor`: valor estrictamente positivo.
+- `calcular_tasa_severidad(dias_incapacidad: int, dias_cargados: int, horas_trabajadas: Decimal, factor: Decimal = Decimal("240000")) -> Decimal`
+  - Ambos campos de días deben ser enteros mayores o iguales a cero.
+  - `horas_trabajadas` y `factor` deben ser positivos.
+- `proyectar_valor_anual(valor_acumulado: Decimal, periodos_transcurridos: int, periodos_totales: int = 12) -> Decimal`
+  - `valor_acumulado` debe ser mayor o igual a cero.
+  - Los períodos deben cumplir `1 <= periodos_transcurridos <= periodos_totales`.
+- `comparar_meta_anual(valor_proyectado: Decimal, meta: Decimal, sentido: SentidoMeta) -> ResultadoMetaAnual`
+  - `valor_proyectado` y `meta` deben ser mayores o iguales a cero.
+  - Si `meta == 0`, `desviacion_porcentual` será `None`.
+- `SentidoMeta`: enum de dominio con `MINIMIZAR` y `MAXIMIZAR`.
+- `ResultadoMetaAnual`: dataclass inmutable con los seis campos descritos en la sección anterior.
+- `ValorEstadisticoInvalidoError`: excepción de dominio con código `VALOR_ESTADISTICO_INVALIDO` y estado HTTP de referencia `422`.
+
+## Archivos a crear o modificar
+- `src/domain/services/__init__.py` — Dominio — Crear el paquete de servicios puros.
+- `src/domain/services/utilidades_matematicas.py` — Dominio — Crear validaciones, división segura y redondeo común.
+- `src/domain/services/calculos_estadisticos_sst.py` — Dominio — Crear fórmulas de accidentalidad, proyección y comparación.
+- `src/domain/exceptions/estadisticas_sst.py` — Dominio — Crear la excepción para entradas estadísticas inválidas.
+- `src/domain/exceptions/__init__.py` — Dominio — Exportar la excepción si el patrón del paquete lo requiere.
+- `tests/unit/domain/services/test_utilidades_matematicas.py` — Pruebas — Crear pruebas del módulo común.
+- `tests/unit/domain/services/test_calculos_estadisticos_sst.py` — Pruebas — Crear pruebas de fórmulas y metas.
+- `ai-specs/specs/development_guide.md` — Documentación — Documentar fórmulas, factor predeterminado, redondeo y semántica de metas.
+
+## Casos de prueba unitarios
+- Frecuencia con cero accidentes devuelve `Decimal("0.00")`.
+- Frecuencia con valores conocidos produce el resultado esperado con factor `240000`.
+- Frecuencia admite un factor alternativo.
+- Severidad suma correctamente incapacidad y días cargados.
+- Severidad con ambos numeradores en cero devuelve `Decimal("0.00")`.
+- El redondeo de un tercer decimal igual a cinco usa `ROUND_HALF_UP`.
+- Cada numerador negativo genera `ValorEstadisticoInvalidoError`.
+- Horas trabajadas iguales a cero o negativas generan error.
+- Factor igual a cero o negativo genera error.
+- La proyección en el primer mes, un mes intermedio y el período final devuelve valores correctos.
+- Períodos transcurridos cero, negativos, mayores al total o total no positivo generan error.
+- Una meta `MINIMIZAR` se cumple en valores inferiores e iguales y falla en valores superiores.
+- Una meta `MAXIMIZAR` se cumple en valores superiores e iguales y falla en valores inferiores.
+- La desviación absoluta conserva el signo.
+- La desviación porcentual se calcula respecto de una meta positiva.
+- Una meta cero devuelve desviación porcentual `None` y no produce división por cero.
+- Las funciones no alteran los argumentos ni comparten estado mutable.
+
+## Requisitos no funcionales
+- Python 3.12, anotaciones completas y compatibilidad con `mypy --strict`.
+- Complejidad temporal O(1) y sin acceso a red, base de datos o sistema de archivos.
+- Uso exclusivo de `Decimal` en operaciones y constantes no enteras.
+- Mensajes de validación en español, sin exponer trazas ni información sensible.
+- Docstrings con fórmula, unidad esperada, factor y reglas de validación.
+- Sin nuevas dependencias de terceros.
+- Nombres de funciones y tipos en español, coherentes con el dominio existente.
+
+## Puntos de historia
+<!-- STORY_POINTS:8 -->
+**8** — Incluye tres subtareas coordinadas, definición de contratos matemáticos, validaciones de dominio, tratamiento de metas cero, documentación y pruebas exhaustivas.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+<!-- SUBTASK:SP-193 -->
+### Subtarea: SP-193 — Implementar funciones de cálculo de tasa de accidentalidad
+
+#### Descripción original
+<!-- jira-skip -->
+Programar las fórmulas estadísticas estándar de frecuencia y severidad de accidentalidad.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Implementar en `src/domain/services/calculos_estadisticos_sst.py` las funciones puras `calcular_tasa_frecuencia` y `calcular_tasa_severidad`. Ambas usarán `Decimal`, factor configurable con valor predeterminado `240000`, división segura y redondeo común a dos decimales. Validar numeradores no negativos y horas/factor estrictamente positivos mediante `ValorEstadisticoInvalidoError`.
+
+#### Criterios de aceptación
+- [ ] La frecuencia calcula `accidentes × factor / horas trabajadas`.
+- [ ] La severidad calcula `(días de incapacidad + días cargados) × factor / horas trabajadas`.
+- [ ] Ambas funciones devuelven `Decimal` con dos decimales.
+- [ ] Cero eventos o días produce `0.00`.
+- [ ] Entradas negativas, horas no positivas y factor no positivo generan una excepción de dominio.
+- [ ] Existen pruebas parametrizadas para casos nominales, límites, factor alternativo y redondeo.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Dos fórmulas puras, validaciones y pruebas parametrizadas sin persistencia ni API.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-193 -->
+
+<!-- SUBTASK:SP-194 -->
+### Subtarea: SP-194 — Implementar utilidades de cálculo de metas anuales
+
+#### Descripción original
+<!-- jira-skip -->
+Desarrollar funciones reutilizables para proyección y comparación de metas SST.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Implementar proyección lineal al cierre de un período anual y comparación tipada contra una meta. Incorporar `SentidoMeta`, con valores `MINIMIZAR` y `MAXIMIZAR`, y la dataclass inmutable `ResultadoMetaAnual`. La comparación debe informar cumplimiento, desviación absoluta y desviación porcentual; cuando la meta sea cero, la desviación porcentual será `None`.
+
+#### Criterios de aceptación
+- [ ] La proyección aplica `valor acumulado / períodos transcurridos × períodos totales`.
+- [ ] Se validan valor acumulado no negativo y períodos dentro de rango.
+- [ ] Se comparan correctamente metas de minimización y maximización, incluida la igualdad.
+- [ ] Una meta cero se procesa sin división por cero.
+- [ ] El resultado es inmutable, tipado y usa `Decimal`.
+- [ ] Existen pruebas de ambos sentidos, límites temporales, desviaciones y meta cero.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Requiere modelar la semántica de meta, proyección, desviaciones y casos límite.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-194 -->
+
+<!-- SUBTASK:SP-195 -->
+### Subtarea: SP-195 — Crear módulo común de utilidades matemáticas
+
+#### Descripción original
+<!-- jira-skip -->
+Centralizar funciones estadísticas reutilizables en un módulo compartido del backend.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Crear `src/domain/services/utilidades_matematicas.py` con primitivas privadas o públicas de redondeo a dos decimales, validación de valores no negativos/positivos y división segura. El módulo debe operar con `Decimal`, no depender de frameworks y ser consumido por las fórmulas de SP-193 y SP-194 sin duplicar validaciones.
+
+#### Criterios de aceptación
+- [ ] Existe una única constante de precisión `Decimal("0.01")`.
+- [ ] El redondeo usa explícitamente `ROUND_HALF_UP`.
+- [ ] La división segura rechaza denominadores menores o iguales a cero.
+- [ ] Las validaciones producen `ValorEstadisticoInvalidoError` con el nombre del campo.
+- [ ] No hay dependencias de FastAPI, Pydantic, SQLAlchemy ni infraestructura.
+- [ ] Existen pruebas unitarias directas para cada utilidad y sus límites.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — Módulo pequeño y puro con validaciones, redondeo y pruebas directas.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-195 -->
