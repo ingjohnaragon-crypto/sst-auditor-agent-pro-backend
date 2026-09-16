@@ -104,21 +104,18 @@ def comparar_meta_anual(
     if not isinstance(sentido, SentidoMeta):
         raise ValorEstadisticoInvalidoError("El campo sentido debe ser MINIMIZAR o MAXIMIZAR")
 
-    valor_normalizado = redondear_dos_decimales(valor_proyectado)
-    meta_normalizada = redondear_dos_decimales(meta)
-    desviacion_absoluta = redondear_dos_decimales(valor_normalizado - meta_normalizada)
+    diferencia = valor_proyectado - meta
+    desviacion_absoluta = redondear_dos_decimales(diferencia)
     cumplida = (
-        valor_normalizado <= meta_normalizada
-        if sentido is SentidoMeta.MINIMIZAR
-        else valor_normalizado >= meta_normalizada
+        valor_proyectado <= meta if sentido is SentidoMeta.MINIMIZAR else valor_proyectado >= meta
     )
     desviacion_porcentual = (
         None
-        if meta_normalizada == 0
+        if meta == 0
         else redondear_dos_decimales(
             dividir_seguro(
-                desviacion_absoluta,
-                meta_normalizada,
+                diferencia,
+                meta,
                 "meta",
             )
             * PORCENTAJE
@@ -126,8 +123,8 @@ def comparar_meta_anual(
     )
 
     return ResultadoMetaAnual(
-        valor_proyectado=valor_normalizado,
-        meta=meta_normalizada,
+        valor_proyectado=valor_proyectado,
+        meta=meta,
         sentido=sentido,
         cumplida=cumplida,
         desviacion_absoluta=desviacion_absoluta,

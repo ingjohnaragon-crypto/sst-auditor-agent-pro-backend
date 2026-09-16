@@ -167,12 +167,12 @@ def test_should_calcular_desviaciones_when_meta_positiva() -> None:
     )
 
     assert resultado == ResultadoMetaAnual(
-        valor_proyectado=Decimal("12.35"),
-        meta=Decimal("10.00"),
+        valor_proyectado=Decimal("12.345"),
+        meta=Decimal("10"),
         sentido=SentidoMeta.MINIMIZAR,
         cumplida=False,
         desviacion_absoluta=Decimal("2.35"),
-        desviacion_porcentual=Decimal("23.50"),
+        desviacion_porcentual=Decimal("23.45"),
     )
 
 
@@ -196,6 +196,28 @@ def test_should_omitir_porcentaje_when_meta_cero() -> None:
 
     assert resultado.cumplida is True
     assert resultado.desviacion_porcentual is None
+
+
+def test_should_incumplir_minimizacion_when_valor_supera_meta_antes_de_redondear() -> None:
+    resultado = comparar_meta_anual(
+        Decimal("10.004"),
+        Decimal("10"),
+        SentidoMeta.MINIMIZAR,
+    )
+
+    assert resultado.cumplida is False
+    assert resultado.valor_proyectado == Decimal("10.004")
+
+
+def test_should_calcular_porcentaje_when_meta_positiva_redondearia_a_cero() -> None:
+    resultado = comparar_meta_anual(
+        Decimal("0.008"),
+        Decimal("0.004"),
+        SentidoMeta.MAXIMIZAR,
+    )
+
+    assert resultado.cumplida is True
+    assert resultado.desviacion_porcentual == Decimal("100.00")
 
 
 @pytest.mark.parametrize(

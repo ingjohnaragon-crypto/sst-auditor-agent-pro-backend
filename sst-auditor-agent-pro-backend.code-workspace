@@ -5,9 +5,6 @@
 		},
 		{
 			"path": "../sst-auditor-agent-pro-frontend"
-		},
-		{
-			"path": "../open-spec/spec-driven-project"
 		}
 	]
 }
