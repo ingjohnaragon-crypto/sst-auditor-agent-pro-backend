@@ -148,6 +148,48 @@ and file-naming convention. The rule that holds across every stack:
 
 ---
 
+## Cálculos estadísticos SST
+
+Las fórmulas estadísticas del SG-SST viven en
+`src/domain/services/calculos_estadisticos_sst.py` y son funciones puras, sin
+dependencias de FastAPI, SQLAlchemy o infraestructura.
+
+- **Tasa de frecuencia**:
+  `número de accidentes × factor / horas trabajadas`.
+- **Tasa de severidad**:
+  `(días de incapacidad + días cargados) × factor / horas trabajadas`.
+- **Factor predeterminado**: `240000`; puede reemplazarse explícitamente por
+  llamada cuando la norma o el período analizado requieran otro factor.
+- **Proyección anual**:
+  `valor acumulado / períodos transcurridos × períodos totales`.
+
+Todos los valores estadísticos se calculan con `Decimal`. Los resultados se
+redondean a dos decimales con `ROUND_HALF_UP` y no se redondean operaciones
+intermedias.
+
+Las metas usan `SentidoMeta.MINIMIZAR` cuando un valor menor es favorable y
+`SentidoMeta.MAXIMIZAR` cuando un valor mayor es favorable. La desviación
+absoluta siempre se expresa como `valor proyectado - meta`. Cuando la meta es
+cero, la desviación porcentual es `None`.
+
+```python
+from decimal import Decimal
+
+from src.domain.services.calculos_estadisticos_sst import (
+    SentidoMeta,
+    calcular_tasa_frecuencia,
+    comparar_meta_anual,
+)
+
+tasa = calcular_tasa_frecuencia(2, Decimal("480000"))
+resultado = comparar_meta_anual(tasa, Decimal("1.20"), SentidoMeta.MINIMIZAR)
+```
+
+Las entradas negativas, los denominadores no positivos y los valores no
+finitos generan `ValorEstadisticoInvalidoError`.
+
+---
+
 ## 🧹 Common Issues
 
 | Problem | Solution |
