@@ -50,17 +50,40 @@ def test_should_rechazar_when_valor_no_positivo(valor: Decimal | int) -> None:
         validar_positivo(valor, "denominador")
 
 
-@pytest.mark.parametrize("valor", [Decimal("NaN"), Decimal("Infinity")])
+@pytest.mark.parametrize(
+    "valor",
+    [Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")],
+)
 def test_should_rechazar_when_valor_no_finito(valor: Decimal) -> None:
     with pytest.raises(ValorEstadisticoInvalidoError, match="finito"):
         validar_no_negativo(valor, "indicador")
 
 
-def test_should_dividir_when_denominador_positivo() -> None:
-    assert dividir_seguro(Decimal("10"), Decimal("4"), "horas") == Decimal("2.5")
+@pytest.mark.parametrize(
+    ("numerador", "esperado"),
+    [
+        (Decimal("10"), Decimal("2.5")),
+        (Decimal("0"), Decimal("0")),
+        (Decimal("-10"), Decimal("-2.5")),
+    ],
+)
+def test_should_dividir_when_denominador_positivo(
+    numerador: Decimal,
+    esperado: Decimal,
+) -> None:
+    assert dividir_seguro(numerador, Decimal("4"), "horas") == esperado
 
 
-@pytest.mark.parametrize("denominador", [Decimal("0"), Decimal("-1")])
+@pytest.mark.parametrize(
+    "denominador",
+    [
+        Decimal("0"),
+        Decimal("-1"),
+        Decimal("NaN"),
+        Decimal("Infinity"),
+        Decimal("-Infinity"),
+    ],
+)
 def test_should_rechazar_division_when_denominador_no_positivo(
     denominador: Decimal,
 ) -> None:
@@ -71,3 +94,12 @@ def test_should_rechazar_division_when_denominador_no_positivo(
 def test_should_rechazar_division_when_numerador_no_finito() -> None:
     with pytest.raises(ValorEstadisticoInvalidoError, match="numerador"):
         dividir_seguro(Decimal("NaN"), Decimal("1"), "horas")
+
+
+@pytest.mark.parametrize(
+    "valor",
+    [Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")],
+)
+def test_should_rechazar_redondeo_when_valor_no_finito(valor: Decimal) -> None:
+    with pytest.raises(ValorEstadisticoInvalidoError, match="finito"):
+        redondear_dos_decimales(valor)

@@ -50,9 +50,11 @@ def test_should_crear_motor_con_parametros_de_pool_when_settings_configurados(
 
 
 def test_should_omitir_dimensionamiento_de_pool_when_url_es_sqlite(
+    monkeypatch: pytest.MonkeyPatch,
     caches_limpias: None,
 ) -> None:
     """Con SQLite (StaticPool) no se pasan pool_size/max_overflow, pero sí el resto."""
+    monkeypatch.setenv("URL_BASE_DATOS", "sqlite+aiosqlite:///:memory:")
     with patch("src.infrastructure.database.sesion.create_async_engine") as motor_falso:
         motor_falso.return_value = MagicMock(spec=AsyncEngine)
 
