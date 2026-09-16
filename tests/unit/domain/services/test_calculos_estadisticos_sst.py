@@ -35,6 +35,12 @@ def test_should_calcular_frecuencia_when_datos_validos(
     assert resultado == esperado
 
 
+def test_should_usar_factor_predeterminado_when_frecuencia_sin_factor() -> None:
+    resultado = calcular_tasa_frecuencia(2, Decimal("480000"))
+
+    assert resultado == Decimal("1.00")
+
+
 @pytest.mark.parametrize(
     ("accidentes", "horas", "factor", "campo"),
     [
@@ -53,6 +59,24 @@ def test_should_rechazar_frecuencia_when_dato_invalido(
 ) -> None:
     with pytest.raises(ValorEstadisticoInvalidoError, match=campo):
         calcular_tasa_frecuencia(accidentes, horas, factor)
+
+
+@pytest.mark.parametrize(
+    ("horas", "factor", "campo"),
+    [
+        (Decimal("NaN"), Decimal("240000"), "horas_trabajadas"),
+        (Decimal("Infinity"), Decimal("240000"), "horas_trabajadas"),
+        (Decimal("10"), Decimal("NaN"), "factor"),
+        (Decimal("10"), Decimal("Infinity"), "factor"),
+    ],
+)
+def test_should_rechazar_frecuencia_when_decimal_no_finito(
+    horas: Decimal,
+    factor: Decimal,
+    campo: str,
+) -> None:
+    with pytest.raises(ValorEstadisticoInvalidoError, match=campo):
+        calcular_tasa_frecuencia(1, horas, factor)
 
 
 @pytest.mark.parametrize(
@@ -99,6 +123,22 @@ def test_should_rechazar_severidad_when_dato_invalido(
 
 
 @pytest.mark.parametrize(
+    ("horas", "factor", "campo"),
+    [
+        (Decimal("-Infinity"), Decimal("240000"), "horas_trabajadas"),
+        (Decimal("10"), Decimal("-Infinity"), "factor"),
+    ],
+)
+def test_should_rechazar_severidad_when_decimal_no_finito(
+    horas: Decimal,
+    factor: Decimal,
+    campo: str,
+) -> None:
+    with pytest.raises(ValorEstadisticoInvalidoError, match=campo):
+        calcular_tasa_severidad(1, 1, horas, factor)
+
+
+@pytest.mark.parametrize(
     ("acumulado", "transcurridos", "totales", "esperado"),
     [
         (Decimal("10"), 1, 12, Decimal("120.00")),
@@ -136,6 +176,17 @@ def test_should_rechazar_proyeccion_when_dato_invalido(
 ) -> None:
     with pytest.raises(ValorEstadisticoInvalidoError, match=campo):
         proyectar_valor_anual(acumulado, transcurridos, totales)
+
+
+@pytest.mark.parametrize(
+    "acumulado",
+    [Decimal("NaN"), Decimal("Infinity"), Decimal("-Infinity")],
+)
+def test_should_rechazar_proyeccion_when_acumulado_no_finito(
+    acumulado: Decimal,
+) -> None:
+    with pytest.raises(ValorEstadisticoInvalidoError, match="valor_acumulado"):
+        proyectar_valor_anual(acumulado, 1)
 
 
 @pytest.mark.parametrize(
@@ -236,6 +287,24 @@ def test_should_rechazar_meta_when_valor_negativo(
         comparar_meta_anual(valor, meta, SentidoMeta.MINIMIZAR)
 
 
+@pytest.mark.parametrize(
+    ("valor", "meta", "campo"),
+    [
+        (Decimal("NaN"), Decimal("1"), "valor_proyectado"),
+        (Decimal("Infinity"), Decimal("1"), "valor_proyectado"),
+        (Decimal("1"), Decimal("NaN"), "meta"),
+        (Decimal("1"), Decimal("Infinity"), "meta"),
+    ],
+)
+def test_should_rechazar_meta_when_decimal_no_finito(
+    valor: Decimal,
+    meta: Decimal,
+    campo: str,
+) -> None:
+    with pytest.raises(ValorEstadisticoInvalidoError, match=campo):
+        comparar_meta_anual(valor, meta, SentidoMeta.MINIMIZAR)
+
+
 def test_should_rechazar_meta_when_sentido_invalido() -> None:
     with pytest.raises(ValorEstadisticoInvalidoError, match="sentido"):
         comparar_meta_anual(
@@ -254,3 +323,5 @@ def test_should_ser_inmutable_when_resultado_creado() -> None:
 
     with pytest.raises(FrozenInstanceError):
         resultado.cumplida = True  # type: ignore[misc]
+
+    assert not hasattr(resultado, "__dict__")

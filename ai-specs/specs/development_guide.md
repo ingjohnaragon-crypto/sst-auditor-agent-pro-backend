@@ -188,6 +188,11 @@ resultado = comparar_meta_anual(tasa, Decimal("1.20"), SentidoMeta.MINIMIZAR)
 Las entradas negativas, los denominadores no positivos y los valores no
 finitos generan `ValorEstadisticoInvalidoError`.
 
+La matriz de escenarios y los comandos de cobertura dirigida están en
+`tests/unit/domain/services/README.md`. El comando dirigido usa
+`-o addopts=""` para aislar estos módulos de la medición global definida en
+`pyproject.toml`.
+
 ---
 
 ## 🧹 Common Issues
