@@ -80,6 +80,7 @@ async def test_should_completar_flujo_matriz_when_datos_validos(
         },
     )
     assert recal.status_code == 200
+    assert recal.json()["nivel_probabilidad"] == 0
     assert recal.json()["nivel_riesgo"] == 0
     assert recal.json()["interpretacion_nr"] == "IV"
 
@@ -305,10 +306,13 @@ async def test_should_devolver_422_when_body_incluye_derivados(
             "nivel_deficiencia": 2,
             "nivel_exposicion": 2,
             "nivel_consecuencia": 10,
+            "nivel_probabilidad": 99,
             "nivel_riesgo": 999,
         },
     )
     assert resp.status_code == 422
+    assert resp.json()["exito"] is False
+    assert resp.json()["codigo"] == "ERROR_VALIDACION"
 
 
 async def test_should_devolver_401_when_sin_token(

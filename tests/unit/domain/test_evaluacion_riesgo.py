@@ -5,7 +5,12 @@ from uuid import uuid4
 import pytest
 from src.domain.exceptions.matriz_riesgo import ValorGtcInvalidoError
 from src.domain.models.evaluacion_riesgo import EvaluacionRiesgo
-from src.domain.models.gtc45 import AceptabilidadRiesgo, InterpretacionNR
+from src.domain.models.gtc45 import (
+    ND_VALIDOS,
+    NE_VALIDOS,
+    AceptabilidadRiesgo,
+    InterpretacionNR,
+)
 
 
 def test_should_calcular_nr_muy_alto_when_nd10_ne4_nc100() -> None:
@@ -42,9 +47,17 @@ def test_should_mapear_bordes_a3(
     aceptabilidad: AceptabilidadRiesgo,
 ) -> None:
     ev = EvaluacionRiesgo.crear(uuid4(), nd, ne, nc)
+    assert ev.nivel_probabilidad == nd * ne
     assert ev.nivel_riesgo == nr
     assert ev.interpretacion_nr == interpretacion
     assert ev.aceptabilidad == aceptabilidad
+
+
+@pytest.mark.parametrize("nd", sorted(ND_VALIDOS))
+@pytest.mark.parametrize("ne", sorted(NE_VALIDOS))
+def test_should_calcular_np_como_producto_when_nd_y_ne_validos(nd: int, ne: int) -> None:
+    ev = EvaluacionRiesgo.crear(uuid4(), nd, ne, 10)
+    assert ev.nivel_probabilidad == nd * ne
 
 
 def test_should_lanzar_when_nd_invalido() -> None:
@@ -69,3 +82,10 @@ def test_should_recalcular_derivados_when_put() -> None:
     assert ev.nivel_probabilidad == 0
     assert ev.nivel_riesgo == 0
     assert ev.interpretacion_nr == InterpretacionNR.IV
+
+
+def test_should_actualizar_np_when_recalcular_nd_ne() -> None:
+    ev = EvaluacionRiesgo.crear(uuid4(), 10, 4, 100)
+    ev.id = uuid4()
+    ev.recalcular(6, 3, 25)
+    assert ev.nivel_probabilidad == 18
