@@ -51,5 +51,13 @@ jobs:
           done
           exit $status
 
+      - name: Lint with Ruff
+        run: ruff check src tests
+
+      - name: Type-check with mypy
+        run: mypy src
+
       - name: Run tests with coverage
-        run: pytest tests/ -v
+        run: |
+          echo "Coverage threshold: >= 90% (pyproject.toml / --cov-fail-under)"
+          pytest tests/ -v

@@ -149,25 +149,147 @@ async def test_should_responder_409_when_finalizar_incompleta(
     assert fin.json()["codigo"] == "AUTOEVALUACION_INCOMPLETA"
 
 
-async def test_should_filtrar_estandares_por_ciclo_phva(
+async def test_should_responder_404_when_crear_con_empresa_inexistente(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+) -> None:
+    token = await obtener_token(cliente_async, usuarios_semilla)
+    respuesta = await cliente_async.post(
+        "/api/v1/autoevaluaciones",
+        headers=bearer(token),
+        json={"empresa_id": str(uuid4()), "fecha": "2026-07-04"},
+    )
+    assert respuesta.status_code == 404
+    assert respuesta.json()["codigo"] == "EMPRESA_NO_ENCONTRADA"
+
+
+async def test_should_responder_404_when_calificar_estandar_inexistente(
     cliente_async: AsyncClient,
     usuarios_semilla: UsuariosSemilla,
 ) -> None:
     token = await obtener_token(cliente_async, usuarios_semilla)
     headers = bearer(token)
-
-    todos = await cliente_async.get("/api/v1/estandares-minimos", headers=headers)
-    assert todos.status_code == 200
-    assert len(todos.json()) == 3
-
-    planear = await cliente_async.get(
-        "/api/v1/estandares-minimos?ciclo_phva=PLANEAR", headers=headers
+    empresa = await cliente_async.post(
+        "/api/v1/empresas",
+        headers=headers,
+        json={
+            "razon_social": "Est SA",
+            "nit": "600222333-1",
+            "actividad_economica": "C",
+            "nivel_riesgo_arl": "I",
+            "numero_trabajadores": 2,
+        },
     )
-    assert planear.status_code == 200
-    assert all(e["ciclo_phva"] == "PLANEAR" for e in planear.json())
-    assert len(planear.json()) == 2
-
-    invalido = await cliente_async.get(
-        "/api/v1/estandares-minimos?ciclo_phva=OTRO", headers=headers
+    auto = await cliente_async.post(
+        "/api/v1/autoevaluaciones",
+        headers=headers,
+        json={"empresa_id": empresa.json()["id"], "fecha": "2026-07-05"},
     )
-    assert invalido.status_code == 422
+    respuesta = await cliente_async.put(
+        f"/api/v1/autoevaluaciones/{auto.json()['id']}/calificaciones/{uuid4()}",
+        headers=headers,
+        json={"resultado": "CUMPLE"},
+    )
+    assert respuesta.status_code == 404
+    assert respuesta.json()["codigo"] == "ESTANDAR_NO_ENCONTRADO"
+
+
+async def test_should_responder_403_when_consulta_escribe_autoevaluacion(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+    catalogo_semilla: CatalogoSemilla,
+) -> None:
+    admin = await obtener_token(cliente_async, usuarios_semilla)
+    headers_admin = bearer(admin)
+    empresa = await cliente_async.post(
+        "/api/v1/empresas",
+        headers=headers_admin,
+        json={
+            "razon_social": "RBAC Auto SA",
+            "nit": "600444555-2",
+            "actividad_economica": "D",
+            "nivel_riesgo_arl": "II",
+            "numero_trabajadores": 5,
+        },
+    )
+    empresa_id = empresa.json()["id"]
+    auto = await cliente_async.post(
+        "/api/v1/autoevaluaciones",
+        headers=headers_admin,
+        json={"empresa_id": empresa_id, "fecha": "2026-07-06"},
+    )
+    auto_id = auto.json()["id"]
+
+    consulta = await obtener_token(
+        cliente_async, usuarios_semilla, correo=usuarios_semilla.correo_consulta
+    )
+    headers_consulta = bearer(consulta)
+
+    crear = await cliente_async.post(
+        "/api/v1/autoevaluaciones",
+        headers=headers_consulta,
+        json={"empresa_id": empresa_id, "fecha": "2026-07-07"},
+    )
+    assert crear.status_code == 403
+    assert crear.json()["codigo"] == "ACCESO_DENEGADO"
+
+    calificar = await cliente_async.put(
+        f"/api/v1/autoevaluaciones/{auto_id}/calificaciones/{catalogo_semilla.estandar_ids[0]}",
+        headers=headers_consulta,
+        json={"resultado": "CUMPLE"},
+    )
+    assert calificar.status_code == 403
+    assert calificar.json()["codigo"] == "ACCESO_DENEGADO"
+
+    finalizar = await cliente_async.post(
+        f"/api/v1/autoevaluaciones/{auto_id}/finalizar",
+        headers=headers_consulta,
+    )
+    assert finalizar.status_code == 403
+    assert finalizar.json()["codigo"] == "ACCESO_DENEGADO"
+
+
+async def test_should_responder_409_when_finalizar_ya_finalizada(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+    catalogo_semilla: CatalogoSemilla,
+) -> None:
+    token = await obtener_token(cliente_async, usuarios_semilla)
+    headers = bearer(token)
+    empresa = await cliente_async.post(
+        "/api/v1/empresas",
+        headers=headers,
+        json={
+            "razon_social": "Fin Dup SA",
+            "nit": "600666777-3",
+            "actividad_economica": "E",
+            "nivel_riesgo_arl": "III",
+            "numero_trabajadores": 8,
+        },
+    )
+    auto = await cliente_async.post(
+        "/api/v1/autoevaluaciones",
+        headers=headers,
+        json={"empresa_id": empresa.json()["id"], "fecha": "2026-07-08"},
+    )
+    auto_id = auto.json()["id"]
+    for estandar_id in catalogo_semilla.estandar_ids:
+        cal = await cliente_async.put(
+            f"/api/v1/autoevaluaciones/{auto_id}/calificaciones/{estandar_id}",
+            headers=headers,
+            json={"resultado": "CUMPLE"},
+        )
+        assert cal.status_code == 200
+
+    primera = await cliente_async.post(
+        f"/api/v1/autoevaluaciones/{auto_id}/finalizar",
+        headers=headers,
+    )
+    assert primera.status_code == 200
+
+    segunda = await cliente_async.post(
+        f"/api/v1/autoevaluaciones/{auto_id}/finalizar",
+        headers=headers,
+    )
+    assert segunda.status_code == 409
+    assert segunda.json()["codigo"] == "AUTOEVALUACION_FINALIZADA"

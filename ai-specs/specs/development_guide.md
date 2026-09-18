@@ -193,6 +193,16 @@ La matriz de escenarios y los comandos de cobertura dirigida están en
 `-o addopts=""` para aislar estos módulos de la medición global definida en
 `pyproject.toml`.
 
+## Pruebas de integración HTTP (SP-157)
+
+Los endpoints clave (auth, empresas, estándares, autoevaluación, matriz GTC 45)
+se validan como integración HTTP en `tests/integration/`. La matriz
+endpoint → archivo → códigos HTTP y los comandos de ejecución están en
+`tests/integration/README.md`.
+
+- **SP-147**: cálculos de dominio (sin FastAPI).
+- **SP-157**: contratos HTTP y RBAC de endpoints.
+
 ---
 
 ## 🧹 Common Issues

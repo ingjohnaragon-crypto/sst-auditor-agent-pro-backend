@@ -169,6 +169,22 @@ async def test_should_rechazar_escritura_when_rol_consulta(
     assert delete_proceso.status_code == 403
     assert delete_proceso.json()["codigo"] == "ACCESO_DENEGADO"
 
+    post_peligro = await cliente_async.post(
+        f"/api/v1/procesos-actividades/{proceso_id}/peligros",
+        headers=headers_consulta,
+        json={"clasificacion": "BIOLOGICO", "descripcion": "X"},
+    )
+    assert post_peligro.status_code == 403
+    assert post_peligro.json()["codigo"] == "ACCESO_DENEGADO"
+
+    post_control = await cliente_async.post(
+        f"/api/v1/evaluaciones-riesgo/{uuid4()}/controles",
+        headers=headers_consulta,
+        json={"tipo": "EPP", "descripcion": "Casco"},
+    )
+    assert post_control.status_code == 403
+    assert post_control.json()["codigo"] == "ACCESO_DENEGADO"
+
 
 async def test_should_devolver_404_when_recursos_inexistentes(
     cliente_async: AsyncClient,
@@ -210,6 +226,22 @@ async def test_should_devolver_404_when_recursos_inexistentes(
     )
     assert delete_control.status_code == 404
     assert delete_control.json()["codigo"] == "CONTROL_NO_ENCONTRADO"
+
+    patch_proceso = await cliente_async.patch(
+        f"/api/v1/procesos-actividades/{fantasma}",
+        headers=headers,
+        json={"nombre": "Fantasma", "es_rutinaria": True},
+    )
+    assert patch_proceso.status_code == 404
+    assert patch_proceso.json()["codigo"] == "PROCESO_NO_ENCONTRADO"
+
+    post_peligro_fantasma = await cliente_async.post(
+        f"/api/v1/procesos-actividades/{fantasma}/peligros",
+        headers=headers,
+        json={"clasificacion": "FISICO", "descripcion": "X"},
+    )
+    assert post_peligro_fantasma.status_code == 404
+    assert post_peligro_fantasma.json()["codigo"] == "PROCESO_NO_ENCONTRADO"
 
     empresa_id = await _crear_empresa(cliente_async, headers)
     proceso_real = await cliente_async.post(

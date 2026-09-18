@@ -109,3 +109,14 @@ async def test_should_responder_401_when_token_mal_firmado(
 
     assert respuesta.status_code == 401
     _assert_respuesta_error(respuesta.json(), "TOKEN_INVALIDO")
+
+
+async def test_should_responder_422_when_body_malformado(
+    cliente_async: AsyncClient,
+) -> None:
+    respuesta = await cliente_async.post("/api/v1/auth/refresh", json={})
+
+    assert respuesta.status_code == 422
+    body = respuesta.json()
+    assert body["exito"] is False
+    assert isinstance(body["mensaje"], str)
