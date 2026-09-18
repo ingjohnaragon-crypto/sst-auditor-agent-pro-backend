@@ -83,6 +83,7 @@ async def test_should_completar_flujo_matriz_when_datos_validos(
     assert recal.json()["nivel_probabilidad"] == 0
     assert recal.json()["nivel_riesgo"] == 0
     assert recal.json()["interpretacion_nr"] == "IV"
+    assert recal.json()["aceptabilidad"] == "ACEPTABLE"
 
     control = await cliente_async.post(
         f"/api/v1/evaluaciones-riesgo/{evaluacion_id}/controles",
@@ -102,6 +103,7 @@ async def test_should_completar_flujo_matriz_when_datos_validos(
     assert data["procesos"][0]["proceso"]["nombre"] == "Soldadura"
     assert len(data["procesos"][0]["peligros"]) == 1
     assert data["procesos"][0]["peligros"][0]["evaluacion"]["nivel_riesgo"] == 0
+    assert data["procesos"][0]["peligros"][0]["evaluacion"]["aceptabilidad"] == "ACEPTABLE"
     assert len(data["procesos"][0]["peligros"][0]["controles"]) == 1
 
     borrado = await cliente_async.delete(
@@ -308,6 +310,8 @@ async def test_should_devolver_422_when_body_incluye_derivados(
             "nivel_consecuencia": 10,
             "nivel_probabilidad": 99,
             "nivel_riesgo": 999,
+            "interpretacion_nr": "I",
+            "aceptabilidad": "NO_ACEPTABLE",
         },
     )
     assert resp.status_code == 422
