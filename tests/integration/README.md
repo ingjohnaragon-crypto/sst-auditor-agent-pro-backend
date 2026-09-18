@@ -29,6 +29,7 @@ pertenecen a SP-147 (`tests/unit/domain/services/`).
 | `.../calificaciones/{id}` | PUT | `test_autoevaluacion_*.py` | 200, 403, 404, 409, 422 |
 | `.../finalizar` | POST | `test_autoevaluacion_*.py` | 200, 403, 409 |
 | Matriz GTC 45 | CRUD anidado | `test_matriz_riesgos.py` | 200/201/204, 401, 403, 404, 422 |
+| `PUT .../peligros/{id}/evaluacion` | PUT | `test_matriz_riesgos.py` | NP = ND×NE (201/200); extra `nivel_probabilidad` → 422 `ERROR_VALIDACION` (SP-199) |
 
 Contrato de error esperado: `exito`, `codigo`, `mensaje` (y `detalle` opcional).
 
