@@ -1,0 +1,185 @@
+# Ticket enriquecido: SP-157 — Desarrollar suites de pruebas unitarias backend (Pytest)
+
+## Descripción original
+<!-- jira-skip -->
+Escribir pruebas automatizadas para todos los endpoints clave.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+Auditar, completar y consolidar las suites de pruebas HTTP (Pytest + httpx `AsyncClient`) de los endpoints clave del backend FastAPI. El repositorio **ya incluye** cobertura sustancial de autenticación, autoevaluación Resolución 0312, matriz GTC 45, empresas y estándares mínimos, además de un paso de CI que ejecuta `pytest tests/ -v` con umbral global del 90 % vía `pyproject.toml`.
+
+Esta historia **no debe reescribir** lo existente ni duplicar SP-147 (pruebas de utilidades matemáticas de dominio). El alcance es:
+
+- Inventariar endpoints publicados bajo `/api/v1` y mapear cada uno a pruebas existentes.
+- Cerrar brechas detectadas (casos felices, 401/403/404/422, RBAC por rol).
+- Documentar la matriz de cobertura de endpoints.
+- Endurecer la ejecución automática en CI para que falle de forma explícita ante regresiones de pruebas o cobertura.
+
+Endpoints clave en alcance:
+
+- Autenticación: `POST /auth/login`, `POST /auth/refresh`, `GET /auth/yo` y dependencias de roles.
+- Empresas: `POST /empresas`, `GET /empresas`, `GET /empresas/{id}`.
+- Estándares mínimos: `GET /estandares-minimos` (con filtro `ciclo_phva`).
+- Autoevaluaciones: crear, listar, detalle, calificar y finalizar.
+- Matriz GTC 45: matriz agregada, procesos, peligros, evaluación y controles (CRUD y errores).
+
+Las pruebas de integración deben usar la DB de prueba y semillas existentes (`cliente_async`, `usuarios_semilla`, catálogo de estándares). Preferir ampliar archivos bajo `tests/integration/` antes de crear suites paralelas.
+
+## Criterios de aceptación
+- [ ] Existe un inventario documentado de endpoints clave vs. archivos/casos de prueba.
+- [ ] Cada endpoint clave tiene al menos un caso feliz y un caso de error HTTP relevante (401, 403, 404 o 422 según aplique).
+- [ ] Login, refresh y `/auth/yo` cubren éxito, credenciales inválidas, token inválido/expirado y validación de body.
+- [ ] RBAC verifica denegación 403 para roles no autorizados en al menos un recurso de escritura SST.
+- [ ] Autoevaluación 0312 cubre flujo completo y errores (empresa inexistente, calificación inválida, finalizar indebido).
+- [ ] Matriz GTC 45 cubre CRUD anidado, upsert de evaluación, 404 y rechazo de escritura para `CONSULTA`.
+- [ ] Empresas y estándares mínimos quedan cubiertos de forma explícita (no solo como setup de otros flujos).
+- [ ] `pytest` en CI falla si hay fallos o si la cobertura global baja del 90 %.
+- [ ] El workflow de CI nombra el paso de pruebas de forma clara y publica un resumen de cobertura en el log.
+- [ ] No se agregan dependencias nuevas de testing; se reutilizan pytest, pytest-asyncio, pytest-cov y httpx.
+- [ ] `ruff check src tests` y `mypy src` pasan sin errores nuevos.
+- [ ] La documentación distingue unitarias de dominio (SP-147) vs. integración HTTP (SP-157).
+
+## Campos y endpoints
+No se crean endpoints ni modelos de dominio. Solo se prueban contratos existentes.
+
+Inventario de referencia (rutas bajo el prefijo de API configurado, típicamente `/api/v1`):
+
+- Auth
+  - `POST /auth/login` → 200 tokens; 401 credenciales; 422 body inválido.
+  - `POST /auth/refresh` → 200 tokens; 401 refresh inválido/revocado.
+  - `GET /auth/yo` → 200 usuario; 401 sin token o token inválido.
+- Empresas
+  - `POST /empresas` → 201; 409 NIT/correo duplicado; 401/403.
+  - `GET /empresas` → 200 listado; 401.
+  - `GET /empresas/{id}` → 200; 404.
+- Estándares
+  - `GET /estandares-minimos` → 200; filtro `ciclo_phva` válido/inválido.
+- Autoevaluaciones
+  - `POST /autoevaluaciones` → 201.
+  - `GET /autoevaluaciones` y `GET /autoevaluaciones/{id}` → 200/404.
+  - `PUT .../calificaciones/{estandar_id}` → 200/422.
+  - `POST .../finalizar` → 200/422 según reglas de negocio.
+- Matriz GTC 45
+  - `GET /empresas/{id}/matriz-riesgos`
+  - CRUD de `procesos-actividades`, `peligros`, `evaluacion`, `controles-riesgo`
+  - Errores 404/403/422 ya parcialmente cubiertos en `tests/integration/test_matriz_riesgos.py`
+
+Archivos de prueba existentes a reutilizar o ampliar:
+
+- `tests/integration/test_auth_login.py`
+- `tests/integration/test_auth_refresh.py`
+- `tests/integration/test_auth_yo.py`
+- `tests/integration/test_requerir_roles.py`
+- `tests/integration/test_autoevaluacion_flujo.py`
+- `tests/integration/test_autoevaluacion_errores.py`
+- `tests/integration/test_matriz_riesgos.py`
+- `tests/integration/helpers_auth.py`
+- `tests/integration/conftest.py`
+
+## Archivos a crear o modificar
+- `tests/integration/README.md` — Documentación — Crear matriz endpoint → prueba → códigos HTTP.
+- `tests/integration/test_empresas.py` — Pruebas — Crear o consolidar casos dedicados de empresas si el inventario detecta huecos.
+- `tests/integration/test_estandares.py` — Pruebas — Crear suite dedicada si los casos actuales solo viven embebidos en autoevaluación.
+- `tests/integration/test_auth_*.py` / `test_requerir_roles.py` — Pruebas — Ampliar únicamente brechas reales.
+- `tests/integration/test_autoevaluacion_*.py` — Pruebas — Completar casos faltantes del flujo 0312.
+- `tests/integration/test_matriz_riesgos.py` — Pruebas — Completar rutas CRUD/errores no cubiertas.
+- `.github/workflows/ci.yml` — CI — Endurecer paso de pruebas (nombre, resumen de cobertura, fallo explícito por umbral).
+- `ai-specs/specs/development_guide.md` — Documentación — Enlazar la matriz HTTP y aclarar diferencia con SP-147.
+- `pyproject.toml` — Configuración — Solo si hace falta marcar `unit`/`integration` o ajustar reportes; no bajar el umbral del 90 %.
+
+## Casos de prueba unitarios
+Aunque el ticket habla de “unitarias”, en este backend los endpoints se validan como **integración HTTP**. Casos mínimos a verificar o añadir:
+
+- Auth: login OK; correo inexistente y contraseña incorrecta con mismo mensaje; usuario inactivo; body 422; refresh OK e inválido; `/auth/yo` con y sin Bearer.
+- Roles: `CONSULTA` no puede escribir recursos SST; `AUDITOR_SST`/`ADMINISTRADOR` sí.
+- Empresas: crear, listar, obtener por id, 404, conflicto de unicidad, 401 sin token.
+- Estándares: listado completo y filtro PHVA válido/inválido.
+- Autoevaluación: crear → calificar → finalizar → consultar; errores de estado y recursos fantasma.
+- Matriz: crear proceso/peligro/evaluación/control; patch/delete; matriz agregada; 404; 403 consulta.
+- Contrato de error: `exito=false`, `codigo`, `mensaje` en respuestas de dominio/validación.
+- Regresión: la suite completa mantiene cobertura global ≥ 90 %.
+
+## Requisitos no funcionales
+- Python 3.12, pytest-asyncio, httpx AsyncClient.
+- Pruebas deterministas, aisladas por fixtures y sin depender de servicios externos reales.
+- Tiempo de CI razonable; evitar duplicar el mismo flujo en varios archivos.
+- Cobertura global mínima 90 % (`--cov-fail-under=90`).
+- Nombres `test_should_<resultado>_when_<condicion>`.
+- Sin secretos en fixtures; contraseñas solo de semillas de prueba.
+- No modificar contratos de API salvo que una prueba demuestre un defecto real (fuera de alcance salvo hotfix mínimo con regresión).
+
+## Puntos de historia
+<!-- STORY_POINTS:8 -->
+**8** — Gran parte de la suite ya existe; el esfuerzo está en auditoría de brechas, consolidación de empresas/estándares, documentación de matriz HTTP, endurecimiento de CI y verificación integral sin regresiones.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+<!-- SUBTASK:SP-226 -->
+### Subtarea: SP-226 — Escribir pruebas unitarias para endpoints de autenticación
+
+#### Descripción original
+<!-- jira-skip -->
+Cubrir con Pytest los endpoints de login, refresh y validación de roles.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Auditar `tests/integration/test_auth_login.py`, `test_auth_refresh.py`, `test_auth_yo.py` y `test_requerir_roles.py`. Completar únicamente los huecos: estados HTTP faltantes, mensajes sin enumeración de usuarios, expiración/revocación de refresh si aplica, y al menos un caso 403 de RBAC sobre un endpoint de escritura SST. Reutilizar `helpers_auth.py` y `usuarios_semilla`.
+
+#### Criterios de aceptación
+- [ ] Login, refresh y `/auth/yo` tienen casos de éxito y error documentados en la matriz.
+- [ ] No se filtran hashes ni se enumeran usuarios por mensajes distintos.
+- [ ] Existe prueba explícita de denegación por rol insuficiente.
+- [ ] No se duplican casos ya cubiertos; solo se añaden brechas.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Base sólida ya presente; foco en auditoría RBAC y huecos residuales.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-226 -->
+
+<!-- SUBTASK:SP-227 -->
+### Subtarea: SP-227 — Escribir pruebas unitarias para endpoints de evaluación y matriz de riesgos
+
+#### Descripción original
+<!-- jira-skip -->
+Cubrir con Pytest los endpoints CRUD de autoevaluación 0312 y matriz GTC 45.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Auditar `test_autoevaluacion_flujo.py`, `test_autoevaluacion_errores.py` y `test_matriz_riesgos.py`. Completar rutas o códigos HTTP no ejercitados (por ejemplo empresas/estándares como suites dedicadas, o verbos CRUD de matriz faltantes). Mantener el contrato de error uniforme y la regla de solo lectura para `CONSULTA`.
+
+#### Criterios de aceptación
+- [ ] Flujo 0312 feliz y de error cubiertos de extremo a extremo.
+- [ ] Matriz GTC 45 cubre lectura agregada y mutaciones principales con CASCADE/404.
+- [ ] Empresas y estándares mínimos tienen cobertura explícita.
+- [ ] RBAC de escritura SST verificado en al menos un recurso de matriz o autoevaluación.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Suites grandes ya existen; el valor está en cerrar huecos y consolidar.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-227 -->
+
+<!-- SUBTASK:SP-228 -->
+### Subtarea: SP-228 — Configurar ejecución automática de pruebas en CI
+
+#### Descripción original
+<!-- jira-skip -->
+Integrar la suite de Pytest al pipeline de integración continua.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+El workflow `.github/workflows/ci.yml` ya ejecuta `pytest tests/ -v` (paso “Run tests with coverage”) y hereda `--cov-fail-under=90` desde `pyproject.toml`. Esta subtarea endurece esa integración: confirmar fallo por cobertura, asegurar que el log muestre el TOTAL de cobertura, y opcionalmente añadir pasos de `ruff check` / `mypy` si no alargan el pipeline de forma injustificada. Documentar el comando exacto que CI ejecuta.
+
+#### Criterios de aceptación
+- [ ] Push/PR a `develop`/`main` ejecuta Pytest automáticamente.
+- [ ] CI falla si hay tests en rojo o cobertura < 90 %.
+- [ ] El log de CI muestra el resumen de cobertura (`TOTAL` / fail-under).
+- [ ] No se introducen runners ni herramientas de cobertura duplicadas.
+- [ ] La guía de desarrollo menciona el paso de CI y la matriz de endpoints.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — Integración base ya hecha en SP-147; requiere verificación y endurecimiento documental/operativo.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-228 -->

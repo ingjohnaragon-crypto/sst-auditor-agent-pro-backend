@@ -1,6 +1,11 @@
 """Pruebas de integración de GET /api/v1/auth/yo."""
 
+from datetime import UTC, datetime, timedelta
+from uuid import uuid4
+
+import jwt
 from httpx import AsyncClient
+from src.infrastructure.config.settings import get_settings
 
 from tests.integration.conftest import UsuariosSemilla
 
@@ -70,3 +75,29 @@ async def test_should_responder_401_when_token_refresco_como_bearer(
 
     assert respuesta.status_code == 401
     _assert_respuesta_error(respuesta.json(), "TOKEN_INVALIDO")
+
+
+async def test_should_responder_401_when_token_acceso_expirado(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+) -> None:
+    tokens = await _login(cliente_async, usuarios_semilla)
+    settings = get_settings()
+    claims = jwt.decode(
+        str(tokens["token_acceso"]),
+        settings.jwt_secreto,
+        algorithms=["HS256"],
+    )
+    ahora = datetime.now(UTC)
+    claims["iat"] = ahora - timedelta(hours=2)
+    claims["exp"] = ahora - timedelta(hours=1)
+    claims["jti"] = str(uuid4())
+    token_expirado = jwt.encode(claims, settings.jwt_secreto, algorithm="HS256")
+
+    respuesta = await cliente_async.get(
+        "/api/v1/auth/yo",
+        headers={"Authorization": f"Bearer {token_expirado}"},
+    )
+
+    assert respuesta.status_code == 401
+    _assert_respuesta_error(respuesta.json(), "TOKEN_EXPIRADO")
