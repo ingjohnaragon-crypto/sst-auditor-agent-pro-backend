@@ -30,6 +30,7 @@ pertenecen a SP-147 (`tests/unit/domain/services/`).
 | `.../finalizar` | POST | `test_autoevaluacion_*.py` | 200, 403, 409 |
 | Matriz GTC 45 | CRUD anidado | `test_matriz_riesgos.py` | 200/201/204, 401, 403, 404, 422 |
 | `PUT .../peligros/{id}/evaluacion` | PUT | `test_matriz_riesgos.py` | NP = ND×NE (201/200); extra `nivel_probabilidad` → 422 `ERROR_VALIDACION` (SP-199) |
+| `PUT .../peligros/{id}/evaluacion` | PUT | `test_matriz_riesgos.py` | NR/I–IV/aceptabilidad (201/200 D1 ACEPTABLE); extra derivados → 422 (SP-200) |
 
 Contrato de error esperado: `exito`, `codigo`, `mensaje` (y `detalle` opcional).
 

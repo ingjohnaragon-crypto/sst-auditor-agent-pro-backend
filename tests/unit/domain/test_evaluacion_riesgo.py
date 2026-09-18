@@ -4,8 +4,9 @@ from uuid import uuid4
 
 import pytest
 from src.domain.exceptions.matriz_riesgo import ValorGtcInvalidoError
-from src.domain.models.evaluacion_riesgo import EvaluacionRiesgo
+from src.domain.models.evaluacion_riesgo import EvaluacionRiesgo, interpretar_nr
 from src.domain.models.gtc45 import (
+    ACEPTABILIDAD_POR_INTERPRETACION,
     ND_VALIDOS,
     NE_VALIDOS,
     AceptabilidadRiesgo,
@@ -82,6 +83,7 @@ def test_should_recalcular_derivados_when_put() -> None:
     assert ev.nivel_probabilidad == 0
     assert ev.nivel_riesgo == 0
     assert ev.interpretacion_nr == InterpretacionNR.IV
+    assert ev.aceptabilidad == AceptabilidadRiesgo.ACEPTABLE
 
 
 def test_should_actualizar_np_when_recalcular_nd_ne() -> None:
@@ -89,3 +91,40 @@ def test_should_actualizar_np_when_recalcular_nd_ne() -> None:
     ev.id = uuid4()
     ev.recalcular(6, 3, 25)
     assert ev.nivel_probabilidad == 18
+    assert ev.nivel_riesgo == 450
+    assert ev.interpretacion_nr == InterpretacionNR.II
+    assert ev.aceptabilidad == AceptabilidadRiesgo.ACEPTABLE_CON_CONTROL
+
+
+@pytest.mark.parametrize(
+    ("nr", "interpretacion"),
+    [
+        (0, InterpretacionNR.IV),
+        (20, InterpretacionNR.IV),
+        (40, InterpretacionNR.III),
+        (120, InterpretacionNR.III),
+        (150, InterpretacionNR.II),
+        (500, InterpretacionNR.II),
+        (600, InterpretacionNR.I),
+        (4000, InterpretacionNR.I),
+    ],
+)
+def test_should_interpretar_bordes_a3_when_nr_en_rango(
+    nr: int, interpretacion: InterpretacionNR
+) -> None:
+    assert interpretar_nr(nr) == interpretacion
+
+
+def test_should_mapear_aceptabilidad_when_interpretacion_a3() -> None:
+    assert ACEPTABILIDAD_POR_INTERPRETACION[InterpretacionNR.I] == AceptabilidadRiesgo.NO_ACEPTABLE
+    assert (
+        ACEPTABILIDAD_POR_INTERPRETACION[InterpretacionNR.II]
+        == AceptabilidadRiesgo.ACEPTABLE_CON_CONTROL
+    )
+    assert ACEPTABILIDAD_POR_INTERPRETACION[InterpretacionNR.III] == AceptabilidadRiesgo.MEJORABLE
+    assert ACEPTABILIDAD_POR_INTERPRETACION[InterpretacionNR.IV] == AceptabilidadRiesgo.ACEPTABLE
+
+
+def test_should_lanzar_when_nr_fuera_de_tabla_a3() -> None:
+    with pytest.raises(ValorGtcInvalidoError, match="tabla A.3"):
+        interpretar_nr(21)
