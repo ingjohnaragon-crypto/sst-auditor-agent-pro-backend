@@ -85,7 +85,7 @@ across multiple Jira projects). **Never commit `.env`.**
 
 ```bash
 os-stack --list && os-stack python-fastapi   # or java-spring, node-express, go-gin, frontend-react, frontend-angular
-os-agent --list && os-agent claude-code
+os-agent --list && os-agent cursor
 os-language --list && os-language en          # or es
 ```
 

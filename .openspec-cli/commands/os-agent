@@ -140,14 +140,20 @@ os_success "Active agent switched to: $NEW_AGENT"
 os_load_agent
 os_print_agent
 
-if [ "$OS_AGENT_DELIVERY" = "cli" ]; then
-  os_divider
-  os_info "CLI mode: prompts will be sent directly to $OS_AGENT_COMMAND"
-  if ! command -v "$OS_AGENT_COMMAND" > /dev/null 2>&1; then
-    os_warn "$OS_AGENT_COMMAND not found in PATH — install it before using os-plan"
-  fi
-else
-  os_divider
-  os_info "Clipboard mode: prompts will be copied for manual paste"
-fi
+os_divider
+case "$OS_AGENT_DELIVERY" in
+  cli)
+    os_info "CLI mode: prompts will be sent directly to $OS_AGENT_COMMAND"
+    if ! command -v "$OS_AGENT_COMMAND" > /dev/null 2>&1; then
+      os_warn "$OS_AGENT_COMMAND not found in PATH — install it before using os-plan"
+    fi
+    ;;
+  file)
+    os_info "File mode: prompts in .openspec-cli/.last-prompt.md for Cursor Agent"
+    os_info "No clipboard / no interactive waits — use @.openspec-cli/.last-prompt.md"
+    ;;
+  *)
+    os_info "Clipboard mode: prompts will be copied for manual paste"
+    ;;
+esac
 os_divider

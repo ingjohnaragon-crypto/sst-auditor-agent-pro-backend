@@ -135,10 +135,13 @@ os_divider
 # os-develop is different: the AI writes code directly into files.
 os_deliver_prompt_autonomous "$PROMPT_FILE"
 
-if [ "${OS_AGENT_DELIVERY:-clipboard}" = "cli" ]; then
+if [ "${OS_AGENT_DELIVERY:-file}" = "cli" ]; then
   os_divider
   os_success "Implementation complete — review the changes:"
   git status --short
+elif [ "${OS_AGENT_HANDOFF:-0}" = "1" ]; then
+  os_divider
+  os_info "Cursor: ejecuta @.openspec-cli/.last-prompt.md y implementa en esta rama."
 fi
 
 os_divider

@@ -96,7 +96,7 @@ os-review-fix PR_NUMBER                # fix automático si REQUEST CHANGES + re
 
 ```bash
 os-stack python-fastapi
-os-agent claude-code
+os-agent cursor
 
 os-create-ticket --hu
 
@@ -137,9 +137,9 @@ frontend-angular        # Angular
 
 | Agente | Entrega | Notas |
 |---|---|---|
+| `cursor` | Archivo (`.last-prompt.md`) | **Default** — Cursor Agent ejecuta el prompt sin clipboard |
 | `copilot` | Portapapeles | Pegar manualmente en VS Code Copilot Chat |
 | `claude-code` | CLI directo | Totalmente automático sin copy-paste |
-| `cursor` | Portapapeles | Pegar manualmente en Cursor |
 | `windsurf` | Portapapeles | Pegar manualmente en Windsurf |
 | `aider` | CLI directo | Automático via terminal |
 
