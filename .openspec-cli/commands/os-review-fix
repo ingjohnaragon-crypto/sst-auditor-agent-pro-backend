@@ -13,10 +13,12 @@ set -e
 
 PR_NUMBER="${1:-}"
 AUTO_COMMIT=true
+CONTINUE_AFTER_HANDOFF=false
 
 for arg in "$@"; do
   case "$arg" in
     --no-commit) AUTO_COMMIT=false ;;
+    --continue) CONTINUE_AFTER_HANDOFF=true ;;
   esac
 done
 
@@ -27,7 +29,7 @@ CLI_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 . "$CLI_DIR/lib/language.sh"
 
 if [ -z "$PR_NUMBER" ]; then
-  os_error "Usage: os-review-fix <PR-NUMBER> [--no-commit]"
+  os_error "Usage: os-review-fix <PR-NUMBER> [--no-commit] [--continue]"
   exit 1
 fi
 
@@ -189,10 +191,23 @@ printf '%s' "$FIX_PROMPT" > "$FIX_PROMPT_FILE"
 
 # ── Deliver fix prompt to agent ───────────────────────────────
 os_divider
-os_deliver_prompt_autonomous "$FIX_PROMPT_FILE" "Press Enter when done..."
+if [ "$CONTINUE_AFTER_HANDOFF" = "true" ]; then
+  os_info "Continuando tras handoff de Cursor (--continue)."
+else
+  os_deliver_prompt_autonomous "$FIX_PROMPT_FILE" \
+    "vuelve a correr: os-review-fix $PR_NUMBER --continue"
 
-if [ "${OS_AGENT_DELIVERY:-clipboard}" = "cli" ]; then
-  os_success "Agent completed fixes."
+  if [ "${OS_AGENT_DELIVERY:-file}" = "cli" ]; then
+    os_success "Agent completed fixes."
+  fi
+
+  if [ "${OS_AGENT_HANDOFF:-0}" = "1" ]; then
+    os_success "Prompt de fix listo para Cursor."
+    os_info "Ejecuta @.openspec-cli/.fix-prompt.md en el Agent chat."
+    os_info "Cuando terminen los fixes: os-review-fix $PR_NUMBER --continue"
+    os_divider
+    exit 0
+  fi
 fi
 
 # ── Run tests ─────────────────────────────────────────────────

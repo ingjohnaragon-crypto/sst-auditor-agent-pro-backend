@@ -1,0 +1,38 @@
+---
+description: Ejecuta comandos OpenSpec (os-*) leyendo prompts en .openspec-cli/ para Cursor Agent
+alwaysApply: true
+---
+
+# OpenSpec + Cursor (delivery: file)
+
+Cuando el usuario escriba un comando OpenSpec (`os-enrich`, `os-plan`, `os-develop`,
+`os-commit`, `os-review`, `os-review-apply`, `os-review-fix`, `os-agent`, etc.)
+o pida continuar el flujo OpenSpec:
+
+## Flujo rápido
+
+1. Si el comando prepara contexto (Jira, rama, diff), **ejecútalo en la terminal**
+   del repo correspondiente (`sst-auditor-agent-pro-backend` o `-frontend`).
+2. Lee de inmediato el prompt generado:
+   - Principal: `.openspec-cli/.last-prompt.md`
+   - Fixes de review: `.openspec-cli/.fix-prompt.md`
+3. **Ejecuta el prompt completo** (no lo resumas ni pidas pegarlo).
+4. Escribe los artefactos que el prompt indique, por ejemplo:
+   - Enrich → `ai-specs/changes/enriquecimientos/<TICKET>/<TICKET>_enriched.md`
+     y `.openspec-cli/.enriched-content.md`
+   - Plan → `ai-specs/changes/planes/<TICKET>/<TICKET>_backend.md` (o `_frontend.md`)
+   - Review → `.openspec-cli/.review-output.md`
+5. No dependas de Claude Code ni del portapapeles.
+
+## Handoffs sin bloqueo
+
+Con `agent: cursor` / `delivery: file`, los comandos **no esperan Enter** ni paste
+por stdin. Si el CLI dice que el prompt está listo:
+
+- Ejecuta el `.last-prompt.md` / `.fix-prompt.md` ahora.
+- Para `os-review-fix` tras aplicar fixes: corre
+  `os-review-fix <N> --continue`.
+
+## Agente activo
+
+Preferir `os-agent cursor`. Claude Code (`cli`) es opcional; no es el default.

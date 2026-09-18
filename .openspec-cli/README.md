@@ -45,35 +45,33 @@ JIRA_TOKEN=your_jira_api_token
 ```bash
 # 1. Select your AI agent and stack
 os-agent --list
-os-agent copilot          # or claude-code, cursor, windsurf, aider
+os-agent cursor            # file delivery — Cursor Agent (default)
 os-stack --list
 os-stack python-fastapi
 
 # 2. Enrich the Jira ticket with technical detail
 os-enrich KAN-6
-cat .openspec-cli/.last-prompt.md | clip   # Windows
-# Paste into your AI agent → copy output
+# → Prompt in .openspec-cli/.last-prompt.md
+# → In Cursor Agent: @.openspec-cli/.last-prompt.md (writes enriched md)
 
-# 3. Save output and upload to Jira
-notepad .openspec-cli/.enriched-content.md  # paste AI output here
-os-enrich-apply KAN-6                        # uploads to Jira automatically
+# 3. Upload enrichment to Jira
+os-enrich-apply KAN-6
 
 # 4. Generate implementation plan
 os-plan KAN-6
-# Prompt is delivered automatically to your active agent
-# → AI generates ai-specs/changes/planes/KAN-6/KAN-6_backend.md
+# → Cursor Agent writes ai-specs/changes/planes/KAN-6/KAN-6_backend.md
 
 # 5. Implement
 os-develop KAN-6
-# → AI implements step by step on branch feature/KAN-6-backend
+# → Cursor Agent implements on branch feature/KAN-6-backend
 
 # 6. Commit and open PR
 os-commit KAN-6
 
 # 7. Review the PR
 os-review 1
-notepad .openspec-cli/.review-output.md     # paste AI review output here
-os-review-apply 1                            # publishes review to GitHub
+# → Cursor Agent writes .openspec-cli/.review-output.md
+os-review-apply 1
 ```
 
 ---
@@ -86,12 +84,17 @@ Lists available AI agents or switches the active agent.
 
 ```bash
 os-agent --list          # show all agents with delivery method
+os-agent cursor          # file delivery (default) — Cursor Agent reads .last-prompt.md
 os-agent copilot         # clipboard delivery (paste manually in VS Code)
-os-agent cursor          # clipboard delivery (paste manually in Cursor)
 os-agent windsurf        # clipboard delivery (paste manually in Windsurf)
 os-agent claude-code     # CLI delivery (sends prompt directly via terminal)
 os-agent aider           # CLI delivery (sends prompt directly via terminal)
 ```
+
+**Cursor (`delivery: file`)**: no clipboard, no `read` waits. Commands write
+`.openspec-cli/.last-prompt.md` and exit; the Cursor rule
+`.cursor/rules/openspec-cursor.mdc` tells the Agent to execute that prompt.
+For `os-review-fix` after fixes: `os-review-fix <N> --continue`.
 
 ### `os-stack [--list | <stack-name>]`
 
@@ -168,6 +171,13 @@ os-review-apply 1 my-review.md             # or specify a custom file
 
 Stages relevant changes, generates a conventional commit message,
 pushes and opens a PR via GitHub CLI.
+
+On **Python** stacks (`python-fastapi`, etc.) it runs `ruff format` on staged
+`.py` files **before** `git commit`, so the pre-commit `ruff-format` hook does
+not abort the commit after rewriting files.
+
+The PR body includes a real summary: plan blurb (if present), files grouped by
+area (código / pruebas / CI / docs), and `git diff --stat`.
 
 ```bash
 os-commit KAN-6

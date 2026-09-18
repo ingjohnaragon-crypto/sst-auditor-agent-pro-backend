@@ -154,6 +154,15 @@ os_divider
 
 # ── Deliver and capture output (temp working file only — GitHub is the archive) ──
 os_deliver_prompt_capture "$PROMPT_FILE" "$OUTPUT_FILE"
+
+if [ "${OS_AGENT_HANDOFF:-0}" = "1" ] && [ ! -s "$OUTPUT_FILE" ]; then
+  os_success "Prompt de review preparado para Cursor."
+  os_info "Ejecuta @.openspec-cli/.last-prompt.md y guarda en .openspec-cli/.review-output.md"
+  os_info "Luego: os-review-apply $PR_NUMBER"
+  os_divider
+  exit 0
+fi
+
 os_success "Review saved!"
 os_info "Working : .openspec-cli/.review-output.md"
 os_info "Note    : Reviews are published to GitHub via os-review-apply (no local archive)"

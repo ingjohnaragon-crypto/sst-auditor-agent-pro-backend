@@ -105,6 +105,14 @@ As a [role], I want [capability], so that [benefit].
   echo "$PROMPT" > "$PROMPT_FILE"
 
   os_deliver_prompt_capture "$PROMPT_FILE" "$OUTPUT_FILE"
+
+  if [ "${OS_AGENT_HANDOFF:-0}" = "1" ] && [ ! -s "$OUTPUT_FILE" ]; then
+    os_success "Prompt HU listo para Cursor: @.openspec-cli/.last-prompt.md"
+    os_info "Escribe la HU en .openspec-cli/.last-ai-output.md y re-ejecuta os-create-ticket --hu"
+    os_divider
+    exit 0
+  fi
+
   DESCRIPTION=$(cat "$OUTPUT_FILE" 2>/dev/null || echo "")
 
   if [ -z "$DESCRIPTION" ]; then
