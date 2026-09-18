@@ -3,15 +3,34 @@
 # Jira Cloud REST API v3 helpers.
 # Requires: curl, py/python3
 
+# Prefer Windows curl.exe in Git Bash — the MSYS curl often hangs on DNS.
+# Always use connect/max timeouts so os-* fails fast instead of freezing.
+os_curl() {
+  _curl_bin="curl"
+  if command -v curl.exe > /dev/null 2>&1; then
+    _curl_bin="curl.exe"
+  fi
+  "$_curl_bin" -sS --connect-timeout 15 --max-time 60 "$@"
+}
+
 # ── Fetch a Jira ticket ──────────────────────────────────────
 os_jira_fetch_ticket() {
   ticket_id="$1"
   os_step "Fetching ticket $ticket_id from Jira..."
 
-  response=$(curl -s \
+  response=$(os_curl \
     -u "$JIRA_EMAIL:$JIRA_TOKEN" \
     -H "Accept: application/json" \
-    "$JIRA_BASE_URL/rest/api/3/issue/$ticket_id")
+    "$JIRA_BASE_URL/rest/api/3/issue/$ticket_id") || {
+    os_error "No se pudo contactar Jira (timeout/DNS). Reintenta o usa PowerShell."
+    os_info  "Host: $JIRA_BASE_URL"
+    exit 1
+  }
+
+  if [ -z "$response" ]; then
+    os_error "Respuesta vacía de Jira al pedir $ticket_id (red/DNS)."
+    exit 1
+  fi
 
   if echo "$response" | grep -q "errorMessages"; then
     msg=$(echo "$response" | py -c \
@@ -63,14 +82,20 @@ os_jira_fetch_subtasks() {
   ticket_id="$1"
   os_step "Fetching subtasks for $ticket_id..."
 
-  response=$(curl -s \
+  response=$(os_curl \
     -u "$JIRA_EMAIL:$JIRA_TOKEN" \
     -H "Accept: application/json" \
     -G \
     --data-urlencode "jql=parent=$ticket_id ORDER BY created ASC" \
     --data-urlencode "fields=summary,status,issuetype,description,assignee" \
     --data-urlencode "maxResults=50" \
-    "$JIRA_BASE_URL/rest/api/3/search/jql")
+    "$JIRA_BASE_URL/rest/api/3/search/jql") || {
+    os_warn "No se pudieron cargar subtareas (timeout/DNS)."
+    JIRA_SUBTASK_KEYS=""
+    JIRA_SUBTASKS_CONTEXT="No subtasks found for this ticket."
+    export JIRA_SUBTASK_KEYS JIRA_SUBTASKS_CONTEXT
+    return 0
+  }
 
   JIRA_SUBTASK_KEYS=$(echo "$response" | py -c \
     "import sys,json; d=json.load(sys.stdin); print(' '.join(i['key'] for i in d.get('issues',[])))" \
@@ -134,7 +159,7 @@ os_jira_print_ticket() {
 # ── Get valid transitions ────────────────────────────────────
 os_jira_get_transitions() {
   ticket_id="$1"
-  curl -s \
+  os_curl \
     -u "$JIRA_EMAIL:$JIRA_TOKEN" \
     -H "Accept: application/json" \
     "$JIRA_BASE_URL/rest/api/3/issue/$ticket_id/transitions" \
@@ -159,7 +184,7 @@ os_jira_transition() {
     return 1
   fi
 
-  result=$(curl -s -o /dev/null -w "%{http_code}" \
+  result=$(os_curl -o /dev/null -w "%{http_code}" \
     -X POST \
     -u "$JIRA_EMAIL:$JIRA_TOKEN" \
     -H "Content-Type: application/json" \
@@ -219,7 +244,7 @@ body = {
 print(json.dumps(body))
 " "$_summary" "$_desc" "$_project" "$_type")
 
-  _response=$(curl -s \
+  _response=$(os_curl \
     -X POST \
     -u "$JIRA_EMAIL:$JIRA_TOKEN" \
     -H "Accept: application/json" \
@@ -255,7 +280,7 @@ os_jira_list_tickets() {
     _jql="project=$_project ORDER BY created DESC"
   fi
 
-  curl -s \
+  os_curl \
     -u "$JIRA_EMAIL:$JIRA_TOKEN" \
     -H "Accept: application/json" \
     -G \
