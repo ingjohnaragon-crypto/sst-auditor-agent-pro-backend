@@ -7,7 +7,13 @@ alwaysApply: true
 
 Cuando el usuario escriba un comando OpenSpec (`os-enrich`, `os-plan`, `os-develop`,
 `os-commit`, `os-review`, `os-review-apply`, `os-review-fix`, `os-agent`, etc.)
-o pida continuar el flujo OpenSpec:
+**en el Agent chat**, o pida continuar el flujo OpenSpec:
+
+## Qué NO hace la consola sola
+
+Si el usuario corrió `os-enrich` / `os-plan` en una terminal externa, el CLI solo
+deja el prompt en disco. **Tú (Cursor Agent) debes leer y ejecutar**
+`.openspec-cli/.last-prompt.md` cuando el usuario lo pida o pegue la salida del CLI.
 
 ## Flujo rápido
 

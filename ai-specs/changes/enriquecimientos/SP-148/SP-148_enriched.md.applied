@@ -1,0 +1,190 @@
+# Ticket enriquecido: SP-148 — SST-HU 3.1: Motor de Cálculo Automatizado GTC 45
+
+## Descripción original
+<!-- jira-skip -->
+Como Responsable de SST, quiero que el sistema calcule automáticamente el Nivel de Probabilidad (NP), el Nivel de Riesgo (NR) y aceptabilidad al ingresar ND, NE y NC, para mitigar fallas humanas de cálculo.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+La feature `matriz-riesgos` (SP-192) ya permite CRUD de procesos/peligros/evaluación/controles. Hoy el diálogo de evaluación envía **solo** ND/NE/NC al backend (`PUT /peligros/{id}/evaluacion`) y los campos derivados llegan en la respuesta. En el formulario **no hay preview** de NP/NR/interpretación/aceptabilidad mientras el usuario elige valores: solo un aviso de que el backend calcula.
+
+Esta historia añade un **motor de cálculo GTC 45 en el frontend** (espejo de las reglas de dominio del backend) para feedback inmediato, más un **semáforo visual** reutilizable:
+
+1. **SP-199** — Cálculo de NP = ND × NE (valores discretos GTC 45).
+2. **SP-200** — Cálculo de NR = NP × NC, interpretación (I–IV) y aceptabilidad.
+3. **SP-201** — Componente semáforo que coloree según interpretación/aceptabilidad en tiempo real.
+
+Fuente de verdad de persistencia: **sigue siendo el backend**. El cliente solo previsualiza; el body de `SolicitudEvaluacion` no debe incluir NP/NR/interpretación/aceptabilidad. Tras guardar, la UI muestra los valores devueltos por la API (pueden coincidir; si discreparan, gana la API).
+
+Reglas a espejar (backend `evaluacion_riesgo.py` / `gtc45.py`):
+
+- ND ∈ {10, 6, 2, 0}; NE ∈ {4, 3, 2, 1}; NC ∈ {100, 60, 25, 10}
+- NP = ND × NE; NR = NP × NC
+- Interpretación NR (tabla A.3): I 600–4000; II 150–500; III 40–120; IV 0–20 (incluye ND=0 → NP=0, NR=0 → IV)
+- Aceptabilidad: I→NO_ACEPTABLE; II→ACEPTABLE_CON_CONTROL; III→MEJORABLE; IV→ACEPTABLE
+
+Fuera de alcance: nuevos endpoints; recalcular en servidor; migrar el formulario a `FormularioDinamico`; signal `input()`/`output()`.
+
+## Criterios de aceptación
+
+- [ ] Existe un servicio puro de cálculo GTC 45 en el frontend que, dados ND/NE/NC válidos, devuelve NP, NR, `interpretacion_nr` y `aceptabilidad` con las mismas reglas que el backend.
+- [ ] Al cambiar ND/NE/NC en el diálogo de evaluación, la UI muestra en tiempo real NP, NR, interpretación y aceptabilidad (preview).
+- [ ] Un componente presentacional de semáforo refleja el color según interpretación (I rojo … IV verde) y se usa en el diálogo de preview (y, si aporta, sustituye el mapeo inline de la página).
+- [ ] `SolicitudEvaluacion` / `guardar()` del diálogo siguen enviando **solo** `nivel_deficiencia`, `nivel_exposicion`, `nivel_consecuencia`.
+- [ ] Valores inválidos o incompletos no inventan resultados: el preview queda vacío o en estado neutro hasta tener ND/NE/NC válidos.
+- [ ] Tests unitarios del servicio de cálculo cubren matriz de casos (incl. ND=0 → IV) y el semáforo/dialogo cubren estados de color.
+- [ ] `npm test` / `npm run test:coverage` verdes (≥ 90 % global).
+
+## Campos y endpoints
+
+No hay API nueva. Contrato existente:
+
+- `PUT /api/v1/peligros/{peligro_id}/evaluacion`
+  - Request: `{ nivel_deficiencia, nivel_exposicion, nivel_consecuencia }`
+  - Response: `EvaluacionRiesgo` con campos derivados (`nivel_probabilidad`, `nivel_riesgo`, `interpretacion_nr`, `aceptabilidad`, …)
+
+Tipos frontend ya en `modelos/matriz-riesgos.model.ts`: `NivelDeficiencia`, `NivelExposicion`, `NivelConsecuencia`, `InterpretacionNR`, `AceptabilidadRiesgo`, `SolicitudEvaluacion`, `EvaluacionRiesgo`.
+
+Resultado de preview sugerido (solo cliente):
+
+```ts
+interface ResultadoCalculoGtc45 {
+  nivel_probabilidad: number;
+  nivel_riesgo: number;
+  interpretacion_nr: InterpretacionNR;
+  aceptabilidad: AceptabilidadRiesgo;
+}
+```
+
+## Archivos a crear o modificar
+
+- `src/app/features/matriz-riesgos/servicios/servicio-calculo-riesgo-gtc45.ts` — Application — Create (motor puro + `.spec.ts`)
+- `src/app/features/matriz-riesgos/modelos/matriz-riesgos.model.ts` — Domain — Modify (tipo `ResultadoCalculoGtc45` si no se define junto al servicio)
+- `src/app/features/matriz-riesgos/componentes/semaforo-riesgo/` — Presentation — Create (`.component.ts|.html|.css|.spec.ts`; `@Input()` interpretación/aceptabilidad; OnPush; sin signal inputs)
+- `src/app/features/matriz-riesgos/componentes/dialogo-formulario-matriz/` — Presentation — Modify (suscribir `valueChanges` del form de evaluación → preview + semáforo)
+- `src/app/features/matriz-riesgos/paginas/pagina-matriz-riesgos/` — Presentation — Modify (opcional: reutilizar semáforo en lugar de `claseInterpretacion` inline)
+- `src/app/features/matriz-riesgos/README.md` — Docs — Modify (documentar preview local vs persistencia backend)
+
+## Casos de prueba unitarios
+
+- Servicio: ND=10, NE=4, NC=100 → NP=40, NR=4000 → I / NO_ACEPTABLE
+- Servicio: ND=2, NE=2, NC=25 → NP=4, NR=100 → III / MEJORABLE (ajustar a rangos exactos A.3)
+- Servicio: ND=0, NE=cualquier, NC=cualquier → NP=0, NR=0 → IV / ACEPTABLE
+- Servicio: valor fuera de conjunto discreto → no lanza silenciosamente; API tipada / guard explícito según diseño
+- Diálogo: al cambiar selects, preview se actualiza sin llamar HTTP
+- Diálogo: `guardar()` emite solo ND/NE/NC
+- Semáforo: clases CSS distintas para I–IV; estado vacío sin interpretación
+
+## Requisitos no funcionales
+
+- Standalone + `ChangeDetectionStrategy.OnPush`; `@Input()`/`@Output()` (no signal inputs).
+- Cálculo síncrono y puro (sin `HttpClient`); fácil de testear sin TestBed de red.
+- Tokens/clases `sst-*` / Tailwind existentes; no inventar paleta fuera del design system.
+- Roles: solo UI/preview; escritura sigue gated por `puedeEscribir` / backend `requerir_roles`.
+- Mantener cobertura Jest ≥ 90 %.
+
+## Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — Feature matriz ya existe; esfuerzo en motor espejo + semáforo + wiring del diálogo; sin API nueva.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-199 -->
+### Subtarea: SP-199 — Implementar cálculo automático de NP (ND x NE)
+
+#### Descripción original
+<!-- jira-skip -->
+Lógica para calcular nivel de probabilidad según las variables dadas.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Implementar en `ServicioCalculoRiesgoGtc45` (o equivalente) la función `calcularNp(nd, ne)` / parte de `calcular(nd, ne, nc)`:
+
+- Validar que ND ∈ {10, 6, 2, 0} y NE ∈ {4, 3, 2, 1} (mismos sets que backend).
+- NP = ND × NE (entero).
+- Exponer NP dentro del resultado de preview consumido por el diálogo.
+- Tests tabla: (10,4)→40; (6,3)→18; (2,1)→2; (0,4)→0.
+
+No persistir NP desde el cliente.
+
+#### Criterios de aceptación
+- [ ] NP se calcula correctamente para todos los pares ND×NE válidos.
+- [ ] ND=0 produce NP=0.
+- [ ] Specs unitarios del servicio cubren la tabla anterior.
+- [ ] El diálogo muestra NP en preview al tener ND y NE.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — Fórmula trivial; foco en tipado, validación de sets y tests.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-199 -->
+
+<!-- SUBTASK:SP-200 -->
+### Subtarea: SP-200 — Implementar matriz cruzada de NR (NP x NC) y Aceptabilidad
+
+#### Descripción original
+<!-- jira-skip -->
+Desarrollar algoritmo de decisión del nivel de riesgo e intervención.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Completar el motor con:
+
+- NR = NP × NC (NC ∈ {100, 60, 25, 10}).
+- `interpretar_nr(NR)` idéntico al backend:
+  - I: 600–4000
+  - II: 150–500
+  - III: 40–120
+  - IV: 0–20
+- Mapa de aceptabilidad por interpretación (I→NO_ACEPTABLE, …, IV→ACEPTABLE).
+- Si NR no cae en ningún rango (no debería con sets discretos), fallar de forma explícita en el servicio (no inventar interpretación).
+
+Integrar resultado completo en el preview del diálogo de evaluación.
+
+#### Criterios de aceptación
+- [ ] NR, interpretación y aceptabilidad coinciden con casos de referencia del backend/dominio.
+- [ ] Caso ND=0 → IV / ACEPTABLE.
+- [ ] Preview en diálogo muestra los cuatro campos derivados.
+- [ ] Specs cubren al menos un caso por interpretación I–IV.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Rangos A.3 + mapa de aceptabilidad + tests de matriz.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-200 -->
+
+<!-- SUBTASK:SP-201 -->
+### Subtarea: SP-201 — Crear semáforo visual de riesgo en Angular
+
+#### Descripción original
+<!-- jira-skip -->
+UI dinámica que cambie de color según los riesgos del formulario en tiempo real.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Crear componente presentacional `SemaforoRiesgoComponent` en `features/matriz-riesgos/componentes/semaforo-riesgo/`:
+
+- Inputs: `interpretacion_nr` (y opcionalmente `aceptabilidad` / etiqueta).
+- Colores alineados a la página actual: I rojo, II naranja, III ámbar, IV esmeralda (Tailwind / tokens `sst-*`).
+- OnPush, standalone, carpeta completa con spec.
+- Usarlo en `dialogo-formulario-matriz` (modo evaluación) ligado al preview del servicio de cálculo.
+- Opcional: reutilizar en `pagina-matriz-riesgos` reemplazando `claseInterpretacion()`.
+
+Accesibilidad: texto visible (p. ej. “Nivel I — NO ACEPTABLE”), no solo color.
+
+#### Criterios de aceptación
+- [ ] El semáforo cambia de color al modificar ND/NE/NC en el formulario.
+- [ ] Hay etiqueta legible además del color.
+- [ ] Specs cubren I–IV y estado sin valor.
+- [ ] No se usan signal `input()`/`output()`.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — UI presentacional + wiring al diálogo; lógica de color acotada.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-201 -->

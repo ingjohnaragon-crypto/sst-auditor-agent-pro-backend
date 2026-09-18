@@ -48,11 +48,21 @@ os_print_file_delivery_hints() {
     os_info  "Output : $_OF"
   fi
   os_divider
-  os_label "  En Cursor Agent:"
-  os_info "1. Abre o menciona: @$_PF"
-  os_info "2. O escribe el comando os-* (la rule OpenSpec lo ejecuta)"
+  os_label "  Importante:"
+  os_info "La consola NO ejecuta el Agent sola. El siguiente paso es en Cursor Chat."
+  os_divider
+  os_label "  En Cursor Agent chat (no la terminal):"
+  os_info "1. Escribe: @.openspec-cli/.last-prompt.md  (o pega la ruta de abajo)"
+  os_info "2. O: ejecuta el last-prompt / continúa os-enrich"
   if [ -n "$_OF" ]; then
-    os_info "3. El agente debe escribir el resultado en: $_OF"
+    os_info "3. El Agent debe escribir el resultado en: $_OF"
+  fi
+  # Best-effort: open the prompt in the editor so it's visible
+  if command -v cursor > /dev/null 2>&1; then
+    cursor "$_PF" > /dev/null 2>&1 || true
+    os_info "Se intentó abrir el prompt en Cursor (CLI cursor)."
+  elif command -v code > /dev/null 2>&1; then
+    code "$_PF" > /dev/null 2>&1 || true
   fi
   os_divider
 }
