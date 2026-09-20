@@ -9,6 +9,7 @@ from src.application.dto.respuesta_autoevaluacion import RespuestaAutoevaluacion
 from src.application.dto.respuesta_calificacion_estandar import (
     RespuestaCalificacionEstandar,
 )
+from src.application.dto.respuesta_cumplimiento_phva import RespuestaCumplimientoPHVA
 from src.application.dto.respuesta_error import RespuestaError
 from src.application.dto.solicitud_calificar_estandar import SolicitudCalificarEstandar
 from src.application.dto.solicitud_crear_autoevaluacion import (
@@ -80,6 +81,29 @@ async def listar_autoevaluaciones(
 ) -> list[RespuestaAutoevaluacion]:
     """Histórico ordenado por fecha desc; sin calificaciones embebidas."""
     return await servicio.listar_por_empresa(empresa_id)
+
+
+@router.get(
+    "/{id}/cumplimiento-phva",
+    status_code=http_status.HTTP_200_OK,
+    response_model=RespuestaCumplimientoPHVA,
+    responses={
+        **RESPUESTAS_ERROR_COMUNES,
+        404: {
+            "model": RespuestaError,
+            "description": "Autoevaluación o empresa inexistente "
+            "(AUTOEVALUACION_NO_ENCONTRADA / EMPRESA_NO_ENCONTRADA)",
+        },
+    },
+    summary="Cumplimiento consolidado por fases PHVA según perfil Res. 0312",
+)
+async def obtener_cumplimiento_phva(
+    id: UUID,
+    _usuario: Usuario = Depends(obtener_usuario_actual),
+    servicio: ServicioAutoevaluaciones = Depends(obtener_servicio_autoevaluaciones),
+) -> RespuestaCumplimientoPHVA:
+    """Preview en vivo o resumen finalizado; ítems sin calificar aportan 0."""
+    return await servicio.obtener_cumplimiento_phva(id)
 
 
 @router.get(
@@ -156,5 +180,5 @@ async def finalizar_autoevaluacion(
     _escritor: Usuario = Depends(requerir_rol_escritor),
     servicio: ServicioAutoevaluaciones = Depends(obtener_servicio_autoevaluaciones),
 ) -> RespuestaAutoevaluacion:
-    """Exige todos los ítems del catálogo; fija `puntaje_total` y plan de mejora."""
+    """Aplica NO_APLICA por perfil, exige el catálogo y fija puntaje/plan de mejora."""
     return await servicio.finalizar(id)

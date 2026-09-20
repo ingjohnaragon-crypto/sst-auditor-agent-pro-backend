@@ -3,9 +3,13 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.cargar_mapa_perfil_estandares import (
+    cargar_mapa_perfil_estandares,
+)
 from src.application.services.servicio_autoevaluaciones import ServicioAutoevaluaciones
 from src.application.services.servicio_empresas import ServicioEmpresas
 from src.domain.exceptions.autoevaluacion import AccesoDenegadoError
+from src.domain.models.perfil_estandares import MapaPerfilEstandares
 from src.domain.models.usuario import RolUsuario, Usuario
 from src.domain.repositories.repositorio_autoevaluacion import RepositorioAutoevaluacion
 from src.domain.repositories.repositorio_empresa import RepositorioEmpresa
@@ -21,6 +25,11 @@ from src.infrastructure.repositories.repositorio_estandar_minimo_sqlalchemy impo
     RepositorioEstandarMinimoSQLAlchemy,
 )
 from src.presentation.dependencies.autenticacion import obtener_usuario_actual
+
+
+def obtener_mapa_perfil_estandares() -> MapaPerfilEstandares:
+    """Carga cacheada del mapa de numerales no aplicables por perfil."""
+    return cargar_mapa_perfil_estandares()
 
 
 def obtener_repositorio_empresa(
@@ -59,12 +68,14 @@ def obtener_servicio_autoevaluaciones(
     repositorio_estandar_minimo: RepositorioEstandarMinimo = Depends(
         obtener_repositorio_estandar_minimo
     ),
+    mapa_perfil: MapaPerfilEstandares = Depends(obtener_mapa_perfil_estandares),
 ) -> ServicioAutoevaluaciones:
-    """Ensambla el servicio de autoevaluaciones con sus tres puertos."""
+    """Ensambla el servicio de autoevaluaciones con puertos y mapa de perfil."""
     return ServicioAutoevaluaciones(
         repositorio_autoevaluacion=repositorio_autoevaluacion,
         repositorio_empresa=repositorio_empresa,
         repositorio_estandar_minimo=repositorio_estandar_minimo,
+        mapa_perfil=mapa_perfil,
     )
 
 
