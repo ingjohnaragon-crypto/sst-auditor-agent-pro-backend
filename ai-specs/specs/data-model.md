@@ -117,6 +117,14 @@ DBML y este documento.
   soporta las tres tablas (7, 21 y 60 ítems) sin cambio de esquema; el
   subconjunto aplicable a cada empresa se resuelve por reglas de negocio a
   partir de `nivel_riesgo_arl` y `numero_trabajadores`.
+- **Perfil Res. 0312 (SP-149)**: las reglas de matching (`min`/`max`
+  trabajadores, riesgos, `fallback`) y el `orden_fases_phva` viven en
+  `scripts/datos/perfil_estandares_res312.json`. El motor resuelve el código
+  de perfil (p. ej. `TABLA_7`) sin un enum cerrado de tablas. Al finalizar,
+  los no exigibles sin calificación reciben `NO_APLICA` con puntaje máximo.
+  `GET .../cumplimiento-phva` agrega % y brecha por fase (preview en vivo).
+  Ampliar la norma: editar el JSON; si aparece una fase nueva, añadirla también
+  a `CicloPHVA` en dominio.
 - **Exclusión de datos sensibles**: las historias clínicas NO se modelan — su
   custodia es exclusiva de la IPS (referencia §2.2). Solo se modelarían
   metadatos de evaluaciones ocupacionales si se requieren, sin contenido clínico.

@@ -243,20 +243,151 @@ async def test_should_lanzar_autoevaluacion_no_encontrada_when_finalizar_inexist
 async def test_should_finalizar_usando_contar_como_total_requerido(
     servicio: ServicioAutoevaluaciones,
     repo_autoevaluacion: AsyncMock,
+    repo_empresa: AsyncMock,
     repo_estandar: AsyncMock,
 ) -> None:
-    auto = construir_autoevaluacion()
+    empresa = construir_empresa()
+    auto = construir_autoevaluacion(empresa_id=empresa.id)
     estandar = construir_estandar()
     auto.calificar(estandar, ResultadoCalificacion.CUMPLE)
     repo_autoevaluacion.buscar_por_id.return_value = auto
-    repo_estandar.contar.return_value = 1
+    repo_empresa.buscar_por_id.return_value = empresa
+    repo_estandar.listar.return_value = [estandar]
     repo_autoevaluacion.guardar.return_value = auto
 
     respuesta = await servicio.finalizar(auto.id)  # type: ignore[arg-type]
 
     assert respuesta.puntaje_total == estandar.valor_porcentual
     assert respuesta.requiere_plan_mejora is True
-    repo_estandar.contar.assert_awaited_once()
+    repo_estandar.listar.assert_awaited_once()
+    repo_empresa.buscar_por_id.assert_awaited_once_with(empresa.id)
+
+
+async def test_should_finalizar_autoasignando_no_aplica_por_perfil(
+    repo_autoevaluacion: AsyncMock,
+    repo_empresa: AsyncMock,
+    repo_estandar: AsyncMock,
+) -> None:
+    from src.domain.models.perfil_estandares import MapaPerfilEstandares
+
+    empresa = construir_empresa()  # 10 trabajadores, riesgo II → TABLA_7
+    auto = construir_autoevaluacion(empresa_id=empresa.id)
+    exigible = construir_estandar()
+    no_aplica = EstandarMinimo(
+        id=uuid4(),
+        ciclo_phva=CicloPHVA.ACTUAR,
+        numeral="7.1.4",
+        descripcion="No aplica en TABLA_7",
+        valor_porcentual=Decimal("10.00"),
+    )
+    auto.calificar(exigible, ResultadoCalificacion.CUMPLE)
+    mapa = MapaPerfilEstandares.desde_dict(
+        {
+            "orden_fases_phva": ["PLANEAR", "HACER", "VERIFICAR", "ACTUAR"],
+            "perfiles": {
+                "TABLA_7": {
+                    "prioridad": 1,
+                    "regla": {
+                        "min_trabajadores": 1,
+                        "max_trabajadores": 10,
+                        "riesgos": ["I", "II", "III"],
+                    },
+                    "numerales_no_aplican": ["7.1.4"],
+                },
+                "TABLA_21": {
+                    "prioridad": 2,
+                    "regla": {
+                        "min_trabajadores": 11,
+                        "max_trabajadores": 50,
+                        "riesgos": ["I", "II", "III"],
+                    },
+                    "numerales_no_aplican": [],
+                },
+                "TABLA_60": {
+                    "prioridad": 99,
+                    "regla": {"fallback": True},
+                    "numerales_no_aplican": [],
+                },
+            },
+        }
+    )
+    servicio = ServicioAutoevaluaciones(
+        repositorio_autoevaluacion=repo_autoevaluacion,
+        repositorio_empresa=repo_empresa,
+        repositorio_estandar_minimo=repo_estandar,
+        mapa_perfil=mapa,
+    )
+    repo_autoevaluacion.buscar_por_id.return_value = auto
+    repo_empresa.buscar_por_id.return_value = empresa
+    repo_estandar.listar.return_value = [exigible, no_aplica]
+    repo_autoevaluacion.guardar.return_value = auto
+
+    respuesta = await servicio.finalizar(auto.id)  # type: ignore[arg-type]
+
+    assert no_aplica.id in auto.calificaciones
+    assert auto.calificaciones[no_aplica.id].resultado == ResultadoCalificacion.NO_APLICA
+    assert respuesta.puntaje_total == Decimal("10.50")
+    assert len(respuesta.calificaciones) == 2
+
+
+async def test_should_obtener_cumplimiento_phva_when_autoevaluacion_existe(
+    repo_autoevaluacion: AsyncMock,
+    repo_empresa: AsyncMock,
+    repo_estandar: AsyncMock,
+) -> None:
+    from src.domain.models.perfil_estandares import MapaPerfilEstandares
+
+    empresa = construir_empresa()
+    auto = construir_autoevaluacion(empresa_id=empresa.id)
+    estandar = construir_estandar()
+    auto.calificar(estandar, ResultadoCalificacion.CUMPLE)
+    mapa = MapaPerfilEstandares.desde_dict(
+        {
+            "orden_fases_phva": ["PLANEAR", "HACER", "VERIFICAR", "ACTUAR"],
+            "perfiles": {
+                "TABLA_7": {
+                    "prioridad": 1,
+                    "regla": {
+                        "min_trabajadores": 1,
+                        "max_trabajadores": 10,
+                        "riesgos": ["I", "II", "III"],
+                    },
+                    "numerales_no_aplican": [],
+                },
+                "TABLA_21": {
+                    "prioridad": 2,
+                    "regla": {
+                        "min_trabajadores": 11,
+                        "max_trabajadores": 50,
+                        "riesgos": ["I", "II", "III"],
+                    },
+                    "numerales_no_aplican": [],
+                },
+                "TABLA_60": {
+                    "prioridad": 99,
+                    "regla": {"fallback": True},
+                    "numerales_no_aplican": [],
+                },
+            },
+        }
+    )
+    servicio = ServicioAutoevaluaciones(
+        repositorio_autoevaluacion=repo_autoevaluacion,
+        repositorio_empresa=repo_empresa,
+        repositorio_estandar_minimo=repo_estandar,
+        mapa_perfil=mapa,
+    )
+    repo_autoevaluacion.buscar_por_id.return_value = auto
+    repo_empresa.buscar_por_id.return_value = empresa
+    repo_estandar.listar.return_value = [estandar]
+
+    respuesta = await servicio.obtener_cumplimiento_phva(auto.id)  # type: ignore[arg-type]
+
+    assert respuesta.autoevaluacion_id == auto.id
+    assert respuesta.perfil == "TABLA_7"
+    assert respuesta.finalizada is False
+    assert len(respuesta.fases) == 4
+    assert respuesta.puntaje_total == Decimal("0.50")
 
 
 async def test_should_listar_estandares_filtrados_por_ciclo(

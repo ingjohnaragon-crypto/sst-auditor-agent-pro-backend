@@ -315,6 +315,37 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/autoevaluaciones/{id}/cumplimiento-phva:
+    get:
+      summary: Cumplimiento consolidado por fases PHVA según perfil Res. 0312
+      description: >
+        Calcula en vivo (o con puntaje persistido si ya finalizó) el porcentaje
+        por fase PLANEAR/HACER/VERIFICAR/ACTUAR. Ítems exigibles sin calificar
+        aportan 0; ítems no exigibles del perfil se tratan como NO_APLICA virtual
+        (Art. 27) solo en el resumen. No exige finalización.
+      tags: [Autoevaluaciones]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Resumen PHVA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaCumplimientoPHVA"
+        "404":
+          description: AUTOEVALUACION_NO_ENCONTRADA / EMPRESA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
   /api/v1/autoevaluaciones/{id}/calificaciones/{estandar_id}:
     put:
       summary: Upsert de calificación de un estándar (puntaje derivado en servidor)
@@ -366,6 +397,11 @@ paths:
   /api/v1/autoevaluaciones/{id}/finalizar:
     post:
       summary: Finaliza la autoevaluación (puntaje_total y requiere_plan_mejora)
+      description: >
+        Resuelve el perfil Res. 0312 de la empresa y autoasigna NO_APLICA
+        (puntaje máximo) a numerales no exigibles aún sin calificar (Art. 27).
+        Luego exige que el catálogo esté completo, fija puntaje_total y
+        requiere_plan_mejora (umbral 85 %).
       tags: [Autoevaluaciones]
       security: [{bearerAuth: []}]
       parameters:
@@ -942,6 +978,47 @@ components:
         numeral: {type: string}
         descripcion: {type: string}
         valor_porcentual: {type: string}
+    RespuestaCumplimientoFasePHVA:
+      type: object
+      required:
+        - ciclo_phva
+        - peso_maximo
+        - puntaje_obtenido
+        - porcentaje_cumplimiento
+        - brecha
+      properties:
+        ciclo_phva: {type: string, enum: [PLANEAR, HACER, VERIFICAR, ACTUAR]}
+        peso_maximo: {type: string, description: Decimal serializado}
+        puntaje_obtenido: {type: string}
+        porcentaje_cumplimiento: {type: string}
+        brecha: {type: string}
+    RespuestaCumplimientoPHVA:
+      type: object
+      required:
+        - autoevaluacion_id
+        - empresa_id
+        - perfil
+        - puntaje_total
+        - umbral_plan_mejora
+        - requiere_plan_mejora
+        - finalizada
+        - fases
+      properties:
+        autoevaluacion_id: {type: string, format: uuid}
+        empresa_id: {type: string, format: uuid}
+        perfil:
+          type: string
+          description: >
+            Código de perfil Res. 0312 resuelto desde el mapa versionado
+            (p. ej. TABLA_7, TABLA_21, TABLA_60). Extensible vía JSON.
+          example: TABLA_7
+        puntaje_total: {type: string}
+        umbral_plan_mejora: {type: string, example: "85.00"}
+        requiere_plan_mejora: {type: boolean}
+        finalizada: {type: boolean}
+        fases:
+          type: array
+          items: {$ref: "#/components/schemas/RespuestaCumplimientoFasePHVA"}
     SolicitudCrearProcesoActividad:
       type: object
       additionalProperties: false

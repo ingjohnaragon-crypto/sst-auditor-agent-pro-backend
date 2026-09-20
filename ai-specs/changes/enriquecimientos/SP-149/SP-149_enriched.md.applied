@@ -1,0 +1,222 @@
+# Ticket enriquecido: SP-149 — SST-HU 3.2: Motor de Calificación PHVA y Estado Res. 0312
+
+## Descripción original
+<!-- jira-skip -->
+Como Auditor SST, quiero ver el porcentaje de cumplimiento consolidado por cada fase del ciclo PHVA según el perfil de mi empresa, para identificar rápidamente vacíos legales.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+Hoy la autoevaluación (SP-144) ya permite calificar los 60 ítems del catálogo Res. 0312, derivar puntaje por ítem (`CUMPLE`/`NO_APLICA` → `valor_porcentual`; `NO_CUMPLE` → 0) y finalizar con `puntaje_total` + `requiere_plan_mejora` (umbral 85 %). Falta el **motor de calificación por perfil empresarial** y la **segmentación PHVA** que el auditor necesita para ver vacíos legales por fase.
+
+Esta historia entrega:
+
+1. **SP-202** — Resolver el perfil Res. 0312 de la empresa (`nivel_riesgo_arl` + `numero_trabajadores`) y calibrar el puntaje global ponderado (ítems no exigibles → `NO_APLICA` con puntaje máximo, Art. 27).
+2. **SP-203** — Calcular sub-porcentajes y brecha por fase PHVA (`PLANEAR`, `HACER`, `VERIFICAR`, `ACTUAR`) y exponerlos en un endpoint de lectura.
+3. **SP-204** — Gráficos dinámicos en Angular (barras PHVA + brecha) consumiendo ese endpoint.
+
+Reglas de perfil (Res. 0312; sin Unidades Agropecuarias Art. 7 — fuera de alcance):
+
+- **TABLA_7** — ≤ 10 trabajadores y riesgo I|II|III (Art. 3).
+- **TABLA_21** — 11–50 trabajadores y riesgo I|II|III (Art. 9).
+- **TABLA_60** — > 50 trabajadores (cualquier riesgo), o riesgo IV|V con cualquier tamaño (Arts. 8, 15, 16).
+
+La calificación siempre usa la **Tabla de Valores del Art. 27** (catálogo de 60 ítems ya sembrado). En ítems que no aplican al perfil se otorga el porcentaje máximo vía `NO_APLICA` (no se renormalizan pesos).
+
+Pesos PHVA del seed actual (suma 100): PLANEAR 25 · HACER 60 · VERIFICAR 5 · ACTUAR 10.
+
+Fuera de alcance: flag agropecuario Art. 7; CRUD de planes de mejora; cambiar el catálogo seed; semáforo GTC 45 (SP-148).
+
+## Criterios de aceptación
+
+- [ ] Existe un servicio de dominio que, dados `nivel_riesgo_arl` y `numero_trabajadores`, devuelve el perfil (`TABLA_7` | `TABLA_21` | `TABLA_60`) y el conjunto de numerales exigibles vs no aplican.
+- [ ] Al finalizar (o al consultar cumplimiento), los ítems no exigibles del perfil se tratan como `NO_APLICA` con su `valor_porcentual` completo (Art. 27).
+- [ ] `puntaje_total` sigue siendo la suma de puntajes de los 60 ítems (Decimal, 2 decimales); `requiere_plan_mejora = puntaje_total < 85`.
+- [ ] Existe endpoint autenticado que, para una autoevaluación, devuelve puntaje global, perfil, cumplimiento por fase PHVA (peso máximo, obtenido, %, brecha) y umbral 85.
+- [ ] El frontend muestra barras de rendimiento por fase PHVA y la brecha de cumplimiento a partir de ese endpoint (sin recalcular reglas normativas en el cliente).
+- [ ] Roles: `AUDITOR_SST` y `ADMINISTRADOR` de escritura; `CONSULTA` solo lectura del resumen PHVA.
+- [ ] Tests unitarios del motor de perfil + segmentación PHVA; integración HTTP del nuevo endpoint; tests del componente de barras (≥ 90 % cobertura global).
+- [ ] `ai-specs/specs/api-spec.yml` y documentación de dominio actualizados.
+
+## Campos y endpoints
+
+### Dominio (nuevos / extendidos)
+
+- `PerfilEstándaresRes312`: `TABLA_7` | `TABLA_21` | `TABLA_60`
+- Función/servicio: `resolver_perfil_estandares(nivel_riesgo_arl, numero_trabajadores) -> PerfilEstándaresRes312`
+- Función: `numerales_no_aplican(perfil) -> set[str]` (mapeo explícito documentado; fuente Res. 0312)
+- `CumplimientoFasePHVA`: `ciclo_phva`, `peso_maximo`, `puntaje_obtenido`, `porcentaje_cumplimiento`, `brecha`
+- `ResumenCumplimientoPHVA`: `autoevaluacion_id`, `empresa_id`, `perfil`, `puntaje_total`, `umbral_plan_mejora` (85), `requiere_plan_mejora`, `fases[]`
+
+Fórmulas (por fase, sobre ítems del catálogo en esa fase):
+
+- `peso_maximo` = Σ `valor_porcentual` de ítems de la fase
+- `puntaje_obtenido` = Σ `puntaje` de calificaciones de esa fase
+- `porcentaje_cumplimiento` = (`puntaje_obtenido` / `peso_maximo`) × 100 (si peso = 0 → 0)
+- `brecha` = `peso_maximo` - `puntaje_obtenido`
+
+### Endpoint nuevo
+
+- `GET /api/v1/autoevaluaciones/{id}/cumplimiento-phva`
+  - Auth: Bearer
+  - 200: `ResumenCumplimientoPHVA`
+  - 404: `AUTOEVALUACION_NO_ENCONTRADA` / `EMPRESA_NO_ENCONTRADA`
+  - Si la autoevaluación no está finalizada: calcular en vivo con las calificaciones existentes; ítems sin calificar cuentan 0 en su fase (documentar en OpenAPI). Alternativa aceptable: exigir finalización y responder 409 `AUTOEVALUACION_INCOMPLETA` — elegir una y documentarla en el plan.
+
+### Endpoint existente a ajustar
+
+- `POST /api/v1/autoevaluaciones/{id}/finalizar`
+  - Antes de exigir 60 calificaciones manuales: aplicar `NO_APLICA` automático a numerales no exigibles del perfil de la empresa (idempotente si ya estaban calificados).
+  - Luego exigir que todo ítem exigible tenga calificación; total sigue siendo 60 filas en `calificaciones_estandar`.
+
+### Contratos existentes reutilizados
+
+- `GET /api/v1/estandares-minimos?ciclo_phva=`
+- `GET/PUT` calificaciones y detalle de autoevaluación (sin cambio de shape salvo campos derivados ya existentes).
+
+## Archivos a crear o modificar
+
+### Backend
+
+- `src/domain/services/motor_calificacion_res312.py` — Domain — Create (perfil + ponderación + segmentación PHVA)
+- `src/domain/models/perfil_estandares.py` (o enum en el motor) — Domain — Create
+- `scripts/datos/perfil_estandares_res312.json` — Data — Create (mapeo numeral → perfiles donde aplica / no aplica)
+- `src/domain/models/autoevaluacion.py` — Domain — Modify (`finalizar` / helper de aplicación de NO_APLICA por perfil)
+- `src/application/services/servicio_autoevaluaciones.py` — Application — Modify (usar motor; nuevo caso de uso resumen PHVA)
+- `src/application/dto/respuesta_cumplimiento_phva.py` — Application — Create
+- `src/application/mappers/mapper_cumplimiento_phva.py` — Application — Create
+- `src/presentation/routers/autoevaluaciones_router.py` — Presentation — Modify (ruta `cumplimiento-phva`)
+- `tests/unit/domain/services/test_motor_calificacion_res312.py` — Tests — Create
+- `tests/integration/test_cumplimiento_phva.py` — Tests — Create
+- `ai-specs/specs/api-spec.yml` — Docs — Modify
+- `ai-specs/specs/data-model.md` — Docs — Modify (regla de perfil + Art. 27 NO_APLICA)
+
+### Frontend (SP-204; repo `sst-auditor-agent-pro-frontend`)
+
+- `src/app/features/autoevaluacion/` (o extensión del dashboard) — Feature — Create/Modify
+- `.../modelos/cumplimiento-phva.model.ts` — Domain — Create
+- `.../servicios/servicio-cumplimiento-phva.ts` — Application — Create
+- `.../componentes/grafico-cumplimiento-phva/` — Presentation — Create (barras + brecha; CSS/SVG; sin librería de charts nueva salvo decisión explícita en plan)
+- Integrar en página de detalle de autoevaluación o panel PHVA del dashboard
+- Specs unitarios del componente y del servicio HTTP
+
+## Casos de prueba unitarios
+
+- Perfil: 8 trabajadores riesgo II → `TABLA_7`
+- Perfil: 25 trabajadores riesgo III → `TABLA_21`
+- Perfil: 8 trabajadores riesgo IV → `TABLA_60`
+- Perfil: 100 trabajadores riesgo I → `TABLA_60`
+- Límites: 10 / 11 / 50 / 51 trabajadores
+- Ponderación: ítem no exigible auto-`NO_APLICA` aporta su `valor_porcentual`
+- Ponderación: `NO_CUMPLE` aporta 0; suma global = 100 con todo CUMPLE/NO_APLICA
+- PHVA: fase con todo CUMPLE → % = 100, brecha = 0
+- PHVA: fase con puntaje parcial → % y brecha exactos con `Decimal`
+- Finalizar sin calificar exigibles → `AUTOEVALUACION_INCOMPLETA`
+- Endpoint 200 con resumen; 404 autoevaluación inexistente
+- Frontend: renderiza 4 barras; muestra brecha; estado vacío / loading / error
+
+## Requisitos no funcionales
+
+- Cálculos con `Decimal` (sin float); redondeo coherente con SP-144 (2 decimales en respuestas).
+- Motor puro en dominio: sin FastAPI, SQLAlchemy ni HTTP.
+- Mapeo de perfil versionado en JSON/datos (auditable); no hardcode disperso en el router.
+- Endpoint O(n) sobre ≤ 60 ítems; sin N+1 innecesario (cargar autoevaluación + empresa + catálogo en el caso de uso).
+- JWT + RBAC existentes; no exponer datos de otras empresas sin autorización (misma política que el resto de autoevaluaciones).
+- i18n/UI en español; accesibilidad de barras (roles/labels ARIA).
+- Cobertura global ≥ 90 %; Ruff + mypy strict en backend; tests Angular verdes.
+
+## Puntos de historia
+<!-- STORY_POINTS:8 -->
+**8** — Motor de perfil Res. 0312 + ajuste de finalización + endpoint de cumplimiento PHVA + gráficos Angular; catálogo y calificaciones base ya existen (SP-143/SP-144).
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-202 -->
+### Subtarea: SP-202 — Programar algoritmo de cumplimiento ponderado global
+
+#### Descripción original
+<!-- jira-skip -->
+Lógica para calibrar puntaje final dependiendo del perfil empresarial.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Implementar en dominio el resolutor de perfil Res. 0312 (`TABLA_7` / `TABLA_21` / `TABLA_60`) a partir de `Empresa.nivel_riesgo_arl` y `Empresa.numero_trabajadores`, más el mapeo de numerales no aplicables.
+
+Integrar en `ServicioAutoevaluaciones.finalizar` (y helpers de dominio): antes de validar completitud, aplicar `NO_APLICA` automático a ítems no exigibles del perfil; exigir calificación solo en los exigibles; calcular `puntaje_total` como Σ de los 60 puntajes y `requiere_plan_mejora` con umbral 85.
+
+Entregar el archivo de datos del mapeo y tests unitarios parametrizados de perfiles límite y de ponderación.
+
+#### Criterios de aceptación
+
+- [ ] `resolver_perfil_estandares` cubre las reglas Arts. 3, 8, 9, 15 y 16 (sin Art. 7 agropecuario).
+- [ ] Finalizar auto-asigna `NO_APLICA` a no exigibles sin pisar calificaciones manuales previas de esos ítems si ya existen (definir política: preferir conservar manual o sobrescribir — documentar; recomendación: sobrescribir solo si aún no calificado).
+- [ ] `puntaje_total` y umbral 85 se comportan igual que hoy cuando el perfil es `TABLA_60` y todo está calificado.
+- [ ] Suite unitaria del motor en verde; sin I/O.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — Reglas de perfil + mapeo de numerales + cambio en finalización + pruebas.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-202 -->
+
+<!-- SUBTASK:SP-203 -->
+### Subtarea: SP-203 — Desarrollar motor de segmentación por fases PHVA
+
+#### Descripción original
+<!-- jira-skip -->
+Calcular sub-porcentajes correspondientes a Planear
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Extender el motor de calificación para agregar por `ciclo_phva` los campos `peso_maximo`, `puntaje_obtenido`, `porcentaje_cumplimiento` y `brecha` (fórmulas de la historia padre).
+
+Exponer `GET /api/v1/autoevaluaciones/{id}/cumplimiento-phva` con DTO/mapper, wiring en router y dependencias existentes. Incluir en la respuesta el `perfil` resuelto y el puntaje global.
+
+Actualizar `api-spec.yml`. Pruebas unitarias de segmentación e integración HTTP (200/404 y, si aplica, 409).
+
+#### Criterios de aceptación
+
+- [ ] Las cuatro fases aparecen siempre en la respuesta, aunque el puntaje sea 0.
+- [ ] Los porcentajes por fase usan solo ítems de esa fase; la suma de `peso_maximo` de las cuatro fases es 100.
+- [ ] El endpoint está autenticado y documentado en OpenAPI.
+- [ ] Tests unitarios + integración en verde.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Cálculo por fase + endpoint + contrato OpenAPI + tests.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-203 -->
+
+<!-- SUBTASK:SP-204 -->
+### Subtarea: SP-204 — Crear gráficos dinámicos de cumplimiento en Angular
+
+#### Descripción original
+<!-- jira-skip -->
+Maquetar barras de rendimiento del ciclo PHVA y brecha de cumplimiento.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+En el frontend Angular, consumir `GET /autoevaluaciones/{id}/cumplimiento-phva` y renderizar:
+
+- Cuatro barras (Planear / Hacer / Verificar / Actuar) con el `porcentaje_cumplimiento`.
+- Indicador de brecha global o por fase (`brecha` / distancia al umbral 85 %).
+- Estados loading, vacío (sin autoevaluación) y error.
+
+Preferir CSS/SVG alineado al design system existente (dashboard ya tiene un panel PHVA decorativo) sin añadir librería de charts salvo justificación en el plan. Componente presentacional OnPush + servicio HTTP tipado + specs.
+
+#### Criterios de aceptación
+
+- [ ] Las barras reflejan los porcentajes del API (no cálculos locales de normativa).
+- [ ] Se muestra la brecha de forma legible para el auditor.
+- [ ] Accesible (etiquetas/ARIA); responsive.
+- [ ] Tests del componente y del servicio en verde.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — UI de barras + servicio HTTP + integración visual en detalle/dashboard.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-204 -->
