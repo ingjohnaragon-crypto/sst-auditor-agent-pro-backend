@@ -27,6 +27,14 @@ class EvidenciaYaInactivaError(DomainException):
         super().__init__(message)
 
 
+class ArchivoNoDisponibleError(DomainException):
+    code = "ARCHIVO_NO_DISPONIBLE"
+    http_status = 404
+
+    def __init__(self, message: str = "El archivo de la evidencia no está disponible") -> None:
+        super().__init__(message)
+
+
 class CalificacionNoEncontradaError(DomainException):
     code = "CALIFICACION_NO_ENCONTRADA"
     http_status = 404

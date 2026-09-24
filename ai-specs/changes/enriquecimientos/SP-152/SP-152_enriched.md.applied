@@ -1,0 +1,198 @@
+# Ticket enriquecido: SP-152 — Garantizar acceso seguro a archivos adjuntos
+
+## Descripción original
+<!-- jira-skip -->
+Validación de seguridad y tokens temporales para descargas de PDF.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+SP-151 ya guarda los metadatos de una evidencia (`evidencias`) y no el archivo. Esta historia autoriza la descarga con un enlace de vida corta, vuelve a comprobar el rol en el momento de servir y deja constancia de cada intento. No incorpora S3 ni otro SDK: el enlace firmado se emite con PyJWT (HS256), el mismo mecanismo de los tokens de sesión, con un `tipo` distinto para que un Bearer de acceso no sirva como descarga.
+
+Depende de la tabla `evidencias` (migración `e5f6a7b8c9d0`). Si esa revisión no está en la rama, este trabajo no arranca.
+
+Decisiones cerradas:
+
+- El cliente pide el enlace con su Bearer de sesión. La respuesta trae una URL relativa y los segundos de vigencia. El token de descarga no viaja en el body de otras APIs ni se reutiliza el de acceso (`tipo=acceso`).
+- Vigencia por defecto: 300 segundos. Tope: 900. Configurable. Reutilizable hasta que expire; no es de un solo uso.
+- `CONSULTA` no descarga. Solo `ADMINISTRADOR` y `AUDITOR_SST`. No se exige que el usuario sea quien cargó el archivo: no hay pertenencia por empresa y un auditor debe poder abrir evidencias de otro. «Propiedad» significa evidencia existente, activa y ligada a una calificación.
+- Evidencia inexistente o inactiva: 404, sin distinguir ambos casos al emitir el enlace.
+- Al canjear el enlace se vuelve a comprobar firma, expiración, `tipo=descarga`, evidencia activa y que el usuario siga activo con rol escritor. Un usuario desactivado o pasado a `CONSULTA` no descarga aunque el enlace no haya vencido.
+- El binario solo se lee si `ALMACENAMIENTO_LOCAL_RAIZ` está definido, la ruta guardada resuelve dentro de esa raíz (sin `..`) y el archivo existe. Si no está el archivo —situación actual, porque SP-151 no escribió bytes— se responde 404 `ARCHIVO_NO_DISPONIBLE` después de autorizar. No se abre ninguna ruta que el cliente haya inventado fuera de esa raíz.
+- Cada canje con token válido persiste una fila de auditoría (usuario, evidencia, resultado, fecha). No se guarda el token, la ruta ni el contenido.
+
+Fuera de alcance: subir el archivo, S3, URL de un proveedor cloud, borrado físico, historias clínicas, pantalla Angular.
+
+## Criterios de aceptación
+
+- [ ] `POST /api/v1/evidencias/{id}/enlace-descarga` exige Bearer de acceso y rol escritor. `CONSULTA` recibe 403 `ACCESO_DENEGADO`.
+- [ ] El enlace incluye un JWT `tipo=descarga` con `evidencia_id`, `sub` del usuario y `exp`. Un token `tipo=acceso` o `tipo=refresco` no descarga.
+- [ ] El enlace vence a los 300 segundos por defecto y nunca se emite a más de 900.
+- [ ] Evidencia ausente o inactiva no recibe enlace (404).
+- [ ] `GET` del enlace sin Bearer de sesión valida el token, revalida rol y evidencia, y no sirve archivos fuera de `ALMACENAMIENTO_LOCAL_RAIZ`.
+- [ ] Si el archivo no está en esa raíz, la respuesta es 404 `ARCHIVO_NO_DISPONIBLE` y queda fila de auditoría.
+- [ ] Si el archivo está dentro de la raíz, la respuesta es el binario con el `tipo_mime` guardado y `Content-Disposition: attachment`.
+- [ ] Token vencido: 401 `TOKEN_EXPIRADO`. Firma inválida o `tipo` distinto: 401 `TOKEN_INVALIDO`.
+- [ ] Tabla `accesos_evidencia` vía Alembic (`down_revision` = `e5f6a7b8c9d0`) con `downgrade`.
+- [ ] Cobertura global ≥ 90 %. `api-spec.yml` y `data-model.md` actualizados.
+
+## Campos y endpoints
+
+Tabla `accesos_evidencia`:
+
+- `id` UUID PK
+- `evidencia_id` UUID NOT NULL, FK → `evidencias.id`, índice
+- `usuario_id` UUID NOT NULL, FK → `usuarios.id`
+- `resultado` VARCHAR(32) NOT NULL: `AUTORIZADO`, `ARCHIVO_NO_DISPONIBLE`, `DENEGADO`
+- `fecha` TIMESTAMPTZ NOT NULL
+- Sin token, sin ruta, sin bytes del archivo
+
+`POST /api/v1/evidencias/{id}/enlace-descarga`
+
+- Auth: Bearer `tipo=acceso`, rol `ADMINISTRADOR` o `AUDITOR_SST`
+- Body vacío
+- 200:
+
+```json
+{
+  "url": "/api/v1/descargas/evidencias?token=<jwt>",
+  "expira_en_segundos": 300
+}
+```
+
+- 401 `TOKEN_INVALIDO` / `TOKEN_EXPIRADO`
+- 403 `ACCESO_DENEGADO`
+- 404 `EVIDENCIA_NO_ENCONTRADA` (no existe o `activo=false`)
+
+`GET /api/v1/descargas/evidencias?token=`
+
+- Sin Bearer de sesión. El secreto va en el query.
+- 200: stream del archivo, si existe bajo la raíz configurada
+- 401 token de descarga inválido o vencido
+- 403 usuario inactivo, rol `CONSULTA` o sin rol escritor al canjear (`DENEGADO` en auditoría)
+- 404 `ARCHIVO_NO_DISPONIBLE` si la autorización pasó y el archivo no está
+- 404 `EVIDENCIA_NO_ENCONTRADA` si la evidencia se dio de baja después de emitir el enlace
+
+Variable nueva: `ALMACENAMIENTO_LOCAL_RAIZ` (opcional). Vacía: ningún canje sirve bytes; todos los autorizados responden `ARCHIVO_NO_DISPONIBLE`. `DESCARGA_SEGUNDOS_EXPIRACION` default 300, máximo 900.
+
+## Archivos a crear o modificar
+
+- `alembic/versions/<rev>_crear_tabla_accesos_evidencia.py` — Infrastructure — Create
+- `src/infrastructure/database/modelos/acceso_evidencia_orm.py` — Infrastructure — Create
+- `src/domain/models/acceso_evidencia.py` — Domain — Create
+- `src/domain/exceptions/evidencia.py` — Domain — Modify
+- `src/domain/repositories/repositorio_acceso_evidencia.py` — Domain — Create
+- `src/infrastructure/repositories/repositorio_acceso_evidencia_sqlalchemy.py` — Infrastructure — Create
+- `src/infrastructure/security/tokens_jwt.py` — Infrastructure — Modify
+- `src/infrastructure/config/settings.py` — Infrastructure — Modify
+- `src/application/services/servicio_descarga_evidencia.py` — Application — Create
+- `src/application/dto/respuesta_enlace_descarga.py` — Application — Create
+- `src/presentation/routers/evidencias_router.py` — Presentation — Modify
+- `src/presentation/dependencies/evidencia.py` — Presentation — Modify
+- `ai-specs/specs/api-spec.yml` — Docs — Modify
+- `ai-specs/specs/data-model.md` — Docs — Modify
+- `tests/unit/application/test_servicio_descarga_evidencia.py` — Tests — Create
+- `tests/integration/test_descarga_evidencias.py` — Tests — Create
+
+## Casos de prueba unitarios
+
+- Escritor con evidencia activa recibe URL y `expira_en_segundos` ≤ 900. El claim `tipo` es `descarga`.
+- `CONSULTA` al pedir enlace → `AccesoDenegadoError`. No se firma token.
+- Evidencia inactiva o ausente → `EvidenciaNoEncontradaError`.
+- Canje con token vencido → `TokenExpiradoException`. Token `tipo=acceso` → `TokenInvalidoException`.
+- Usuario desactivado entre la emisión y el canje → denegado y fila `DENEGADO`.
+- Raíz vacía o archivo inexistente → `ARCHIVO_NO_DISPONIBLE` y fila de auditoría, sin leer fuera del directorio.
+- Ruta que escapa de la raíz (`..` ya normalizado) no abre el archivo.
+- Archivo presente bajo la raíz → resultado `AUTORIZADO` y se devuelve el MIME guardado.
+
+## Requisitos no funcionales
+
+- No loguear el query `token`, la ruta ni los bytes.
+- El token de descarga no se acepta en `Authorization` de las demás rutas (`tipo` distinto de `acceso`).
+- Resolver la ruta con `Path.resolve()` y `relative_to(raíz)` antes de abrir.
+- `Content-Disposition` usa solo el nombre de archivo, sin directorios.
+- Auditoría en la misma transacción que la decisión de autorizar, antes de abrir el archivo.
+- Ruff y mypy strict. Cobertura global ≥ 90 %.
+- Sin librerías nuevas.
+
+## Puntos de historia
+<!-- STORY_POINTS:8 -->
+**8** — Enlace firmado, revalidación de rol al canjear, lectura acotada a una raíz local y tabla de auditoría. Sin proveedor cloud ni carga del binario.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-211 -->
+### Subtarea: SP-211 — Implementar generación de URLs firmadas con expiración
+
+#### Descripción original
+<!-- jira-skip -->
+Crear tokens temporales (presigned URLs) para descarga segura de documentos.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Emitir un JWT HS256 de `tipo=descarga` (no un presign de S3: no hay almacenamiento de objetos). Claims mínimos: `sub` (usuario), `evidencia_id`, `tipo`, `exp`, `jti`. TTL por `DESCARGA_SEGUNDOS_EXPIRACION` (default 300, máximo 900). El caso de uso arma la URL relativa `/api/v1/descargas/evidencias?token=`. Rechazar firmar si la evidencia no está activa.
+
+#### Criterios de aceptación
+
+- [ ] El token no valida como Bearer de sesión en el resto de la API.
+- [ ] `exp` no supera 900 segundos.
+- [ ] No se incluye la ruta del archivo ni el MIME dentro del token.
+- [ ] Prueba unitaria del claim `tipo` y de la expiración.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Firma reutilizando PyJWT y un endpoint que devuelve la URL. Sin lectura de disco.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-211 -->
+
+<!-- SUBTASK:SP-212 -->
+### Subtarea: SP-212 — Validar permisos de usuario antes de servir el archivo
+
+#### Descripción original
+<!-- jira-skip -->
+Verificar rol y propiedad del documento antes de autorizar la descarga.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Al pedir el enlace y otra vez al canjearlo: el usuario debe existir, estar activo y tener rol `ADMINISTRADOR` o `AUDITOR_SST`. `CONSULTA` recibe 403. La evidencia debe seguir activa. No comparar `usuario_id` de la evidencia con el del token: la «propiedad» es la vigencia de la evidencia, no la autoría de la carga. Solo entonces, y solo bajo `ALMACENAMIENTO_LOCAL_RAIZ`, abrir el archivo. Fuera de la raíz o si no hay archivo: no se lee nada del disco.
+
+#### Criterios de aceptación
+
+- [ ] `CONSULTA` no obtiene enlace ni puede canjear uno ajeno si su rol cambió.
+- [ ] Un usuario inactivo no canjea un enlace todavía vigente.
+- [ ] Una ruta que sale de la raíz no se abre.
+- [ ] Integración: 403, 401 y 404 `ARCHIVO_NO_DISPONIBLE` sin archivo sembrado.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Doble control de rol y contención de la ruta. El disco vacío es el caso esperado hoy.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-212 -->
+
+<!-- SUBTASK:SP-213 -->
+### Subtarea: SP-213 — Registrar auditoría de accesos a archivos sensibles
+
+#### Descripción original
+<!-- jira-skip -->
+Loggear cada descarga o visualización de evidencia con usuario y timestamp.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Persistir `accesos_evidencia` en cada canje cuyo token ya fue aceptado: `AUTORIZADO`, `ARCHIVO_NO_DISPONIBLE` o `DENEGADO`. La fila lleva `evidencia_id`, `usuario_id` y `fecha` UTC. No usar solo el log de aplicación: la traza tiene que sobrevivir en base de datos. No guardar el token. Un token con firma inválida no crea fila (no hay evidencia confiable).
+
+#### Criterios de aceptación
+
+- [ ] Migración con FK a `evidencias` y `usuarios`, e índice por `evidencia_id`.
+- [ ] Canje autorizado, archivo ausente y rol revocado dejan cada uno su `resultado`.
+- [ ] La fila no contiene ruta ni token.
+- [ ] `downgrade` elimina la tabla.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — Una tabla y tres resultados de canje, sin endpoint de consulta del histórico.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-213 -->

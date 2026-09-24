@@ -12,6 +12,7 @@ from sqlalchemy.pool import StaticPool
 from src.domain.models.usuario import RolUsuario, Usuario
 from src.infrastructure.database.base import Base
 from src.infrastructure.database.modelos import (  # noqa: F401 — registra tablas
+    AccesoEvidenciaORM,
     AutoevaluacionORM,
     CalificacionEstandarORM,
     CatalogoReferenciaORM,

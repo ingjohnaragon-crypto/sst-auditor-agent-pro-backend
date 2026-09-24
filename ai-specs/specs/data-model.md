@@ -340,6 +340,19 @@ Nunca borrado físico (conservación 20 años tras el cese laboral).
 `accion_mejora_id UUID NULL FK → acciones_mejora.id` se añadirá cuando exista
 esa tabla.
 
+#### `accesos_evidencia` — SP-152
+
+Auditoría de cada canje con token válido. No guarda el token, la ruta ni el binario.
+El archivo solo se lee si `ALMACENAMIENTO_LOCAL_RAIZ` contiene la ruta resuelta.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| `id` | `UUID` | PK |
+| `evidencia_id` | `UUID` | NOT NULL, FK → `evidencias.id`, índice |
+| `usuario_id` | `UUID` | NOT NULL, FK → `usuarios.id` |
+| `resultado` | `VARCHAR(32)` | NOT NULL: `AUTORIZADO`, `ARCHIVO_NO_DISPONIBLE`, `DENEGADO` |
+| `fecha` | `TIMESTAMPTZ` | NOT NULL |
+
 ### Relaciones (cardinalidad)
 
 | Relación | Cardinalidad |
@@ -356,6 +369,7 @@ esa tabla.
 | `autoevaluaciones` → `planes_mejoramiento` | 1—N (FK opcional en el plan) |
 | `planes_mejoramiento` → `acciones_mejora` | 1—N |
 | `calificaciones_estandar` → `evidencias` | 1—N (`calificacion_estandar_id` NOT NULL en SP-151) |
+| `evidencias` → `accesos_evidencia` | 1—N |
 | `acciones_mejora` → `evidencias` | 1—N (FK opcional) |
 | `usuarios` → `autoevaluaciones` | 1—N (evaluador) |
 | `usuarios` → `evidencias` | 1—N (quien carga) |

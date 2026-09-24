@@ -1,13 +1,13 @@
 """Implementación PyJWT del puerto `ServicioTokens` (firma HS256)."""
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import jwt
 
 from src.domain.exceptions.autenticacion import TokenExpiradoException, TokenInvalidoException
 from src.domain.models.usuario import Usuario
-from src.domain.repositories.servicio_tokens import ServicioTokens
+from src.domain.repositories.servicio_tokens import TIPO_TOKEN_DESCARGA, ServicioTokens
 from src.infrastructure.config.settings import Settings
 
 TIPO_TOKEN_ACCESO = "acceso"
@@ -43,6 +43,18 @@ class TokensJWT(ServicioTokens):
             "tipo": TIPO_TOKEN_REFRESCO,
             "iat": ahora,
             "exp": ahora + self._expiracion_refresco,
+            "jti": str(uuid4()),
+        }
+        return jwt.encode(claims, self._secreto, algorithm=ALGORITMO_JWT)
+
+    def emitir_token_descarga(self, usuario_id: UUID, evidencia_id: UUID, segundos: int) -> str:
+        ahora = datetime.now(UTC)
+        claims: dict[str, object] = {
+            "sub": str(usuario_id),
+            "evidencia_id": str(evidencia_id),
+            "tipo": TIPO_TOKEN_DESCARGA,
+            "iat": ahora,
+            "exp": ahora + timedelta(seconds=segundos),
             "jti": str(uuid4()),
         }
         return jwt.encode(claims, self._secreto, algorithm=ALGORITMO_JWT)
