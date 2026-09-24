@@ -9,6 +9,7 @@ from src.infrastructure.database.modelos.control_riesgo_orm import ControlRiesgo
 from src.infrastructure.database.modelos.empresa_orm import EmpresaORM
 from src.infrastructure.database.modelos.estandar_minimo_orm import EstandarMinimoORM
 from src.infrastructure.database.modelos.evaluacion_riesgo_orm import EvaluacionRiesgoORM
+from src.infrastructure.database.modelos.evidencia_orm import EvidenciaORM
 from src.infrastructure.database.modelos.peligro_orm import PeligroORM
 from src.infrastructure.database.modelos.proceso_actividad_orm import ProcesoActividadORM
 from src.infrastructure.database.modelos.usuario_orm import UsuarioORM
@@ -21,6 +22,7 @@ __all__ = [
     "EmpresaORM",
     "EstandarMinimoORM",
     "EvaluacionRiesgoORM",
+    "EvidenciaORM",
     "PeligroORM",
     "ProcesoActividadORM",
     "UsuarioORM",

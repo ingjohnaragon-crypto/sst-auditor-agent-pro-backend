@@ -95,13 +95,14 @@ class ServicioAutoevaluaciones:
         estandar = await self._estandares.buscar_por_id(estandar_id)
         if estandar is None:
             raise EstandarNoEncontradoError()
-        calificacion = autoevaluacion.calificar(
+        autoevaluacion.calificar(
             estandar,
             ResultadoCalificacion(dto.resultado),
             dto.observaciones,
         )
-        await self._autoevaluaciones.guardar(autoevaluacion)
-        return MapperAutoevaluacion.a_respuesta_calificacion(calificacion)
+        guardada = await self._autoevaluaciones.guardar(autoevaluacion)
+        persistida = guardada.calificaciones[estandar_id]
+        return MapperAutoevaluacion.a_respuesta_calificacion(persistida)
 
     async def finalizar(self, autoevaluacion_id: UUID) -> RespuestaAutoevaluacion:
         """Cierra la autoevaluación aplicando NO_APLICA por perfil y exigiendo el catálogo."""

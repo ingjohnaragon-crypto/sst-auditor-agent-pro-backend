@@ -16,6 +16,7 @@ class MapperAutoevaluacion:
     ) -> RespuestaCalificacionEstandar:
         """Convierte una calificación a su DTO público."""
         return RespuestaCalificacionEstandar(
+            id=calificacion.id,
             estandar_id=calificacion.estandar_id,
             resultado=calificacion.resultado.value,
             puntaje=calificacion.puntaje,

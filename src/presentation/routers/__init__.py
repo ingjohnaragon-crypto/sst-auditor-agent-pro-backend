@@ -21,6 +21,12 @@ from src.presentation.routers.autoevaluaciones_router import (
 )
 from src.presentation.routers.empresas_router import router as empresas_router
 from src.presentation.routers.estandares_router import router as estandares_router
+from src.presentation.routers.evidencias_router import (
+    router as evidencias_router,
+)
+from src.presentation.routers.evidencias_router import (
+    router_por_calificacion as evidencias_por_calificacion_router,
+)
 from src.presentation.routers.health_router import router as health_router
 from src.presentation.routers.matriz_riesgos_router import (
     router as matriz_riesgos_router,
@@ -36,4 +42,6 @@ api_router.include_router(auth_router, prefix=settings.api_prefix)
 api_router.include_router(empresas_router, prefix=settings.api_prefix)
 api_router.include_router(autoevaluaciones_router, prefix=settings.api_prefix)
 api_router.include_router(estandares_router, prefix=settings.api_prefix)
+api_router.include_router(evidencias_por_calificacion_router, prefix=settings.api_prefix)
+api_router.include_router(evidencias_router, prefix=settings.api_prefix)
 api_router.include_router(matriz_riesgos_router, prefix=settings.api_prefix)
