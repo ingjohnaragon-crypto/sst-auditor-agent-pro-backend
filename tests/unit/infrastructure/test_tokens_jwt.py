@@ -97,6 +97,20 @@ def test_should_lanzar_token_expirado_when_token_vencido() -> None:
         TokensJWT(construir_settings()).decodificar(token_vencido)
 
 
+def test_should_emitir_descarga_con_tipo_distinto_al_de_sesion() -> None:
+    usuario = construir_usuario()
+    evidencia_id = uuid4()
+    servicio = TokensJWT(construir_settings())
+
+    claims = servicio.decodificar(
+        servicio.emitir_token_descarga(usuario.id, evidencia_id, 300)  # type: ignore[arg-type]
+    )
+
+    assert claims["tipo"] == "descarga"
+    assert claims["evidencia_id"] == str(evidencia_id)
+    assert claims["sub"] == str(usuario.id)
+
+
 def test_should_lanzar_token_invalido_when_token_corrupto() -> None:
     servicio = TokensJWT(construir_settings())
 

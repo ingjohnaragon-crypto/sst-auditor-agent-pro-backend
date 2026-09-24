@@ -929,6 +929,71 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/evidencias/{id}/enlace-descarga:
+    post:
+      summary: Emite un enlace temporal de descarga
+      tags: [Evidencias]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: URL relativa con JWT tipo=descarga
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaEnlaceDescarga"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: EVIDENCIA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/descargas/evidencias:
+    get:
+      summary: Canjea un enlace de descarga
+      tags: [Evidencias]
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: {type: string}
+      responses:
+        "200":
+          description: Binario, si existe bajo ALMACENAMIENTO_LOCAL_RAIZ
+        "401":
+          description: TOKEN_INVALIDO o TOKEN_EXPIRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: EVIDENCIA_NO_ENCONTRADA o ARCHIVO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1095,6 +1160,12 @@ components:
         ruta_almacenamiento: {type: string}
         fecha_carga: {type: string, format: date-time}
         activo: {type: boolean}
+    RespuestaEnlaceDescarga:
+      type: object
+      required: [url, expira_en_segundos]
+      properties:
+        url: {type: string}
+        expira_en_segundos: {type: integer, maximum: 900}
     RespuestaAutoevaluacion:
       type: object
       required: [id, empresa_id, usuario_id, fecha, requiere_plan_mejora, calificaciones]

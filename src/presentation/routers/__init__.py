@@ -25,6 +25,9 @@ from src.presentation.routers.evidencias_router import (
     router as evidencias_router,
 )
 from src.presentation.routers.evidencias_router import (
+    router_descargas as descargas_evidencia_router,
+)
+from src.presentation.routers.evidencias_router import (
     router_por_calificacion as evidencias_por_calificacion_router,
 )
 from src.presentation.routers.health_router import router as health_router
@@ -44,4 +47,5 @@ api_router.include_router(autoevaluaciones_router, prefix=settings.api_prefix)
 api_router.include_router(estandares_router, prefix=settings.api_prefix)
 api_router.include_router(evidencias_por_calificacion_router, prefix=settings.api_prefix)
 api_router.include_router(evidencias_router, prefix=settings.api_prefix)
+api_router.include_router(descargas_evidencia_router, prefix=settings.api_prefix)
 api_router.include_router(matriz_riesgos_router, prefix=settings.api_prefix)

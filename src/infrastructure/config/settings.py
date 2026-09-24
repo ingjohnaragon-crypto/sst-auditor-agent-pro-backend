@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     jwt_algoritmo: str = ALGORITMO_JWT_PERMITIDO
     jwt_minutos_expiracion_acceso: int = 30
     jwt_dias_expiracion_refresco: int = 7
+    almacenamiento_local_raiz: str | None = None
+    descarga_segundos_expiracion: int = 300
 
     @field_validator("bd_pool_tamano", "bd_pool_reciclar_segundos")
     @classmethod
@@ -66,6 +68,24 @@ class Settings(BaseSettings):
             raise ValueError(
                 f"JWT_SECRETO debe tener al menos {LONGITUD_MINIMA_JWT_SECRETO} caracteres"
             )
+        return valor
+
+    @field_validator("descarga_segundos_expiracion")
+    @classmethod
+    def validar_ttl_descarga(cls, valor: int) -> int:
+        """El enlace de descarga vive entre 1 y 900 segundos."""
+        if valor < 1 or valor > 900:
+            raise ValueError(
+                f"DESCARGA_SEGUNDOS_EXPIRACION debe estar entre 1 y 900 (recibido: {valor})"
+            )
+        return valor
+
+    @field_validator("almacenamiento_local_raiz")
+    @classmethod
+    def vacio_es_sin_raiz(cls, valor: str | None) -> str | None:
+        """Cadena vacía equivale a no tener directorio de binarios."""
+        if valor is None or not valor.strip():
+            return None
         return valor
 
     @field_validator("jwt_algoritmo")
