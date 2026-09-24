@@ -1,0 +1,186 @@
+# Ticket enriquecido: SP-151 — Modelar metadatos de documentos adjuntos de soporte
+
+## Descripción original
+<!-- jira-skip -->
+Estructura para almacenar ubicaciones de archivos y tipos permitidos.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+El modelo ER validado (SP-183, decisión D4) ya define la entidad `evidencias` (metadatos, no el binario): nombre, MIME, ruta, fecha de carga, usuario que carga, vínculo opcional a `calificaciones_estandar` o a `acciones_mejora`, y borrado lógico (D. 1072, Art. 2.2.4.6.13 — conservación 20 años). Esa tabla **aún no está migrada**.
+
+Esta historia materializa esos metadatos y las reglas de tipo/tamaño. El vínculo al estándar evaluado es `calificacion_estandar_id` (la calificación ya apunta al ítem Res. 0312); no se crea una FK directa a `estandares_minimos`, porque perdería la autoevaluación concreta.
+
+Alcance:
+
+1. **SP-208** — Tabla `evidencias` (Alembic + ORM + agregado de dominio).
+2. **SP-209** — Lista cerrada de MIME/extensión y tamaño máximo, validados en dominio antes de persistir.
+3. **SP-210** — FK obligatoria a `usuarios` (quien carga) y a `calificaciones_estandar` (estándar evaluado en esta HU).
+
+`acciones_mejora` todavía no existe en el esquema. `accion_mejora_id` queda fuera de esta historia; cuando exista el plan de mejoramiento se añade la FK opcional y el CHECK «al menos una asociación» del ER.
+
+Fuera de alcance: subida del binario (disco/S3), pantalla Angular, borrado físico, historias clínicas.
+
+## Criterios de aceptación
+
+- [ ] Existe la tabla `evidencias` vía Alembic (`down_revision` = cabeza actual `d4e5f6a7b8c9`), con `downgrade`.
+- [ ] Campos: `nombre_archivo`, `tipo_mime`, `tamano_bytes`, `ruta_almacenamiento`, `fecha_carga`, `usuario_id`, `calificacion_estandar_id`, `activo`, `fecha_eliminacion`.
+- [ ] `usuario_id` y `calificacion_estandar_id` son NOT NULL con FK a tablas existentes.
+- [ ] El dominio rechaza MIME/extensión fuera de la lista permitida y `tamano_bytes` ≤ 0 o > 10 MiB.
+- [ ] La ruta no está vacía y no contiene `..` ni esquema absoluto (`http`, `file`).
+- [ ] Borrado lógico: `activo=false` y `fecha_eliminacion` en UTC; no hay `DELETE` físico.
+- [ ] API autenticada para registrar metadatos, listar los activos de una calificación y dar de baja lógica.
+- [ ] `CONSULTA` solo lee; `AUDITOR_SST` y `ADMINISTRADOR` escriben.
+- [ ] Tests unitarios de validación e integración HTTP (201/200/403/404/422). Cobertura global ≥ 90 %.
+- [ ] `api-spec.yml` y `data-model.md` actualizados (incl. `tamano_bytes`, que el ER aún no listaba).
+
+## Campos y endpoints
+
+### Tabla `evidencias`
+
+- `id` UUID PK (generado en aplicación)
+- `calificacion_estandar_id` UUID NOT NULL, FK → `calificaciones_estandar.id`, índice
+- `usuario_id` UUID NOT NULL, FK → `usuarios.id`
+- `nombre_archivo` VARCHAR(255) NOT NULL
+- `tipo_mime` VARCHAR(100) NOT NULL
+- `tamano_bytes` INTEGER NOT NULL, > 0 y ≤ 10485760
+- `ruta_almacenamiento` VARCHAR(500) NOT NULL (clave relativa, no URL pública)
+- `fecha_carga` TIMESTAMPTZ NOT NULL
+- `activo` BOOLEAN NOT NULL default true
+- `fecha_eliminacion` TIMESTAMPTZ NULL
+- `fecha_creacion` / `fecha_actualizacion` TIMESTAMPTZ NOT NULL
+
+### Tipos permitidos (SP-209)
+
+- `application/pdf` → `.pdf`
+- `image/jpeg` → `.jpg` / `.jpeg`
+- `image/png` → `.png`
+- Extensión del `nombre_archivo` debe coincidir con el MIME.
+- Tamaño máximo: 10 MiB (`10485760` bytes).
+
+### Endpoints
+
+- `POST /api/v1/calificaciones-estandar/{calificacion_id}/evidencias`
+  - Body: `nombre_archivo`, `tipo_mime`, `tamano_bytes`, `ruta_almacenamiento` (sin binario).
+  - `usuario_id` sale del Bearer, no del body.
+  - 201 `RespuestaEvidencia`; 403 `ACCESO_DENEGADO`; 404 calificación inexistente; 422 MIME/tamaño/ruta.
+- `GET /api/v1/calificaciones-estandar/{calificacion_id}/evidencias`
+  - 200 lista solo `activo=true`.
+- `DELETE /api/v1/evidencias/{id}`
+  - 200 o 204 tras borrado lógico; 404 si no existe o ya está inactiva.
+
+## Archivos a crear o modificar
+
+- `alembic/versions/<rev>_crear_tabla_evidencias.py` — Infrastructure — Create
+- `src/infrastructure/database/modelos/evidencia_orm.py` — Infrastructure — Create
+- `src/domain/models/evidencia.py` — Domain — Create
+- `src/domain/exceptions/evidencia.py` — Domain — Create
+- `src/domain/repositories/repositorio_evidencia.py` — Domain — Create
+- `src/infrastructure/repositories/repositorio_evidencia_sqlalchemy.py` — Infrastructure — Create
+- `src/application/dto/solicitud_registrar_evidencia.py` — Application — Create
+- `src/application/dto/respuesta_evidencia.py` — Application — Create
+- `src/application/services/servicio_evidencias.py` — Application — Create
+- `src/presentation/routers/evidencias_router.py` — Presentation — Create
+- `src/presentation/dependencies/evidencia.py` — Presentation — Create
+- `tests/unit/domain/test_evidencia.py` — Tests — Create
+- `tests/integration/test_evidencias.py` — Tests — Create
+- `ai-specs/specs/api-spec.yml` — Docs — Modify
+- `ai-specs/specs/data-model.md` — Docs — Modify
+
+## Casos de prueba unitarios
+
+- MIME `application/pdf` y nombre `acta.pdf` de 100 KB → válido.
+- MIME `image/png` con extensión `.pdf` → error de dominio.
+- `text/html`, `.exe` o tamaño 0 / 10 MiB + 1 → rechazados.
+- Ruta `../secreto.pdf` o `https://...` → rechazada.
+- Ruta relativa `empresas/<id>/acta.pdf` → válida.
+- Baja lógica marca `activo=false` y no elimina la fila.
+- HTTP: 201, listado sin inactivas, 403 rol `CONSULTA`, 404 calificación ajena/inexistente, 422.
+
+## Requisitos no funcionales
+
+- No persistir el binario ni contenido clínico.
+- `ruta_almacenamiento` no se expone como URL firmada en esta historia.
+- JWT existente; el usuario del token es el único `usuario_id` aceptado.
+- Índice por `calificacion_estandar_id` para el listado.
+- Ruff + mypy strict; cobertura global ≥ 90 %.
+
+## Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — Una tabla nueva alineada al ER, validaciones de MIME/tamaño y tres operaciones de metadatos; sin almacenamiento binario ni vínculo a planes de mejora.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-208 -->
+### Subtarea: SP-208 — Diseñar tabla de metadatos de archivos adjuntos
+
+#### Descripción original
+<!-- jira-skip -->
+Modelar campos como nombre, tipo MIME, tamaño, ruta y fecha de carga.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Crear la migración Alembic de `evidencias` y el ORM/agregado de dominio con `nombre_archivo`, `tipo_mime`, `tamano_bytes`, `ruta_almacenamiento`, `fecha_carga`, más `activo` y `fecha_eliminacion`. PK UUID y timestamps UTC como el resto del esquema. `down_revision`: `d4e5f6a7b8c9`.
+
+#### Criterios de aceptación
+
+- [ ] `alembic upgrade head` crea la tabla y `downgrade -1` la elimina.
+- [ ] El dominio no importa SQLAlchemy ni FastAPI.
+- [ ] `tamano_bytes` queda documentado en `data-model.md`.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — Migración, ORM y modelo de dominio sin reglas de negocio finas.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-208 -->
+
+<!-- SUBTASK:SP-209 -->
+### Subtarea: SP-209 — Definir tipos de archivo permitidos y validaciones
+
+#### Descripción original
+<!-- jira-skip -->
+Establecer reglas de extensión y tamaño máximo permitido por evidencia.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+En la factoría `Evidencia.crear`, aceptar solo PDF, JPEG y PNG, exigir que la extensión coincida con el MIME y limitar `tamano_bytes` a 10 MiB. Rechazar rutas vacías, con `..` o con esquema. Excepción de dominio mapeada a 422.
+
+#### Criterios de aceptación
+
+- [ ] Lista de MIME y mapa de extensiones en un solo módulo de dominio.
+- [ ] Casos de prueba de MIME válido, extensión cruzada, tamaño y ruta.
+- [ ] Ningún tipo ejecutable ni HTML pasa la factoría.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — Reglas puras y suite unitaria parametrizada.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-209 -->
+
+<!-- SUBTASK:SP-210 -->
+### Subtarea: SP-210 — Relacionar metadatos con estándar y usuario que carga
+
+#### Descripción original
+<!-- jira-skip -->
+Vincular cada documento adjunto al estándar evaluado y al usuario responsable.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+FK NOT NULL `calificacion_estandar_id` → `calificaciones_estandar.id` (de ahí se llega al estándar y a la autoevaluación) y `usuario_id` → `usuarios.id`. El servicio toma `usuario_id` del token. Endpoints de alta, listado de activas y baja lógica bajo la calificación. No implementar `accion_mejora_id` hasta que exista esa tabla.
+
+#### Criterios de aceptación
+
+- [ ] No se puede insertar evidencia sin calificación y sin usuario.
+- [ ] El body no acepta `usuario_id`.
+- [ ] Rol `CONSULTA` recibe 403 al registrar o dar de baja.
+- [ ] Integración HTTP cubre 201, 200, 403, 404 y 422.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — FKs, caso de uso, router y pruebas de integración.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-210 -->

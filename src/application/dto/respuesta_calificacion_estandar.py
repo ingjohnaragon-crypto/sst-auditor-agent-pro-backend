@@ -9,6 +9,7 @@ from pydantic import BaseModel
 class RespuestaCalificacionEstandar(BaseModel):
     """Calificación derivada (el puntaje nunca proviene del cliente)."""
 
+    id: UUID | None = None
     estandar_id: UUID
     resultado: str
     puntaje: Decimal

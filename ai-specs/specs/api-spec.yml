@@ -825,6 +825,110 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/calificaciones-estandar/{calificacion_id}/evidencias:
+    post:
+      summary: Registra metadatos de un documento de soporte (sin el binario)
+      tags: [Evidencias]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: calificacion_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudRegistrarEvidencia"
+      responses:
+        "201":
+          description: Metadatos persistidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaEvidencia"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: CALIFICACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: EVIDENCIA_INVALIDA / ERROR_VALIDACION
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    get:
+      summary: Lista evidencias activas de una calificación
+      tags: [Evidencias]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: calificacion_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Solo filas con activo=true
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaEvidencia"
+        "404":
+          description: CALIFICACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/evidencias/{id}:
+    delete:
+      summary: Da de baja lógica una evidencia
+      tags: [Evidencias]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Marcada inactiva; la fila se conserva
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: EVIDENCIA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "409":
+          description: EVIDENCIA_YA_INACTIVA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -949,10 +1053,48 @@ components:
       type: object
       required: [estandar_id, resultado, puntaje]
       properties:
+        id:
+          type: string
+          format: uuid
+          nullable: true
+          description: Identificador para adjuntar evidencias. Presente tras persistir.
         estandar_id: {type: string, format: uuid}
         resultado: {type: string, enum: [CUMPLE, NO_CUMPLE, NO_APLICA]}
         puntaje: {type: string, description: Decimal serializado}
         observaciones: {type: string, nullable: true}
+    SolicitudRegistrarEvidencia:
+      type: object
+      additionalProperties: false
+      required: [nombre_archivo, tipo_mime, tamano_bytes, ruta_almacenamiento]
+      properties:
+        nombre_archivo: {type: string, maxLength: 255}
+        tipo_mime:
+          type: string
+          enum: [application/pdf, image/jpeg, image/png]
+        tamano_bytes: {type: integer, minimum: 1, maximum: 10485760}
+        ruta_almacenamiento: {type: string, maxLength: 500}
+    RespuestaEvidencia:
+      type: object
+      required:
+        - id
+        - calificacion_estandar_id
+        - usuario_id
+        - nombre_archivo
+        - tipo_mime
+        - tamano_bytes
+        - ruta_almacenamiento
+        - fecha_carga
+        - activo
+      properties:
+        id: {type: string, format: uuid}
+        calificacion_estandar_id: {type: string, format: uuid}
+        usuario_id: {type: string, format: uuid}
+        nombre_archivo: {type: string}
+        tipo_mime: {type: string}
+        tamano_bytes: {type: integer}
+        ruta_almacenamiento: {type: string}
+        fecha_carga: {type: string, format: date-time}
+        activo: {type: boolean}
     RespuestaAutoevaluacion:
       type: object
       required: [id, empresa_id, usuario_id, fecha, requiere_plan_mejora, calificaciones]

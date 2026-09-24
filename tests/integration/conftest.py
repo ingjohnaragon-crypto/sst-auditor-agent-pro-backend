@@ -19,6 +19,7 @@ from src.infrastructure.database.modelos import (  # noqa: F401 — registra tab
     EmpresaORM,
     EstandarMinimoORM,
     EvaluacionRiesgoORM,
+    EvidenciaORM,
     PeligroORM,
     ProcesoActividadORM,
     UsuarioORM,

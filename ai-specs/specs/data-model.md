@@ -318,21 +318,27 @@ Auditoría anual interna, planificada con el COPASST.
 
 #### `evidencias` — D. 1072, Art. 2.2.4.6.13
 
+Implementada en SP-151 (migración `e5f6a7b8c9d0`). Solo metadatos: el binario
+no se persiste. `accion_mejora_id` sigue pendiente hasta que exista
+`acciones_mejora`; por eso `calificacion_estandar_id` es NOT NULL en esta
+historia y el CHECK «al menos una asociación» del ER todavía no se crea.
+
 | Columna | Tipo | Restricciones |
 |---|---|---|
-| `calificacion_estandar_id` | `UUID` | NULL, FK → `calificaciones_estandar.id` |
-| `accion_mejora_id` | `UUID` | NULL, FK → `acciones_mejora.id` |
-| `usuario_id` | `UUID` | NOT NULL, FK → `usuarios.id` (quien carga) |
+| `id` | `UUID` | PK |
+| `calificacion_estandar_id` | `UUID` | NOT NULL, FK → `calificaciones_estandar.id`, índice |
+| `usuario_id` | `UUID` | NOT NULL, FK → `usuarios.id` (quien carga; sale del Bearer) |
 | `nombre_archivo` | `VARCHAR(255)` | NOT NULL |
-| `tipo_mime` | `VARCHAR(100)` | NOT NULL |
-| `ruta_almacenamiento` | `VARCHAR(500)` | NOT NULL |
+| `tipo_mime` | `VARCHAR(100)` | NOT NULL. Permitidos: `application/pdf`, `image/jpeg`, `image/png` |
+| `tamano_bytes` | `INTEGER` | NOT NULL, > 0 y ≤ 10 MiB |
+| `ruta_almacenamiento` | `VARCHAR(500)` | NOT NULL, relativa, sin `..` ni esquema |
 | `fecha_carga` | `TIMESTAMPTZ` | NOT NULL |
 | `activo` | `BOOLEAN` | NOT NULL, default `true` (borrado lógico) |
 | `fecha_eliminacion` | `TIMESTAMPTZ` | NULL mientras esté activa |
 
-Regla (CHECK en la implementación): **al menos una** de las dos FK opcionales
-(`calificacion_estandar_id`, `accion_mejora_id`) debe estar presente. Nunca
-borrado físico (conservación 20 años tras el cese laboral).
+Nunca borrado físico (conservación 20 años tras el cese laboral).
+`accion_mejora_id UUID NULL FK → acciones_mejora.id` se añadirá cuando exista
+esa tabla.
 
 ### Relaciones (cardinalidad)
 
@@ -349,7 +355,7 @@ borrado físico (conservación 20 años tras el cese laboral).
 | `auditorias` → `hallazgos` | 1—N |
 | `autoevaluaciones` → `planes_mejoramiento` | 1—N (FK opcional en el plan) |
 | `planes_mejoramiento` → `acciones_mejora` | 1—N |
-| `calificaciones_estandar` → `evidencias` | 1—N (FK opcional) |
+| `calificaciones_estandar` → `evidencias` | 1—N (`calificacion_estandar_id` NOT NULL en SP-151) |
 | `acciones_mejora` → `evidencias` | 1—N (FK opcional) |
 | `usuarios` → `autoevaluaciones` | 1—N (evaluador) |
 | `usuarios` → `evidencias` | 1—N (quien carga) |
