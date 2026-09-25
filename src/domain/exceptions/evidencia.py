@@ -35,6 +35,14 @@ class ArchivoNoDisponibleError(DomainException):
         super().__init__(message)
 
 
+class AlmacenamientoNoConfiguradoError(DomainException):
+    code = "ALMACENAMIENTO_NO_CONFIGURADO"
+    http_status = 503
+
+    def __init__(self, message: str = "El almacenamiento de archivos no está configurado") -> None:
+        super().__init__(message)
+
+
 class CalificacionNoEncontradaError(DomainException):
     code = "CALIFICACION_NO_ENCONTRADA"
     http_status = 404

@@ -825,6 +825,61 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/calificaciones-estandar/{calificacion_id}/archivo:
+    post:
+      summary: Sube el binario de soporte de una calificación
+      tags: [Evidencias]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: calificacion_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Archivo guardado y metadatos persistidos
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaEvidencia"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: CALIFICACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: EVIDENCIA_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "503":
+          description: ALMACENAMIENTO_NO_CONFIGURADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
   /api/v1/calificaciones-estandar/{calificacion_id}/evidencias:
     post:
       summary: Registra metadatos de un documento de soporte (sin el binario)

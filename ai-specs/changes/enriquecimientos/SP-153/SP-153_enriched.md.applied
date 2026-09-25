@@ -1,0 +1,173 @@
+# Ticket enriquecido: SP-153 — SST-HU 4.1: Subida de Evidencias de Cumplimiento (Documental)
+
+## Descripción original
+<!-- jira-skip -->
+Como Responsable de SST, quiero adjuntar soportes digitales (PDF, imágenes) para cada estándar calificado, para contar con evidencia probatoria ante el Ministerio del Trabajo.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+El responsable adjunta el PDF o la imagen del estándar ya calificado. El servidor guarda el binario bajo `ALMACENAMIENTO_LOCAL_RAIZ` y crea la fila de `evidencias` con metadatos medidos por él, no dictados por el cliente. SP-151 solo persistía metadatos y una ruta que el cliente elegía. SP-152 ya descarga ese archivo si está dentro de la raíz. Esta historia escribe el archivo que aquella descarga espera.
+
+En este repositorio solo se implementa **SP-214**. SP-215 y SP-216 son Angular y viven en `sst-auditor-agent-pro-frontend`.
+
+Decisiones cerradas:
+
+- `POST /api/v1/calificaciones-estandar/{calificacion_id}/archivo` con `multipart/form-data`, campo `archivo`. No se reutiliza el POST JSON de metadatos: ese sigue existiendo y no escribe disco.
+- El cliente no envía `ruta_almacenamiento`, `tamano_bytes` ni `usuario_id`. El servicio mide el tamaño, toma el nombre original solo como etiqueta, elige la extensión y arma la ruta `evidencias/{calificacion_id}/{uuid}{ext}`.
+- MIME y extensión: los mismos de SP-151 (`application/pdf`, `image/jpeg`, `image/png`). Además, los primeros bytes deben coincidir (`%PDF`, JPEG `FF D8 FF`, PNG `89 50 4E 47`). Si el `Content-Type` del part no coincide con la extensión, se rechaza.
+- Tope 10 MiB. Se lee por bloques y se aborta al superar el tope, sin guardar el resto.
+- Rol escritor (`ADMINISTRADOR` o `AUDITOR_SST`). `CONSULTA` recibe 403. Calificación inexistente: 404. Evidencia inactiva no aplica en el alta.
+- Sin `ALMACENAMIENTO_LOCAL_RAIZ`: 503 `ALMACENAMIENTO_NO_CONFIGURADO`. No se inserta fila.
+- Si la validación falla o la base rechaza el insert, el archivo parcial se borra. Ese es el único borrado físico: limpieza de una carga que no quedó confirmada.
+- El descarte del usuario sigue siendo el `DELETE` lógico de SP-151. No se borra el binario ya confirmado (conservación documental). SP-152 no sirve una evidencia inactiva.
+- Respuesta 201 con `RespuestaEvidencia`. La descarga posterior usa el enlace de SP-152.
+
+Fuera de alcance: S3, historias clínicas, reemplazar el POST JSON, pantalla Angular.
+
+## Criterios de aceptación
+
+- [ ] El multipart escribe el archivo bajo la raíz y crea la fila con tamaño real y ruta generada por el servidor.
+- [ ] El body no acepta ruta ni usuario. Un `Content-Type` JSON en esta ruta no crea evidencia.
+- [ ] PDF, JPEG y PNG válidos responden 201. Extensión cruzada, HTML, ejecutable o magic bytes que no coinciden responden 422 `EVIDENCIA_INVALIDA` y no dejan archivo.
+- [ ] Más de 10 MiB responde 422 y no deja archivo.
+- [ ] `CONSULTA` recibe 403. Calificación inexistente recibe 404.
+- [ ] Sin raíz configurada: 503 `ALMACENAMIENTO_NO_CONFIGURADO` y ninguna fila nueva.
+- [ ] Un `DELETE` lógico posterior impide el canje de SP-152. El archivo confirmado permanece en disco.
+- [ ] Cobertura global ≥ 90 %. `api-spec.yml` actualizado. SP-215 y SP-216 no se implementan en este repo.
+
+## Campos y endpoints
+
+`POST /api/v1/calificaciones-estandar/{calificacion_id}/archivo`
+
+- Auth: Bearer `tipo=acceso`, rol escritor
+- `Content-Type: multipart/form-data`
+- Campo `archivo`: un solo fichero. Sin otros campos.
+- 201 `RespuestaEvidencia` (`id`, `calificacion_estandar_id`, `usuario_id` del token, `nombre_archivo`, `tipo_mime`, `tamano_bytes` medido, `ruta_almacenamiento` relativa, `fecha_carga`, `activo=true`)
+- 401 `TOKEN_INVALIDO` / `TOKEN_EXPIRADO`
+- 403 `ACCESO_DENEGADO`
+- 404 `CALIFICACION_NO_ENCONTRADA`
+- 422 `EVIDENCIA_INVALIDA` (tipo, magic, tamaño, nombre vacío)
+- 503 `ALMACENAMIENTO_NO_CONFIGURADO`
+
+Ruta relativa generada: `evidencias/{calificacion_id}/{uuid}.pdf` (o `.jpg` / `.png`). Nunca la ruta que traiga el cliente.
+
+El `DELETE /api/v1/evidencias/{id}` ya existente no cambia de contrato.
+
+## Archivos a crear o modificar
+
+- `src/domain/exceptions/evidencia.py` — Domain — Modify (`AlmacenamientoNoConfiguradoError`, 503)
+- `src/application/services/servicio_carga_evidencia.py` — Application — Create
+- `src/infrastructure/almacenamiento/almacen_local.py` — Infrastructure — Create
+- `src/presentation/routers/evidencias_router.py` — Presentation — Modify
+- `src/presentation/dependencies/evidencia.py` — Presentation — Modify
+- `ai-specs/specs/api-spec.yml` — Docs — Modify
+- `tests/unit/application/test_servicio_carga_evidencia.py` — Tests — Create
+- `tests/integration/test_carga_evidencias.py` — Tests — Create
+
+SP-215 y SP-216, en el frontend (no en este repo):
+
+- `src/app/features/diagnostico/` — Presentation — Create (zona de carga y visor)
+
+## Casos de prueba unitarios
+
+- PDF con magic `%PDF` y menos de 10 MiB → fila y archivo bajo la raíz, ruta que empieza por `evidencias/{calificacion_id}/`.
+- JPEG `.jpg` y `.jpeg`, PNG → 201.
+- PNG renombrado a `.pdf`, HTML, `.exe` → `EvidenciaInvalidaError` y directorio sin residuo.
+- Lectura que supera 10 MiB → error y sin archivo.
+- Calificación ausente → no se abre disco.
+- Raíz `None` → `AlmacenamientoNoConfiguradoError` antes de escribir.
+- Fallo del `guardar` después de escribir → el archivo se elimina.
+- `usuario_id` de la fila es el del argumento, no un campo del multipart.
+
+## Requisitos no funcionales
+
+- No loguear bytes ni el contenido del part.
+- Leer por bloques (p. ej. 64 KiB) con tope 10 MiB + 1 para cortar.
+- Resolver la ruta final con la misma contención que SP-152 (`resolve` + `relative_to`) antes de mover el temporal.
+- Nombre mostrado: solo el basename, sin directorios, máximo 255.
+- Ruff y mypy strict. Cobertura global ≥ 90 %.
+- Sin librerías nuevas. `UploadFile` de FastAPI basta.
+
+## Puntos de historia
+<!-- STORY_POINTS:8 -->
+**8** — Carga multipart con validación de contenido, escritura acotada a la raíz y limpieza si la transacción no confirma. La UI queda en otras subtareas.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-214 -->
+### Subtarea: SP-214 — Desarrollar API multipart para carga de archivos en Python
+
+#### Descripción original
+<!-- jira-skip -->
+Endpoint robusto para la subida y descarte seguro de evidencias.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Implementar el `POST` multipart descrito arriba. Reutilizar `Evidencia.crear` para MIME, extensión, tamaño y nombre. Añadir la comprobación de magic bytes en el servicio, antes de publicar el archivo en la raíz. El descarte seguro de una carga fallida borra el temporal. El descarte del usuario no es un `DELETE` físico: se usa el borrado lógico ya existente, que deja de servir el archivo.
+
+#### Criterios de aceptación
+
+- [ ] Un archivo válido queda en disco y en `evidencias` en la misma operación.
+- [ ] Magic bytes incoherentes no dejan residuo.
+- [ ] `CONSULTA` no sube.
+- [ ] Integración HTTP cubre 201, 403, 404, 422 y 503.
+- [ ] Tras el 201, el enlace de SP-152 con la raíz de prueba devuelve esos bytes.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — Un endpoint, validación de contenido y escritura atómica respecto a la fila. Sin cambio de esquema.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-214 -->
+
+<!-- SUBTASK:SP-215 -->
+### Subtarea: SP-215 — Crear componente Drag-and-Drop de evidencias en Angular
+
+#### Descripción original
+<!-- jira-skip -->
+Interfaz interactiva para cargar archivos por arrastre a nivel de ítems.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Fuera de este repositorio. En `sst-auditor-agent-pro-frontend`, sobre el ítem ya calificado de `features/diagnostico`, una zona de arrastre (y un botón de selección) envía un único `FormData` con el campo `archivo` a `POST /api/v1/calificaciones-estandar/{calificacion_id}/archivo`. El `calificacion_id` es el `id` de la calificación, no el del estándar. Solo PDF, JPEG y PNG, hasta 10 MiB, rechazados en cliente antes de llamar. Muestra la lista de evidencias activas (`GET` ya existente) y el error 422/413 sin recargar la autoevaluación. `CONSULTA` no ve el control de carga.
+
+#### Criterios de aceptación
+
+- [ ] Arrastrar un PDF válido dispara el multipart y pinta la evidencia devuelta.
+- [ ] Un tipo no permitido no llama al API.
+- [ ] El rol consulta no muestra la zona de carga.
+- [ ] El error del API se muestra en español junto al ítem.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — Un componente de arrastre sobre el ítem calificado. El API ya está definido en SP-214.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-215 -->
+
+<!-- SUBTASK:SP-216 -->
+### Subtarea: SP-216 — Integrar visor dinámico de PDF en el frontend
+
+#### Descripción original
+<!-- jira-skip -->
+Implementar iframe o componente JS para revisar los documentos subidos.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+
+Fuera de este repositorio. El visor no recibe el binario en el listado. Pide `POST /api/v1/evidencias/{id}/enlace-descarga` y abre la `url` devuelta (vigencia 300 segundos). PDF en un `iframe` o visor JS. JPEG y PNG en un `img`, no en el visor PDF. No incrustar el token en el código fuente ni guardarlo en `localStorage`. Al cerrar el visor no se reutiliza un enlace vencido: se pide otro.
+
+#### Criterios de aceptación
+
+- [ ] Un PDF activo se ve tras pedir el enlace. Una imagen se muestra como imagen.
+- [ ] Una evidencia inactiva no ofrece visor.
+- [ ] El token no se persiste en almacenamiento del navegador.
+- [ ] Si el canje responde `ARCHIVO_NO_DISPONIBLE`, el visor muestra ese error y no un iframe vacío.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — Abrir el enlace de SP-152. Sin subir ni transformar el archivo.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-216 -->

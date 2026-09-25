@@ -2,7 +2,7 @@
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi import status as http_status
 from fastapi.responses import FileResponse
 
@@ -10,6 +10,11 @@ from src.application.dto.respuesta_enlace_descarga import RespuestaEnlaceDescarg
 from src.application.dto.respuesta_error import RespuestaError
 from src.application.dto.respuesta_evidencia import RespuestaEvidencia
 from src.application.dto.solicitud_registrar_evidencia import SolicitudRegistrarEvidencia
+from src.application.services.servicio_carga_evidencia import (
+    TAMANO_BLOQUE,
+    ServicioCargaEvidencia,
+    leer_con_tope,
+)
 from src.application.services.servicio_descarga_evidencia import ServicioDescargaEvidencia
 from src.application.services.servicio_evidencias import ServicioEvidencias
 from src.domain.exceptions.autenticacion import TokenInvalidoException
@@ -17,6 +22,7 @@ from src.domain.models.usuario import Usuario
 from src.presentation.dependencies.autenticacion import obtener_usuario_actual
 from src.presentation.dependencies.autoevaluacion import requerir_rol_escritor
 from src.presentation.dependencies.evidencia import (
+    obtener_servicio_carga_evidencia,
     obtener_servicio_descarga_evidencia,
     obtener_servicio_evidencias,
 )
@@ -43,6 +49,42 @@ router_por_calificacion = APIRouter(
 )
 router = APIRouter(prefix="/evidencias", tags=["Evidencias"])
 router_descargas = APIRouter(prefix="/descargas", tags=["Evidencias"])
+
+
+@router_por_calificacion.post(
+    "/{calificacion_id}/archivo",
+    status_code=http_status.HTTP_201_CREATED,
+    response_model=RespuestaEvidencia,
+    responses={
+        **RESPUESTAS_ESCRITURA,
+        404: {
+            "model": RespuestaError,
+            "description": "Calificación inexistente (CALIFICACION_NO_ENCONTRADA)",
+        },
+        503: {
+            "model": RespuestaError,
+            "description": "Raíz de almacenamiento ausente (ALMACENAMIENTO_NO_CONFIGURADO)",
+        },
+    },
+    summary="Sube el archivo de soporte de una calificación",
+)
+async def cargar_archivo_evidencia(
+    calificacion_id: UUID,
+    archivo: UploadFile = File(...),
+    escritor: Usuario = Depends(requerir_rol_escritor),
+    servicio: ServicioCargaEvidencia = Depends(obtener_servicio_carga_evidencia),
+) -> RespuestaEvidencia:
+    """Guarda el binario y los metadatos. El cliente no elige la ruta."""
+    if escritor.id is None:
+        raise TokenInvalidoException()
+    contenido = leer_con_tope(iter(lambda: archivo.file.read(TAMANO_BLOQUE), b""))
+    return await servicio.cargar(
+        calificacion_id,
+        archivo.filename or "",
+        archivo.content_type or "",
+        contenido,
+        escritor.id,
+    )
 
 
 @router_por_calificacion.post(

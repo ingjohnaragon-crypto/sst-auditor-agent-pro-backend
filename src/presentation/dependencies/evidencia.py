@@ -5,12 +5,14 @@ from pathlib import Path
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.application.services.servicio_carga_evidencia import ServicioCargaEvidencia
 from src.application.services.servicio_descarga_evidencia import ServicioDescargaEvidencia
 from src.application.services.servicio_evidencias import ServicioEvidencias
 from src.domain.repositories.repositorio_acceso_evidencia import RepositorioAccesoEvidencia
 from src.domain.repositories.repositorio_evidencia import RepositorioEvidencia
 from src.domain.repositories.repositorio_usuario import RepositorioUsuario
 from src.domain.repositories.servicio_tokens import ServicioTokens
+from src.infrastructure.almacenamiento.almacen_local import AlmacenLocal
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.database.sesion import obtener_sesion
 from src.infrastructure.repositories.repositorio_acceso_evidencia_sqlalchemy import (
@@ -71,4 +73,16 @@ def obtener_servicio_descarga_evidencia(
         segundos_expiracion=settings.descarga_segundos_expiracion,
         prefijo_api=settings.api_prefix,
         raiz_almacenamiento=raiz,
+    )
+
+
+def obtener_servicio_carga_evidencia(
+    repositorio: RepositorioEvidencia = Depends(obtener_repositorio_evidencia),
+    raiz: Path | None = Depends(obtener_raiz_almacenamiento),
+) -> ServicioCargaEvidencia:
+    """Ensambla la carga multipart con el almacén de la raíz configurada."""
+    return ServicioCargaEvidencia(
+        repositorio=repositorio,
+        almacen=AlmacenLocal(raiz),
+        raiz_configurada=raiz is not None,
     )
