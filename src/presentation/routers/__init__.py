@@ -35,6 +35,9 @@ from src.presentation.routers.matriz_riesgos_router import (
     router as matriz_riesgos_router,
 )
 from src.presentation.routers.ping_router import router as ping_router
+from src.presentation.routers.resumen_ejecutivo_router import (
+    router as resumen_ejecutivo_router,
+)
 
 settings = get_settings()
 
@@ -43,6 +46,7 @@ api_router.include_router(health_router)
 api_router.include_router(ping_router, prefix=settings.api_prefix)
 api_router.include_router(auth_router, prefix=settings.api_prefix)
 api_router.include_router(empresas_router, prefix=settings.api_prefix)
+api_router.include_router(resumen_ejecutivo_router, prefix=settings.api_prefix)
 api_router.include_router(autoevaluaciones_router, prefix=settings.api_prefix)
 api_router.include_router(estandares_router, prefix=settings.api_prefix)
 api_router.include_router(evidencias_por_calificacion_router, prefix=settings.api_prefix)

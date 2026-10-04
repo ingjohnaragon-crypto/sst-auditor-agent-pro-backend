@@ -1,0 +1,91 @@
+# Ticket enriquecido: SP-253 — Exponer resumen ejecutivo por empresa
+
+## Descripción original
+<!-- jira-skip -->
+Subtarea: SP-253 — Exponer resumen ejecutivo por empresa
+Descripción original
+Descripción mejorada
+Implementar GET /api/v1/empresas/{empresa_id}/resumen-ejecutivo como está en la épica. Contar filas de autoevaluación. Elegir la última por fecha y luego fecha_creacion. Copiar requiere_plan_mejora de esa fila. Contar evaluaciones de la matriz por interpretacion_nr persistida. Resolver 1.1.1 y 1.1.4 por EstandarMinimo.numeral y el resultado guardado. Si no hay calificación, SIN_CALIFICAR.
+Criterios de aceptación
+El contrato del endpoint queda en OpenAPI.
+
+CONSULTA puede leer.
+
+Los números salen de filas persistidas, sin motor ni interpretar_nr.
+
+
+Puntos de historia
+5 — caso de uso, DTO, router y pruebas. Sin migración.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+Endpoint de solo lectura para el inicio. Arma el resumen de una empresa con filas ya guardadas. No llama a `motor_calificacion_res312` ni a `interpretar_nr`. No hay migración.
+
+La empresa se busca primero. Si no existe, 404 `EMPRESA_NO_ENCONTRADA`.
+
+Autoevaluaciones: `RepositorioAutoevaluacion.listar_por_empresa`. `cantidad_autoevaluaciones` es el largo de esa lista. La última se elige en el servicio con `fecha` descendente y, si empatan, `fecha_creacion` descendente. El repositorio hoy solo ordena por `fecha`; el desempate no se delega al SQL. De esa fila se copian `id` y `requiere_plan_mejora`. No se recalcula el umbral de 85.
+
+Riesgos: `RepositorioProcesoActividad.obtener_matriz_por_empresa`. Se recorre cada peligro. Si `evaluacion` es `null`, no cuenta. Si existe, se suma `evaluacion.interpretacion_nr` ya persistida (`I`, `II`, `III`, `IV`). `riesgos_nivel_i` y `riesgos_nivel_ii` son los mismos enteros que `distribucion_riesgos.I` y `.II`.
+
+Irrenunciables: del catálogo `RepositorioEstandarMinimo.listar`, los numerales `1.1.1` y `1.1.4`, en ese orden. La `descripcion` sale del catálogo. El `resultado` sale de la calificación de la última autoevaluación cuyo `estandar_id` coincide. Sin autoevaluación, o sin esa calificación, `SIN_CALIFICAR`. `SIN_CALIFICAR` no es un valor de `ResultadoCalificacion`; vive solo en este DTO.
+
+## Criterios de aceptación
+- [ ] `GET /api/v1/empresas/{empresa_id}/resumen-ejecutivo` queda en OpenAPI con `response_model`.
+- [ ] `CONSULTA`, `AUDITOR_SST` y `ADMINISTRADOR` reciben 200. Sin token, 401.
+- [ ] Empresa inexistente responde 404 `EMPRESA_NO_ENCONTRADA`.
+- [ ] Los conteos y `requiere_plan_mejora` salen de filas persistidas. El servicio no llama al motor ni a `interpretar_nr`.
+- [ ] Sin autoevaluaciones: conteo 0, `autoevaluacion_id` null, `requiere_plan_mejora` false, ambos irrenunciables en `SIN_CALIFICAR`.
+- [ ] Un peligro sin evaluación no entra en la distribución.
+
+## Campos y endpoints
+
+- `GET /api/v1/empresas/{empresa_id}/resumen-ejecutivo`
+- Auth: `obtener_usuario_actual`. No usa `requerir_rol_escritor`.
+- Registrar el router en `src/presentation/routers/__init__.py` con `settings.api_prefix`, igual que `empresas_router`.
+
+Cuerpo 200:
+
+- `empresa_id`
+- `cantidad_autoevaluaciones`
+- `autoevaluacion_id` o `null`
+- `requiere_plan_mejora`
+- `riesgos_nivel_i`
+- `riesgos_nivel_ii`
+- `distribucion_riesgos`: objeto con claves `I`, `II`, `III`, `IV` (enteros; 0 si no hay evaluaciones)
+- `irrenunciables`: lista de exactamente dos objetos, en orden `1.1.1` y `1.1.4`, cada uno con `numeral`, `descripcion`, `resultado` (`CUMPLE`, `NO_CUMPLE`, `NO_APLICA` o `SIN_CALIFICAR`)
+
+Errores con `RespuestaError`: 401 `TOKEN_INVALIDO`, 404 `EMPRESA_NO_ENCONTRADA`.
+
+## Archivos a crear o modificar
+- `src/application/dto/respuesta_resumen_ejecutivo.py` — Application — Create
+- `src/application/services/servicio_resumen_ejecutivo.py` — Application — Create
+- `src/presentation/routers/resumen_ejecutivo_router.py` — Presentation — Create
+- `src/presentation/routers/__init__.py` — Presentation — Modify
+- `src/presentation/dependencies/autoevaluacion.py` — Presentation — Modify (proveer el servicio con los repositorios de empresa, autoevaluación, estándar mínimo y proceso/matriz)
+- `tests/unit/application/test_servicio_resumen_ejecutivo.py` — Create
+- `tests/integration/test_resumen_ejecutivo.py` — Create
+
+No se toca el frontend. SP-254, SP-255 y SP-256 consumen este contrato.
+
+## Casos de prueba unitarios
+- Dos autoevaluaciones: el conteo es 2 y gana la de `fecha` mayor.
+- Misma `fecha`: gana la de `fecha_creacion` más reciente, aunque el listado del repositorio no desempate.
+- Sin autoevaluaciones: conteo 0, `autoevaluacion_id` null, `requiere_plan_mejora` false, irrenunciables `SIN_CALIFICAR` con la descripción del catálogo.
+- Matriz con una evaluación I, una II y un peligro sin evaluación: I=1, II=1, III=0, IV=0. `riesgos_nivel_i` y `riesgos_nivel_ii` coinciden.
+- Ítem 1.1.1 calificado `NO_CUMPLE` y 1.1.4 sin fila: esos dos resultados, no un recálculo del puntaje.
+- Empresa inexistente: `EmpresaNoEncontradaError`.
+- El test parchea `interpretar_nr` y el motor y afirma que no se llamaron.
+- Integración: `CONSULTA` recibe 200. Sin token, 401. UUID de empresa desconocido, 404.
+
+## Requisitos no funcionales
+- Solo lectura. No inserta ni actualiza calificaciones ni evaluaciones.
+- Sin Alembic.
+- El OpenAPI lo genera FastAPI desde el `response_model`.
+- Cobertura del servicio y del router dentro del umbral del 90 %.
+- Los numerales `1.1.1` y `1.1.4` deben existir en el catálogo sembrado. Si falta uno, el servicio no inventa la descripción.
+
+## Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — caso de uso, DTO, router y pruebas. Sin migración.
+<!-- /STORY_POINTS -->
