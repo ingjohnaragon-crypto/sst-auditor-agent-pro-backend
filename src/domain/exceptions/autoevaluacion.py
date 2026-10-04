@@ -73,3 +73,14 @@ class DatosEmpresaInvalidosError(DomainException):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
+
+
+class CatalogoIrrenunciableIncompletoError(DomainException):
+    code = "CATALOGO_IRRENUNCIABLE_INCOMPLETO"
+    http_status = 500
+
+    def __init__(
+        self,
+        message: str = "El catálogo no incluye los numerales irrenunciables 1.1.1 y 1.1.4",
+    ) -> None:
+        super().__init__(message)

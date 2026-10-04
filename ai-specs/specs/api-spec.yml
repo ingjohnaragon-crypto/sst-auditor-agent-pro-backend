@@ -212,6 +212,38 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/empresas/{empresa_id}/resumen-ejecutivo:
+    get:
+      summary: Resumen ejecutivo de una empresa
+      tags: [Empresas]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Conteos persistidos, última autoevaluación e irrenunciables
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaResumenEjecutivo"
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
   /api/v1/estandares-minimos:
     get:
       summary: Lista el catálogo de estándares mínimos (Res. 0312)
@@ -1143,6 +1175,45 @@ components:
         actividad_economica: {type: string}
         nivel_riesgo_arl: {type: string, enum: [I, II, III, IV, V]}
         numero_trabajadores: {type: integer, exclusiveMinimum: 0}
+    RespuestaResumenEjecutivo:
+      type: object
+      required:
+        - empresa_id
+        - cantidad_autoevaluaciones
+        - autoevaluacion_id
+        - requiere_plan_mejora
+        - riesgos_nivel_i
+        - riesgos_nivel_ii
+        - distribucion_riesgos
+        - irrenunciables
+      properties:
+        empresa_id: {type: string, format: uuid}
+        cantidad_autoevaluaciones: {type: integer, minimum: 0}
+        autoevaluacion_id: {type: string, format: uuid, nullable: true}
+        requiere_plan_mejora: {type: boolean}
+        riesgos_nivel_i: {type: integer, minimum: 0}
+        riesgos_nivel_ii: {type: integer, minimum: 0}
+        distribucion_riesgos:
+          type: object
+          required: [I, II, III, IV]
+          properties:
+            I: {type: integer, minimum: 0}
+            II: {type: integer, minimum: 0}
+            III: {type: integer, minimum: 0}
+            IV: {type: integer, minimum: 0}
+        irrenunciables:
+          type: array
+          minItems: 2
+          maxItems: 2
+          items:
+            type: object
+            required: [numeral, descripcion, resultado]
+            properties:
+              numeral: {type: string}
+              descripcion: {type: string}
+              resultado:
+                type: string
+                enum: [CUMPLE, NO_CUMPLE, NO_APLICA, SIN_CALIFICAR]
     RespuestaEmpresa:
       type: object
       required: [id, razon_social, nit, actividad_economica, nivel_riesgo_arl, numero_trabajadores]

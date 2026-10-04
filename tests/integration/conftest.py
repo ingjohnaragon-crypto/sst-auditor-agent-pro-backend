@@ -125,6 +125,7 @@ async def cliente_async() -> AsyncIterator[AsyncClient]:
     transporte = ASGITransport(app=app)
     async with AsyncClient(transport=transporte, base_url="http://test") as cliente:
         cliente.estandar_ids = tuple(ids_estandares)  # type: ignore[attr-defined]
+        cliente.fabrica_sesion = fabrica  # type: ignore[attr-defined]
         yield cliente
 
     app.dependency_overrides.clear()
