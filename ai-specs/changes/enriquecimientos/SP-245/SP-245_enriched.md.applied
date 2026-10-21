@@ -1,0 +1,190 @@
+# Ticket enriquecido: SP-245 — Catálogo documental del ciclo PHVA
+
+## Descripción original
+<!-- jira-skip -->
+Complementa la épica SP-133. SP-151, SP-152 y SP-153 ya cubren la evidencia pegada a un ítem del diagnóstico. Esta épica agrega el catálogo de documentos obligatorios por fase que muestra el mockup (política, matriz, plan anual, capacitación, EPP, actas COPASST, FURAT, indicadores, auditoría y plan de mejora). Los archivos se guardan en el repositorio documental ligero, no en buckets. SP-150 queda diferida: no hay infraestructura de nube para cumplirla.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+El catálogo lista los documentos obligatorios del SG-SST por fase del ciclo PHVA y el estado de cada uno para la empresa activa. El archivo no se guarda en el disco del servidor ni en AWS. Se sube a **Cloudflare R2** usando el puerto que entrega la épica **SP-249**. Esta épica solo guarda en PostgreSQL la clave del objeto, el estado y la fecha.
+
+SP-151, SP-152 y SP-153 siguen cubriendo la evidencia pegada a un ítem del diagnóstico. SP-150 (bucket de AWS) se cierra: el almacenamiento de objetos es R2, sin VPC. El aprendizaje del panel, del token y del bucket de desarrollo también es de SP-249 y debe estar hecho antes de implementar la carga de este catálogo.
+
+Los diez tipos sembrados, tomados del mockup, son:
+
+- PLANEAR: Política de SST, Matriz de riesgos (GTC 45), Plan de trabajo anual, Programa de capacitación.
+- HACER: Registros de entrega de EPP, Actas de COPASST o Vigía, Reportes de accidentes (FURAT).
+- VERIFICAR: Indicadores de gestión, Informe de auditoría interna.
+- ACTUAR: Plan de mejora.
+
+Cada tipo es obligatorio. Una empresa tiene como máximo un documento vigente por tipo. El estado inicial es PENDIENTE. Pasa a CARGADO al subir el archivo y a REVISADO cuando un rol escritor lo marca. El porcentaje del gestor cuenta los que no están en PENDIENTE.
+
+La pantalla vive en el frontend Angular (`sst-auditor-agent-pro-frontend`), ruta nueva dentro del shell autenticado, con pestañas PLANEAR, HACER, VERIFICAR y ACTUAR.
+
+## Criterios de aceptación
+- [ ] La semilla crea los diez tipos por fase y se puede ejecutar más de una vez sin duplicar ni tocar los estándares de la Resolución 0312.
+- [ ] El binario queda en el bucket de Cloudflare R2. En PostgreSQL solo se guarda la clave del objeto y los metadatos.
+- [ ] Un archivo inválido se rechaza antes de llamar a R2.
+- [ ] La descarga exige sesión. El objeto no queda público.
+- [ ] SP-150 no se implementa. No hay volumen de documentos en el servidor.
+- [ ] La pantalla muestra el avance y, al recargar, el archivo sigue disponible.
+
+## Campos y endpoints
+
+Catálogo (semilla, solo lectura):
+
+- `GET /api/v1/catalogo-documentos` — tipos con `id`, `nombre`, `fase` (`PLANEAR`, `HACER`, `VERIFICAR`, `ACTUAR`), `obligatorio`, `descripcion`.
+
+Documento de empresa:
+
+- `GET /api/v1/empresas/{empresa_id}/documentos` — cada tipo con `estado` (`PENDIENTE`, `CARGADO`, `REVISADO`), `fecha_carga`, `clave_objeto` (no se expone al cliente como URL permanente) y `nombre_original`.
+- `POST /api/v1/empresas/{empresa_id}/documentos/{tipo_id}/archivo` — `multipart/form-data`, campo `archivo`. Tipos: `application/pdf`, `image/jpeg`, `image/png`. Tope 10 MiB, misma regla de magic bytes que SP-214. Respuesta 201 con el documento en estado CARGADO.
+- `GET /api/v1/empresas/{empresa_id}/documentos/{tipo_id}/archivo` — 200 con el archivo o un enlace firmado de pocos minutos. 401 sin sesión.
+- `PATCH /api/v1/empresas/{empresa_id}/documentos/{tipo_id}` — cuerpo `{ "estado": "REVISADO" }`. Solo desde CARGADO.
+
+Roles: `CONSULTA` lee y descarga. `ADMINISTRADOR` y `AUDITOR_SST` cargan y marcan REVISADO. Sin variables de R2, la carga responde 503 y no inserta fila.
+
+Vínculo opcional con estándar 0312 (SP-268): tabla de catálogo `tipo_documento_estandar (tipo_id, estandar_id)`. No copia el archivo. Sirve para abrir el documento desde el ítem.
+
+## Archivos a crear o modificar
+- `src/domain/models/tipo_documento_sst.py` — Domain — Create
+- `src/domain/models/documento_empresa.py` — Domain — Create
+- `src/domain/repositories/repositorio_documento_empresa.py` — Domain — Create
+- `src/application/services/servicio_documentos_empresa.py` — Application — Create
+- `src/application/dto/respuesta_documento_empresa.py` — Application — Create
+- `src/infrastructure/database/modelos/documento_empresa_orm.py` — Infrastructure — Create
+- `src/infrastructure/repositories/repositorio_documento_empresa_sqlalchemy.py` — Infrastructure — Create
+- `src/presentation/routers/documentos_router.py` — Presentation — Create
+- `alembic/versions/` — migración de tipos, documentos y vínculo opcional — Create
+- Semilla idempotente de los diez tipos — Infrastructure — Create
+- El cliente R2 no se crea aquí: se reutiliza el adaptador de SP-249.
+- Frontend: `src/app/features/documentos/` en `sst-auditor-agent-pro-frontend` — Create
+
+## Casos de prueba unitarios
+- Semilla dos veces: siguen existiendo diez tipos.
+- Alta feliz: el doble de R2 recibe el objeto y el estado queda CARGADO.
+- PDF con magic bytes inválidos: no hay llamada a R2 ni fila.
+- Segunda carga del mismo tipo: reemplaza la clave anterior y borra el objeto viejo.
+- `CONSULTA` en el POST: 403.
+- Descarga sin sesión: 401.
+- Marcar REVISADO desde PENDIENTE: 409.
+
+## Requisitos no funcionales
+- El secreto de R2 solo vive en el entorno, nunca en Git ni en la respuesta.
+- El enlace firmado, si se usa, vence en minutos. La alternativa es que el API transmita el archivo tras autorizar.
+- Tope 10 MiB leído por bloques, igual que SP-214.
+- Cobertura del servicio y del router dentro del umbral del 90 %.
+
+## Puntos de historia
+<!-- STORY_POINTS:20 -->
+**20** — semilla, modelo, API, vínculo opcional y pantalla. El cliente de Cloudflare R2 y el aprendizaje del panel pertenecen a SP-249 y no se vuelven a estimar aquí.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-264 -->
+### Subtarea: SP-264 — Sembrar catálogo de documentos obligatorios por fase
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-143. Semilla con los diez documentos del ciclo PHVA del mockup, cada uno con fase PLANEAR, HACER, VERIFICAR o ACTUAR, nombre y si es obligatorio. Criterios: la semilla es idempotente; no modifica los estándares de la Resolución 0312.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Migración más semilla con los diez tipos listados en la épica. Cada fila tiene código estable, nombre, fase, descripción y `obligatorio = true`. Volver a ejecutar no duplica ni altera `estandares_minimos`.
+
+#### Criterios de aceptación
+- [ ] Existen exactamente esos diez códigos después de una o varias ejecuciones.
+- [ ] Los estándares de la Resolución 0312 quedan iguales.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — semilla idempotente, sin API.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-264 -->
+
+<!-- SUBTASK:SP-265 -->
+### Subtarea: SP-265 — Modelar el documento de empresa y sus estados
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-151. Entidad por empresa y tipo de documento, con estado PENDIENTE, CARGADO o REVISADO, fecha de carga y referencia a un archivo del repositorio documental ligero. Criterios: una empresa no tiene dos registros vigentes del mismo tipo; el estado inicial es PENDIENTE; no se guarda una ruta de bucket.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Entidad `DocumentoEmpresa`: `empresa_id`, `tipo_id`, `estado`, `fecha_carga`, `nombre_original`, `tipo_mime`, `tamano_bytes`, `clave_objeto`. La clave apunta al objeto en Cloudflare R2 (`documentos/{empresa_id}/{tipo_codigo}/{uuid}.ext`). No se persiste el binario ni una ruta local. Unicidad de empresa + tipo. Estado inicial PENDIENTE, sin clave.
+
+#### Criterios de aceptación
+- [ ] No puede haber dos vigentes del mismo tipo para la misma empresa.
+- [ ] La columna guarda la clave del objeto, no una ruta de disco ni una URL pública.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — modelo, ORM y migración.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-265 -->
+
+<!-- SUBTASK:SP-266 -->
+### Subtarea: SP-266 — Publicar API de documentos de empresa
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-152 y SP-153. Listar el catálogo con el estado de la empresa, cargar, descargar y marcar REVISADO. La carga y la descarga delegan en el repositorio documental ligero. Criterios: un archivo inválido se rechaza antes de escribir en disco; no se integra con S3 ni con SP-150.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Router delgado sobre el servicio. La carga valida MIME, extensión y magic bytes y solo entonces llama al adaptador R2 de SP-249. No escribe en `ALMACENAMIENTO_LOCAL_RAIZ` ni usa AWS. La descarga comprueba la sesión y entrega el archivo o un enlace firmado breve. `PATCH` solo acepta pasar de CARGADO a REVISADO.
+
+#### Criterios de aceptación
+- [ ] El archivo inválido no crea objeto en R2.
+- [ ] Sin token de R2 la carga responde 503 y no deja fila a medias.
+- [ ] `CONSULTA` descarga y no carga.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — tres operaciones HTTP y reglas de estado, reutilizando el puerto de SP-249.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-266 -->
+
+<!-- SUBTASK:SP-267 -->
+### Subtarea: SP-267 — Crear pantalla de gestor documental por fases
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-153. Nueva ruta en el shell con el avance global y pestañas PLANEAR, HACER, VERIFICAR y ACTUAR. Cada documento muestra estado, si es obligatorio, y la acción de cargar o descargar. Criterios: el porcentaje cuenta los documentos que no están en PENDIENTE; al recargar se conserva el archivo guardado en el API.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+En `sst-auditor-agent-pro-frontend`, feature `documentos` con ruta autenticada en el shell. Cuatro pestañas de fase. Cada tarjeta muestra nombre, si es obligatorio, estado y la acción de cargar o descargar. El porcentaje es `(no pendientes / total) * 100` con los datos del GET. El cliente no calcula una URL de R2: usa el endpoint de descarga. Rol `CONSULTA` no ve el botón de carga.
+
+#### Criterios de aceptación
+- [ ] Al recargar, un documento CARGADO sigue en CARGADO y se puede descargar.
+- [ ] El avance coincide con el conteo del API.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — pantalla Angular contra el API ya definido, sin cliente de Cloudflare en el navegador.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-267 -->
+
+<!-- SUBTASK:SP-268 -->
+### Subtarea: SP-268 — Vincular un documento con un estándar 0312
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-144 y SP-153. Relación opcional entre un tipo de documento y uno o más estándares mínimos, para abrir la evidencia del ítem desde el catálogo. Criterios: el vínculo es de catálogo, no copia el archivo; si no hay vínculo, el documento igual se puede cargar.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Tabla de unión entre tipo de documento y estándar mínimo. Es dato de catálogo, no una copia del objeto R2. Si el tipo no tiene estándares, la carga del documento sigue disponible. Desde el ítem del diagnóstico se puede navegar al documento vinculado cuando exista.
+
+#### Criterios de aceptación
+- [ ] Un tipo sin vínculo se carga igual.
+- [ ] El vínculo no duplica el objeto en R2.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — tabla de unión y consulta, sin flujo de carga nuevo.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-268 -->

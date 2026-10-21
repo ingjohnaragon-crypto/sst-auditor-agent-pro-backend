@@ -22,6 +22,7 @@ fi
 
 # ── Load config and agent ────────────────────────────────────
 os_load_config
+os_load_integraciones
 os_load_env
 os_load_agent
 os_load_language
@@ -114,6 +115,11 @@ $AGENT_CONTENT
 
 ## Stack Standards
 $STANDARDS_CONTENT
+
+---
+
+## Integraciones externas
+$OS_INTEGRACIONES
 
 ---
 

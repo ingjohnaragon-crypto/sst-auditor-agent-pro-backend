@@ -1,0 +1,80 @@
+# Ticket enriquecido: SP-257 — Modelar plan de mejora y actividades del cronograma
+
+## Descripción original
+<!-- jira-skip -->
+Historia base:  y . Migración Alembic con plan de mejora ligado a una autoevaluación finalizada y actividades con descripción, responsable, meses (1 a 12) e indicador. El plan solo se crea si la autoevaluación tiene requiere_plan_mejora. Criterios: una autoevaluación tiene como máximo un plan; no se puede crear sobre una autoevaluación en borrador.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+Persistir el plan de mejora que nace de una autoevaluación ya finalizada y sus actividades de cronograma. No hay endpoint en este ticket. La regla de creación vive en el dominio; la base solo garantiza el vínculo y el máximo de un plan por autoevaluación.
+
+Una autoevaluación está finalizada cuando `puntaje_total` no es null (`Autoevaluacion.esta_finalizada`). Borrador es el caso contrario. `requiere_plan_mejora` ya quedó fijado al finalizar (`puntaje_total < 85`). Este ticket no lo recalcula.
+
+`PlanMejora.crear(autoevaluacion)` copia `empresa_id` y `autoevaluacion_id` de esa autoevaluación. Rechaza si `id` es null, si no está finalizada, o si `requiere_plan_mejora` es false. El cliente no elige la empresa ni el flag.
+
+Cada actividad pertenece a un plan y trae `descripcion`, `responsable` e `indicador` no vacíos. Los meses son enteros del 1 al 12, al menos uno, sin repetirse en la misma actividad. No se reutiliza `acciones_mejora`: esa tabla del modelo de datos trae origen, tipo, fecha límite y estado, y sigue pendiente. `evidencias.accion_mejora_id` no se agrega aquí.
+
+El modelo de datos decía `autoevaluacion_id` nullable y cardinalidad 1—N. Esta historia lo deja obligatorio y único. `estado` y `reportado_arl` no entran en esta migración.
+
+## Criterios de aceptación
+- [ ] Alembic crea `planes_mejoramiento`, `actividades_cronograma` y `meses_actividad`, con `down_revision` en el head actual `f6a7b8c9d0e1`.
+- [ ] `autoevaluacion_id` es NOT NULL, FK a `autoevaluaciones.id` y UNIQUE.
+- [ ] `PlanMejora.crear` rechaza borrador (`puntaje_total` null) y autoevaluación finalizada con `requiere_plan_mejora` false.
+- [ ] Una actividad exige descripción, responsable e indicador no vacíos, y meses entre 1 y 12 sin duplicados.
+- [ ] No hay router, DTO ni OpenAPI nuevos. No se crea `acciones_mejora`.
+- [ ] `ai-specs/specs/data-model.md` documenta las tres tablas y el cambio de cardinalidad a 0..1.
+
+## Campos y endpoints
+
+Sin endpoints. El alta queda para un ticket posterior, que debe llamar a `PlanMejora.crear`.
+
+`planes_mejoramiento`:
+- `id` UUID PK, generado en la aplicación.
+- `empresa_id` UUID NOT NULL, FK → `empresas.id`. Copiado de la autoevaluación.
+- `autoevaluacion_id` UUID NOT NULL, FK → `autoevaluaciones.id`, UNIQUE.
+- `fecha_creacion` y `fecha_actualizacion` TIMESTAMPTZ NOT NULL, `server_default=now()`.
+
+`actividades_cronograma`:
+- `id` UUID PK.
+- `plan_mejoramiento_id` UUID NOT NULL, FK → `planes_mejoramiento.id`, ON DELETE CASCADE.
+- `descripcion` TEXT NOT NULL.
+- `responsable` VARCHAR(150) NOT NULL. Texto libre, no FK a `usuarios`.
+- `indicador` VARCHAR(200) NOT NULL.
+- `fecha_creacion` y `fecha_actualizacion` TIMESTAMPTZ NOT NULL.
+
+`meses_actividad`:
+- `actividad_id` UUID NOT NULL, FK → `actividades_cronograma.id`, ON DELETE CASCADE.
+- `mes` SMALLINT NOT NULL, CHECK entre 1 y 12.
+- UNIQUE (`actividad_id`, `mes`).
+- PK compuesta de esas dos columnas.
+
+## Archivos a crear o modificar
+- `src/domain/models/plan_mejora.py` — Domain — Create. `PlanMejora` y `ActividadCronograma`.
+- `src/domain/exceptions/plan_mejora.py` — Domain — Create. Borrador, plan no requerido, mes inválido, actividad inválida.
+- `src/infrastructure/database/modelos/plan_mejoramiento_orm.py` — Infrastructure — Create.
+- `src/infrastructure/database/modelos/actividad_cronograma_orm.py` — Infrastructure — Create.
+- `src/infrastructure/database/modelos/mes_actividad_orm.py` — Infrastructure — Create.
+- `alembic/versions/<rev>_crear_tablas_plan_mejora.py` — Infrastructure — Create. Revisa `f6a7b8c9d0e1`.
+- `tests/unit/domain/test_plan_mejora.py` — Test — Create.
+- `ai-specs/specs/data-model.md` — Documentación — Modify.
+
+## Casos de prueba unitarios
+- Crear el plan desde una autoevaluación finalizada con `requiere_plan_mejora` true copia `empresa_id` y `autoevaluacion_id`.
+- Borrador (`puntaje_total` null) lanza error de dominio y no arma el plan.
+- Finalizada con `requiere_plan_mejora` false lanza error de dominio.
+- Autoevaluación sin `id` lanza error de dominio.
+- Actividad con meses 1 y 12 queda guardada en el plan.
+- Mes 0, mes 13 o mes repetido lanza error.
+- Descripción, responsable o indicador vacíos lanzan error.
+
+## Requisitos no funcionales
+- El esquema de producción entra solo por Alembic. `create_all` sigue reservado a pruebas.
+- El UNIQUE de `autoevaluacion_id` es la garantía de persistencia. No sustituye el rechazo de borrador ni el de `requiere_plan_mejora` false: eso no cabe en un CHECK de una sola tabla.
+- Identificadores en español. Sin secretos ni datos de R2.
+- `empresa_id` sale de la autoevaluación ya persistida, no de un cuerpo de cliente.
+
+## Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — tres tablas, invariantes de dominio y pruebas. Sin endpoint ni `acciones_mejora`.
+<!-- /STORY_POINTS -->
