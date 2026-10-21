@@ -1,0 +1,93 @@
+# Ticket enriquecido: SP-258 — Publicar API del plan de mejora
+
+## Descripción original
+<!-- jira-skip -->
+Historia base: . CRUD del plan y de sus acciones, con los mismos roles de escritura que las autoevaluaciones (ADMINISTRADOR y AUDITOR_SST). CONSULTA solo lee. Criterios: al finalizar una autoevaluación que exige plan, el API permite abrir el plan; una autoevaluación aceptable rechaza la creación con un error de dominio claro.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+Publicar el API del plan de mejora y de sus actividades de cronograma. Las «acciones» de esta historia son las filas de `actividades_cronograma` (descripción, responsable, indicador y meses). No se crea `acciones_mejora` ni se agregan `estado` o `reportado_arl`.
+
+El alta llama a `PlanMejora.crear`. Esa fábrica ya rechaza borrador, id nulo y `requiere_plan_mejora` false. Este ticket no recalcula el umbral de 85. `empresa_id` y `autoevaluacion_id` salen de la autoevaluación persistida. El cuerpo no los envía.
+
+Abrir el plan es `POST /api/v1/autoevaluaciones/{autoevaluacion_id}/plan-mejora`. Puede ir sin actividades. Un segundo plan para la misma autoevaluación responde 409 `PLAN_MEJORA_YA_EXISTE`: el servicio lo busca antes y el repositorio traduce el UNIQUE si hay carrera.
+
+La escritura usa `requerir_rol_escritor` (`ADMINISTRADOR` y `AUDITOR_SST`). `CONSULTA` recibe 403 `ACCESO_DENEGADO` en POST, PUT y DELETE. Los GET usan `obtener_usuario_actual`, así que `CONSULTA` lee. Sin token, 401.
+
+**Precondición:** las tablas y `PlanMejora.crear` son SP-257 (migración `a7b8c9d0e1f2`). Si `develop` aún no las tiene, la rama sale de `feature/SP-257-backend`.
+
+## Criterios de aceptación
+- [ ] `POST /api/v1/autoevaluaciones/{autoevaluacion_id}/plan-mejora` abre el plan cuando la autoevaluación está finalizada y `requiere_plan_mejora` es true. Responde 201 con el plan y sus actividades.
+- [ ] Autoevaluación finalizada con `requiere_plan_mejora` false responde 409 `PLAN_MEJORA_NO_REQUERIDO`. Borrador responde 409 `AUTOEVALUACION_EN_BORRADOR`. Id desconocido responde 404 `AUTOEVALUACION_NO_ENCONTRADA`.
+- [ ] Un segundo alta de la misma autoevaluación responde 409 `PLAN_MEJORA_YA_EXISTE`.
+- [ ] `CONSULTA` lee el plan (200) y no puede crearlo, editar una actividad ni borrarlo (403 `ACCESO_DENEGADO`).
+- [ ] Una actividad inválida (texto vacío, mes fuera de 1–12 o mes repetido) responde 422 `ACTIVIDAD_CRONOGRAMA_INVALIDA` y no persiste el cambio.
+- [ ] El contrato queda en OpenAPI. No hay migración nueva.
+
+## Campos y endpoints
+
+Errores con `RespuestaError`: `exito`, `codigo`, `mensaje`, `detalle`.
+
+`POST /api/v1/autoevaluaciones/{autoevaluacion_id}/plan-mejora` — 201, rol escritor.
+
+- Cuerpo: `actividades`, lista que puede ir vacía. Cada ítem trae `descripcion`, `responsable`, `indicador` y `meses` (enteros del 1 al 12).
+- No se aceptan `empresa_id`, `autoevaluacion_id` ni `requiere_plan_mejora`.
+
+`GET /api/v1/autoevaluaciones/{autoevaluacion_id}/plan-mejora` — 200, cualquier rol autenticado. 404 `PLAN_MEJORA_NO_ENCONTRADO` si esa autoevaluación no tiene plan.
+
+`GET /api/v1/planes-mejora/{plan_id}` — 200, cualquier rol autenticado. 404 `PLAN_MEJORA_NO_ENCONTRADO`.
+
+`DELETE /api/v1/planes-mejora/{plan_id}` — 204, rol escritor. El CASCADE de la base elimina actividades y meses.
+
+`POST /api/v1/planes-mejora/{plan_id}/actividades` — 201, rol escritor. Devuelve el plan completo.
+
+`PUT /api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}` — 200, rol escritor. Reemplaza descripción, responsable, indicador y meses. El id de la actividad no cambia. 404 `ACTIVIDAD_NO_ENCONTRADA`.
+
+`DELETE /api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}` — 204, rol escritor.
+
+Respuesta del plan:
+
+- `id`, `empresa_id`, `autoevaluacion_id`
+- `actividades`: `id`, `descripcion`, `responsable`, `indicador`, `meses` ordenados
+
+No hay `PUT` del encabezado: la empresa y la autoevaluación no se reasignan.
+
+## Archivos a crear o modificar
+- `src/domain/models/plan_mejora.py` — Domain — Modify. `quitar_actividad` y `actualizar_actividad`, reutilizando `ActividadCronograma.crear`.
+- `src/domain/exceptions/plan_mejora.py` — Domain — Modify. `PlanMejoraYaExisteError` (409), `PlanMejoraNoEncontradoError` (404), `ActividadNoEncontradaError` (404).
+- `src/domain/repositories/repositorio_plan_mejora.py` — Domain — Create.
+- `src/infrastructure/repositories/repositorio_plan_mejora_sqlalchemy.py` — Infrastructure — Create. `IntegrityError` del UNIQUE → `PlanMejoraYaExisteError`.
+- `src/application/dto/solicitud_plan_mejora.py` — Application — Create.
+- `src/application/dto/respuesta_plan_mejora.py` — Application — Create.
+- `src/application/mappers/mapper_plan_mejora.py` — Application — Create.
+- `src/application/services/servicio_planes_mejora.py` — Application — Create.
+- `src/presentation/routers/planes_mejora_router.py` — Presentation — Create.
+- `src/presentation/dependencies/autoevaluacion.py` — Presentation — Modify. Proveer el servicio. Reutilizar `requerir_rol_escritor`.
+- `src/presentation/routers/__init__.py` — Presentation — Modify. Registrar bajo `settings.api_prefix`.
+- `tests/unit/application/test_servicio_planes_mejora.py` — Test — Create.
+- `tests/integration/test_planes_mejora.py` — Test — Create.
+- `ai-specs/specs/api-spec.yml` — Documentación — Modify.
+
+## Casos de prueba unitarios
+- Finalizada con `requiere_plan_mejora` true: el servicio guarda el plan con `empresa_id` y `autoevaluacion_id` de esa fila, y las actividades validadas.
+- `requiere_plan_mejora` false: `PlanMejoraNoRequeridoError`, sin `guardar`.
+- Borrador: `AutoevaluacionEnBorradorError`, sin `guardar`.
+- Autoevaluación inexistente: `AutoevaluacionNoEncontradaError`.
+- Ya hay plan para esa autoevaluación: `PlanMejoraYaExisteError`, sin segundo `guardar`.
+- Mes 13 o texto vacío: `ActividadCronogramaInvalidaError`.
+- Actualizar una actividad que no está en el plan: `ActividadNoEncontradaError`.
+- Quitar una actividad la saca de la lista que se persiste.
+
+Integración: escritor recibe 201; `CONSULTA` recibe 200 en el GET y 403 en el POST; sin token, 401; el segundo POST responde 409 `PLAN_MEJORA_YA_EXISTE`.
+
+## Requisitos no funcionales
+- El repositorio devuelve dominio, nunca el ORM. Una transacción por caso de uso.
+- El UNIQUE de `autoevaluacion_id` sigue siendo la garantía ante dos altas simultáneas.
+- Sin secretos, sin R2 y sin recálculo de la Resolución 0312.
+- Identificadores y mensajes de error en español.
+
+## Puntos de historia
+<!-- STORY_POINTS:8 -->
+**8** — repositorio, servicio, siete rutas y pruebas de rol. El dominio de alta y las tablas ya están. Sin migración.
+<!-- /STORY_POINTS -->
