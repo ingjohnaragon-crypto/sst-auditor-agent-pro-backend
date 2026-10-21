@@ -1,6 +1,7 @@
 """Modelos ORM de la infraestructura — nunca se importan desde dominio o aplicación."""
 
 from src.infrastructure.database.modelos.acceso_evidencia_orm import AccesoEvidenciaORM
+from src.infrastructure.database.modelos.actividad_cronograma_orm import ActividadCronogramaORM
 from src.infrastructure.database.modelos.autoevaluacion_orm import AutoevaluacionORM
 from src.infrastructure.database.modelos.calificacion_estandar_orm import (
     CalificacionEstandarORM,
@@ -11,12 +12,15 @@ from src.infrastructure.database.modelos.empresa_orm import EmpresaORM
 from src.infrastructure.database.modelos.estandar_minimo_orm import EstandarMinimoORM
 from src.infrastructure.database.modelos.evaluacion_riesgo_orm import EvaluacionRiesgoORM
 from src.infrastructure.database.modelos.evidencia_orm import EvidenciaORM
+from src.infrastructure.database.modelos.mes_actividad_orm import MesActividadORM
 from src.infrastructure.database.modelos.peligro_orm import PeligroORM
+from src.infrastructure.database.modelos.plan_mejoramiento_orm import PlanMejoramientoORM
 from src.infrastructure.database.modelos.proceso_actividad_orm import ProcesoActividadORM
 from src.infrastructure.database.modelos.usuario_orm import UsuarioORM
 
 __all__ = [
     "AccesoEvidenciaORM",
+    "ActividadCronogramaORM",
     "AutoevaluacionORM",
     "CalificacionEstandarORM",
     "CatalogoReferenciaORM",
@@ -25,7 +29,9 @@ __all__ = [
     "EstandarMinimoORM",
     "EvaluacionRiesgoORM",
     "EvidenciaORM",
+    "MesActividadORM",
     "PeligroORM",
+    "PlanMejoramientoORM",
     "ProcesoActividadORM",
     "UsuarioORM",
 ]

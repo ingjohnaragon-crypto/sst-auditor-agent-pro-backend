@@ -74,3 +74,18 @@ os_print_config() {
   os_info "Standards : $OS_STANDARDS_PATH"
   os_divider
 }
+
+# Carga ai-specs/specs/integraciones/*.md junto al stack activo.
+# No reemplaza python-fastapi ni frontend-angular.
+os_load_integraciones() {
+  OS_INTEGRACIONES=""
+  dir="${OS_REPO_ROOT}/ai-specs/specs/integraciones"
+  [ -d "$dir" ] || return 0
+  for f in "$dir"/*.md; do
+    [ -f "$f" ] || continue
+    OS_INTEGRACIONES="${OS_INTEGRACIONES}
+$(cat "$f")
+"
+  done
+  export OS_INTEGRACIONES
+}

@@ -295,16 +295,39 @@ Auditoría anual interna, planificada con el COPASST.
 | `tipo` | `tipo_hallazgo` | NOT NULL |
 | `descripcion` | `TEXT` | NOT NULL |
 
-#### `planes_mejoramiento` — Referencia §4 / Res. 312
+#### `planes_mejoramiento` — SP-257 / Res. 312
+
+Implementada en SP-257 (migración `a7b8c9d0e1f2`). Una autoevaluación finalizada
+admite como máximo un plan. `estado` y `reportado_arl` no forman parte de esta
+tabla. El alta no recalcula el umbral de 85: usa `requiere_plan_mejora` ya
+persistido.
 
 | Columna | Tipo | Restricciones |
 |---|---|---|
-| `empresa_id` | `UUID` | NOT NULL, FK → `empresas.id` |
-| `autoevaluacion_id` | `UUID` | NULL, FK → `autoevaluaciones.id` (presente si el plan lo origina una autoevaluación < 85 %) |
-| `estado` | `estado_plan_mejoramiento` | NOT NULL, default `ABIERTO` |
-| `reportado_arl` | `BOOLEAN` | NOT NULL, default `false` |
+| `empresa_id` | `UUID` | NOT NULL, FK → `empresas.id`, índice. Copiado de la autoevaluación |
+| `autoevaluacion_id` | `UUID` | NOT NULL, FK → `autoevaluaciones.id`, UNIQUE |
+
+#### `actividades_cronograma` — SP-257
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| `plan_mejoramiento_id` | `UUID` | NOT NULL, FK → `planes_mejoramiento.id`, ON DELETE CASCADE, índice |
+| `descripcion` | `TEXT` | NOT NULL |
+| `responsable` | `VARCHAR(150)` | NOT NULL. Texto libre, no FK a `usuarios` |
+| `indicador` | `VARCHAR(200)` | NOT NULL |
+
+#### `meses_actividad` — SP-257
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| `actividad_id` | `UUID` | NOT NULL, FK → `actividades_cronograma.id`, ON DELETE CASCADE. Parte de la PK |
+| `mes` | `SMALLINT` | NOT NULL, CHECK entre 1 y 12. Parte de la PK |
 
 #### `acciones_mejora` — Referencia §4
+
+Pendiente. SP-257 no la crea. El cronograma no reutiliza esta forma (`origen`,
+`tipo`, `fecha_limite`, `estado`). `evidencias.accion_mejora_id` sigue sin
+columna.
 
 | Columna | Tipo | Restricciones |
 |---|---|---|
@@ -366,8 +389,10 @@ El archivo solo se lee si `ALMACENAMIENTO_LOCAL_RAIZ` contiene la ruta resuelta.
 | `peligros` → `evaluaciones_riesgo` | 1—1 (`UNIQUE peligro_id`) |
 | `evaluaciones_riesgo` → `controles_riesgo` | 1—N |
 | `auditorias` → `hallazgos` | 1—N |
-| `autoevaluaciones` → `planes_mejoramiento` | 1—N (FK opcional en el plan) |
-| `planes_mejoramiento` → `acciones_mejora` | 1—N |
+| `autoevaluaciones` → `planes_mejoramiento` | 1—0..1 (`autoevaluacion_id` NOT NULL y UNIQUE, SP-257) |
+| `planes_mejoramiento` → `actividades_cronograma` | 1—N |
+| `actividades_cronograma` → `meses_actividad` | 1—N |
+| `planes_mejoramiento` → `acciones_mejora` | 1—N (pendiente; la tabla aún no existe) |
 | `calificaciones_estandar` → `evidencias` | 1—N (`calificacion_estandar_id` NOT NULL en SP-151) |
 | `evidencias` → `accesos_evidencia` | 1—N |
 | `acciones_mejora` → `evidencias` | 1—N (FK opcional) |

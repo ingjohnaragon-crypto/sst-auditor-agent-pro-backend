@@ -1,0 +1,162 @@
+# Ticket enriquecido: SP-243 — Inicio ejecutivo del SG-SST
+
+## Descripción original
+<!-- jira-skip -->
+Cierra el inicio de producto que SP-242 dejó con placeholders. El diagnóstico (SP-189), las barras PHVA (SP-204) y la matriz (SP-145, SP-192) ya existen. Esta épica agrega el resumen ejecutivo que muestra el mockup: conteos reales, distribución de riesgos y alerta de estándares irrenunciables. Fuera de alcance: recalcular la Resolución 0312 en el cliente y la multa potencial ilustrativa del mockup.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+El inicio (`/dashboard`) deja de mostrar guiones en Autoevaluaciones y Planes de mejora. Un solo endpoint de lectura arma el resumen de la empresa seleccionada con datos ya persistidos. El cliente no recalcula la Resolución 0312 ni el NP/NR de la GTC 45, y no muestra la multa ilustrativa del mockup.
+
+La última autoevaluación es la de `fecha` más reciente y, si empatan, la de `fecha_creacion` más reciente. Es la misma regla que `seleccionarAutoevaluacionMasReciente` en el frontend. El puntaje 0312 de la tarjeta que ya existe sigue saliendo del histórico actual; esta épica no lo vuelve a calcular.
+
+La actividad reciente de demostración queda fuera. El módulo de planes de mejora es la épica SP-244: aquí la tarjeta solo muestra si la última autoevaluación tiene `requiere_plan_mejora`. El aviso de que ese módulo llega después puede quedarse.
+
+Los conteos de riesgo salen de `interpretacion_nr` ya guardada en cada evaluación de la matriz (I, II, III, IV). Un peligro sin evaluación no cuenta. Los ítems 1.1.1 y 1.1.4 se leen de la calificación persistida de esa última autoevaluación, por el `numeral` del catálogo.
+
+## Criterios de aceptación
+- [ ] `GET /api/v1/empresas/{empresa_id}/resumen-ejecutivo` responde 200 a `CONSULTA`, `AUDITOR_SST` y `ADMINISTRADOR`.
+- [ ] Sin sesión responde 401. Una empresa inexistente responde 404.
+- [ ] La respuesta no invoca `motor_calificacion_res312` ni `interpretar_nr`.
+- [ ] Al cambiar de empresa, las tarjetas, las barras y la alerta usan el resumen de esa empresa.
+- [ ] Sin autoevaluaciones, las tarjetas lo dicen y no hay alerta. Las barras de riesgo igual muestran la matriz.
+- [ ] La actividad reciente de demostración no se reemplaza por un API que no existe.
+
+## Campos y endpoints
+
+- `GET /api/v1/empresas/{empresa_id}/resumen-ejecutivo`
+- Auth: `obtener_usuario_actual`. Sin rol de escritura.
+
+Cuerpo 200:
+
+- `empresa_id`
+- `cantidad_autoevaluaciones`
+- `autoevaluacion_id` de la última, o `null`
+- `requiere_plan_mejora` de esa fila persistida, o `false` si no hay autoevaluación
+- `riesgos_nivel_i`, `riesgos_nivel_ii`
+- `distribucion_riesgos` con `I`, `II`, `III`, `IV` (enteros, cero si no hay evaluaciones)
+- `irrenunciables`: exactamente dos elementos, numerales `1.1.1` y `1.1.4`, cada uno con `numeral`, `descripcion` del catálogo, `resultado` (`CUMPLE`, `NO_CUMPLE`, `NO_APLICA` o `SIN_CALIFICAR`)
+
+`riesgos_nivel_i` y `riesgos_nivel_ii` coinciden con `distribucion_riesgos.I` y `.II`.
+
+## Archivos a crear o modificar
+- `src/application/dto/respuesta_resumen_ejecutivo.py` — Application — Create
+- `src/application/services/servicio_resumen_ejecutivo.py` — Application — Create
+- `src/presentation/routers/resumen_ejecutivo_router.py` — Presentation — Create
+- `src/presentation/routers/__init__.py` — Presentation — Modify
+- `src/presentation/dependencies/` — cablear el servicio con los repositorios de autoevaluación, estándares y matriz ya existentes — Modify
+- Pruebas del servicio y del router — Create
+- Frontend: `src/app/features/dashboard/` en `sst-auditor-agent-pro-frontend` — Modify
+
+El servicio lee repositorios. No llama al motor PHVA ni recalcula el nivel de riesgo.
+
+## Casos de prueba unitarios
+- Empresa con dos autoevaluaciones: el conteo es 2 y la elegida es la de fecha mayor.
+- Empate de fecha: gana la `fecha_creacion` más reciente.
+- Sin autoevaluaciones: conteo 0, `autoevaluacion_id` null, `requiere_plan_mejora` false, irrenunciables en `SIN_CALIFICAR`.
+- Matriz con interpretaciones I, II y un peligro sin evaluación: I=1, II=1, III=0, IV=0.
+- `CONSULTA` obtiene 200. Sin token, 401. Empresa inexistente, 404.
+- El mock del motor no recibe llamadas.
+
+## Requisitos no funcionales
+- Solo lectura. No escribe calificaciones ni evaluaciones de riesgo.
+- El OpenAPI sale del `response_model` de FastAPI.
+- Cobertura del servicio y del router dentro del umbral del 90 %.
+- El cliente no suma niveles ni interpreta de nuevo el numeral.
+
+## Puntos de historia
+<!-- STORY_POINTS:13 -->
+**13** — un endpoint de lectura y tres cambios de la pantalla de inicio. No hay modelo nuevo ni almacenamiento.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-253 -->
+### Subtarea: SP-253 — Exponer resumen ejecutivo por empresa
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-145 (matriz), SP-149 (cumplimiento PHVA y requiere_plan_mejora), SP-242 (inicio). Crear un endpoint de solo lectura por empresa que devuelva: cantidad de autoevaluaciones, cantidad de riesgos nivel I y II, distribución I-IV, si la última autoevaluación requiere plan de mejora, y el estado de los ítems 1.1.1 (responsable del SG-SST) y 1.1.4 (afiliación al sistema de riesgos laborales). No duplicar el motor de calificación. Criterios: el contrato está en OpenAPI; un usuario CONSULTA puede leer; la respuesta usa los cálculos ya persistidos.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Implementar `GET /api/v1/empresas/{empresa_id}/resumen-ejecutivo` como está en la épica. Contar filas de autoevaluación. Elegir la última por `fecha` y luego `fecha_creacion`. Copiar `requiere_plan_mejora` de esa fila. Contar evaluaciones de la matriz por `interpretacion_nr` persistida. Resolver 1.1.1 y 1.1.4 por `EstandarMinimo.numeral` y el `resultado` guardado. Si no hay calificación, `SIN_CALIFICAR`.
+
+#### Criterios de aceptación
+- [ ] El contrato del endpoint queda en OpenAPI.
+- [ ] `CONSULTA` puede leer.
+- [ ] Los números salen de filas persistidas, sin motor ni `interpretar_nr`.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — caso de uso, DTO, router y pruebas. Sin migración.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-253 -->
+
+<!-- SUBTASK:SP-254 -->
+### Subtarea: SP-254 — Reemplazar placeholders del inicio con datos reales
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-242. Las tarjetas Autoevaluaciones y Planes de mejora dejan de mostrar un guion. Muestran el conteo y el flag requiere_plan_mejora del resumen ejecutivo de la empresa seleccionada. La actividad reciente sigue fuera de este alcance si no hay API de auditoría. Criterios: al cambiar de empresa se actualizan las tarjetas; el estado vacío explica que aún no hay autoevaluación.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+En `pagina-dashboard`, la tarjeta Autoevaluaciones muestra `cantidad_autoevaluaciones`. La tarjeta Planes de mejora muestra «Sí» o «No» según `requiere_plan_mejora`. Si `cantidad_autoevaluaciones` es 0, el valor de planes queda en «—» y el subtítulo dice que aún no hay autoevaluación. Al cambiar `empresaSeleccionadaId` se vuelve a pedir el resumen. `ServicioResumenHome.obtenerActividad` sigue siendo la lista de demostración.
+
+#### Criterios de aceptación
+- [ ] Las dos tarjetas dejan de tener el guion fijo cuando hay datos.
+- [ ] Cambiar de empresa actualiza las tarjetas.
+- [ ] Sin autoevaluación, el texto lo explica.
+- [ ] La tabla de actividad reciente no llama al API.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — enlace de las dos tarjetas al resumen. La pantalla de planes no existe todavía.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-254 -->
+
+<!-- SUBTASK:SP-255 -->
+### Subtarea: SP-255 — Mostrar distribución de riesgos I-IV en el inicio
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-204 y SP-192. Agregar en el inicio las cuatro barras de hallazgos por nivel de riesgo, con los conteos del resumen ejecutivo. Mantener la decisión de SP-204: barras HTML o CSS, sin incorporar Recharts ni Chart.js. Criterios: los niveles sin hallazgos se ven en cero; los colores siguen el semáforo ya usado en la matriz (I rojo, II naranja, III amarillo, IV verde).
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Cuatro barras HTML o CSS en el inicio, alimentadas por `distribucion_riesgos`. Un nivel en cero se ve en cero, no se oculta. Reutilizar las clases de `claseInterpretacion` en la matriz: I `red`, II `orange`, III `amber`, IV `emerald`. No agregar Chart.js ni Recharts.
+
+#### Criterios de aceptación
+- [ ] Se ven siempre los cuatro niveles.
+- [ ] El ancho refleja el conteo del resumen, no un cálculo en el cliente.
+- [ ] No hay librería de gráficas nueva.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — barras en el inicio con el semáforo de la matriz.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-255 -->
+
+<!-- SUBTASK:SP-256 -->
+### Subtarea: SP-256 — Alertar incumplimientos de responsable SST y afiliación
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-149 y SP-189. Si la autoevaluación más reciente marca NO_CUMPLE en 1.1.1 o 1.1.4, el inicio muestra una alerta prioritaria con el nombre del ítem y un acceso al diagnóstico. Criterios: la alerta no aparece si ambos cumplen o si no hay autoevaluación; el rol CONSULTA la ve y no puede editar.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Si algún irrenunciable de la respuesta tiene `resultado` `NO_CUMPLE`, mostrar `app-alerta` con el `numeral` y la `descripcion`. El enlace va a `/diagnostico/{autoevaluacion_id}`. `CUMPLE`, `NO_APLICA` y `SIN_CALIFICAR` no disparan alerta. Sin autoevaluación no hay alerta. `CONSULTA` la ve. La alerta no tiene acción de calificar.
+
+#### Criterios de aceptación
+- [ ] `NO_CUMPLE` en 1.1.1 o en 1.1.4 muestra la alerta y el enlace al detalle.
+- [ ] Si ninguno está en `NO_CUMPLE`, o no hay autoevaluación, la alerta no está.
+- [ ] `CONSULTA` no ve un control de edición.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — alerta de lectura sobre el resumen ya cargado.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-256 -->

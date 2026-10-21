@@ -1,0 +1,224 @@
+# Ticket enriquecido: SP-249 — Repositorio documental ligero
+
+## Descripción original
+<!-- jira-skip -->
+Sustituye el camino de buckets de SP-150 mientras no haya infraestructura de nube. Los archivos viven en disco local, bajo una raíz configurable, y sus metadatos en PostgreSQL. El mismo puerto sirve a las evidencias del diagnóstico (SP-151, SP-152, SP-153) y al catálogo PHVA. Más adelante un adaptador S3 puede reemplazar el disco sin cambiar el API. Fuera de alcance: VPC, buckets y credenciales de AWS.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+Los archivos del SG-SST se guardan en **Cloudflare R2**, no en el disco del servidor. PostgreSQL conserva la clave del objeto y los metadatos. El mismo puerto atiende las evidencias del diagnóstico (SP-151, SP-152, SP-153) y el catálogo PHVA (SP-245). SP-150 (AWS S3) se cierra: no hay VPC ni credenciales de AWS.
+
+Quien implemente esta épica no se asume experto en Cloudflare. La primera subtarea, SP-282, es de aprendizaje y de conexión, en ese orden:
+
+1. Crear la cuenta, activar R2, crear el bucket `sst-auditor-dev` y un token con permiso solo sobre ese bucket.
+2. Anotar en `.env.example` los nombres `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET` y `R2_ENDPOINT`, sin valores.
+3. Dejar una nota de una página: qué es un objeto, qué es la clave, dónde vive el token y por qué el archivo no es público.
+4. Recién entonces conectar el API con un cliente compatible con la API S3 apuntando al endpoint de R2.
+
+Hoy el puerto `AlmacenEvidencias` (`guardar` y `eliminar`) lo implementa `AlmacenLocal` bajo `ALMACENAMIENTO_LOCAL_RAIZ`. Esta épica agrega `leer` y una implementación `AlmacenR2`. Producción no usa la carpeta local. El doble en memoria cubre la suite. Un caso manual, fuera de CI, confirma el bucket de desarrollo.
+
+La clave del objeto es `evidencias/{empresa_id}/{uuid}{ext}`. Dos cargas del mismo nombre no se pisan. Borrar el registro borra el objeto. La descarga exige sesión: el API transmite el archivo o entrega un enlace firmado de pocos minutos. Sin variables de R2, la carga responde 503 y no inserta fila.
+
+Fuera de alcance: Workers, dominio propio del bucket, objetos públicos y el volumen de documentos en el VPS (eso lo cierra SP-252).
+
+## Criterios de aceptación
+- [ ] Un PDF subido desde el panel de Cloudflare se ve en `sst-auditor-dev`, y el secreto no está en Git.
+- [ ] El mismo PDF, subido por el API, aparece en ese bucket y se descarga con sesión.
+- [ ] Un anónimo recibe 401. Un tipo no permitido no crea objeto.
+- [ ] La suite pasa sin red y sin token.
+- [ ] Las evidencias nuevas del diagnóstico ya no dependen de `ALMACENAMIENTO_LOCAL_RAIZ`.
+
+## Campos y endpoints
+
+Variables de entorno, documentadas en `.env.example` y con valor solo en `.env`:
+
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET`
+- `R2_ENDPOINT`
+
+API del repositorio, autenticada:
+
+- `GET /api/v1/empresas/{empresa_id}/archivos` — `nombre_original`, `tipo_mime`, `tamano_bytes`, `fecha_carga`, `usuario`. No devuelve URL permanente.
+- `POST /api/v1/empresas/{empresa_id}/archivos` — `multipart/form-data`, campo `archivo`. PDF, JPEG y PNG, tope 10 MiB, magic bytes iguales a SP-214. Respuesta 201.
+- `GET /api/v1/empresas/{empresa_id}/archivos/{archivo_id}` — archivo o enlace firmado breve.
+- `DELETE /api/v1/empresas/{empresa_id}/archivos/{archivo_id}` — 204 y el objeto desaparece del bucket.
+
+Roles: `CONSULTA` lista y descarga. `ADMINISTRADOR` y `AUDITOR_SST` cargan y borran.
+
+## Archivos a crear o modificar
+- `src/infrastructure/almacenamiento/almacen_r2.py` — Infrastructure — Create
+- `src/infrastructure/config/settings.py` — variables R2 — Modify
+- `.env.example` — nombres sin secretos — Modify
+- `docs/cloudflare-r2.md` — nota de una página para quien abre el panel por primera vez — Create
+- `src/application/services/servicio_carga_evidencia.py` — el puerto gana `leer` — Modify
+- `src/domain/models/archivo_documental.py` — Domain — Create
+- `src/domain/repositories/repositorio_archivo_documental.py` — Domain — Create
+- `src/infrastructure/database/modelos/archivo_documental_orm.py` — Infrastructure — Create
+- `src/infrastructure/repositories/repositorio_archivo_documental_sqlalchemy.py` — Infrastructure — Create
+- `src/presentation/routers/archivos_router.py` — Presentation — Create
+- `alembic/versions/` — tabla de archivos — Create
+- Frontend: `src/app/features/archivos/` en `sst-auditor-agent-pro-frontend` — Create
+- `src/infrastructure/almacenamiento/almacen_local.py` — queda solo como referencia de desarrollo; producción no lo usa — Modify
+
+## Casos de prueba unitarios
+- Doble en memoria: guardar, leer y borrar sin red.
+- Magic bytes inválidos: no hay `guardar`.
+- Sin configuración de R2: 503 y ninguna fila.
+- `CONSULTA` en el POST: 403.
+- Descarga sin sesión: 401.
+- Dos cargas con el mismo nombre original: dos claves distintas.
+- Caso manual, fuera de CI: el objeto de prueba se ve en `sst-auditor-dev`.
+
+## Requisitos no funcionales
+- El token de R2 tiene permiso solo sobre el bucket de desarrollo en esta épica. Producción usa otro bucket (SP-252).
+- El enlace firmado, si se usa, vence en minutos.
+- Tope 10 MiB, leído por bloques de 64 KiB como SP-214.
+- La suite no llama a Cloudflare ni usa LocalStack.
+- Cobertura del servicio y del router dentro del umbral del 90 %.
+
+## Puntos de historia
+<!-- STORY_POINTS:28 -->
+**28** — incluye el día de aprendizaje del panel de Cloudflare dentro de SP-282. El resto es metadatos, API, evidencias del diagnóstico, pantalla y pruebas con doble.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-282 -->
+### Subtarea: SP-282 — Dejar el disco local como adaptador único de archivos
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-151 y SP-150. Formalizar el puerto de almacenamiento con el adaptador de disco que ya existe (raíz configurable, sin salir del directorio). SP-150 no se implementa en esta tarea. Criterios: guardar y borrar un archivo no requiere red; una ruta que intente salir de la raíz se rechaza.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Esta subtarea reemplaza el disco local por Cloudflare R2 y reserva tiempo para aprender el panel antes de codificar. Orden obligatorio:
+
+- Crear la cuenta, activar R2, crear el bucket `sst-auditor-dev` y un token limitado a ese bucket.
+- Subir un PDF desde el panel y comprobar que aparece.
+- Documentar en `docs/cloudflare-r2.md` qué es un objeto, qué es la clave y dónde se pega el token.
+- Declarar las cinco variables en `.env.example` sin valores.
+- Implementar `AlmacenR2` con `guardar`, `leer` y `eliminar`, usando el endpoint S3 de R2. La clave es `evidencias/{empresa_id}/{uuid}{ext}`.
+- Si faltan variables, lanzar `AlmacenamientoNoConfiguradoError` (503), igual que hoy cuando no hay raíz local.
+
+SP-150 no se implementa. `AlmacenLocal` no es el almacén de producción.
+
+#### Criterios de aceptación
+- [ ] El PDF de prueba se ve en el bucket y el secreto no está en Git.
+- [ ] Un objeto subido por `AlmacenR2` aparece en `sst-auditor-dev` y `eliminar` lo quita.
+- [ ] Sin variables, no se escribe ni en disco ni en R2.
+
+#### Puntos de historia
+<!-- STORY_POINTS:8 -->
+**8** — tres puntos de aprendizaje del panel y cinco del cliente. Van juntos para no conectar el API a ciegas.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-282 -->
+
+<!-- SUBTASK:SP-283 -->
+### Subtarea: SP-283 — Modelar el archivo documental y sus metadatos
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-151. Tabla de archivo con empresa, nombre original, tipo, tamaño, hash, ruta relativa, usuario que cargó y fecha. El binario no va en la base. Criterios: dos cargas del mismo nombre no se pisan; borrar el registro borra el archivo del disco.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Tabla `archivos_documentales`: `empresa_id`, `nombre_original`, `tipo_mime`, `tamano_bytes`, `hash`, `clave_objeto`, `usuario_id`, `fecha_carga`. El binario no va en la base. La clave es la de R2, no una ruta local. Dos cargas con el mismo nombre generan dos claves. Borrar la fila llama a `eliminar` sobre esa clave.
+
+#### Criterios de aceptación
+- [ ] La columna guarda la clave del objeto, no una ruta de disco.
+- [ ] Borrar el registro borra el objeto en R2.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — modelo, ORM y migración.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-283 -->
+
+<!-- SUBTASK:SP-284 -->
+### Subtarea: SP-284 — Publicar API de carga listado y descarga
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-152. Endpoints autenticados para subir, listar, descargar y eliminar. Tope de tamaño y tipos permitidos (pdf, png, jpg, docx, xlsx). La descarga exige sesión y no publica una URL abierta. Criterios: un anónimo recibe 401; un tipo no permitido no deja archivo en disco.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Router delgado. Valida sesión, rol, MIME y magic bytes antes de llamar a `AlmacenR2`. Tipos de esta entrega: PDF, JPEG y PNG, tope 10 MiB, igual que la evidencia del diagnóstico. La descarga no publica el objeto: o lo transmite el API o firma un enlace de pocos minutos. Un tipo no permitido no crea objeto en el bucket.
+
+#### Criterios de aceptación
+- [ ] Un anónimo recibe 401.
+- [ ] Un archivo inválido no deja objeto en R2.
+- [ ] `CONSULTA` no puede borrar ni cargar.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — cuatro operaciones HTTP sobre el puerto de SP-282.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-284 -->
+
+<!-- SUBTASK:SP-285 -->
+### Subtarea: SP-285 — Unificar las evidencias del diagnóstico en el repositorio
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-153. Las evidencias ya cargadas contra un estándar pasan a referenciar un archivo del repositorio, en la misma raíz de disco. Criterios: descargar una evidencia existente sigue funcionando; no queda un segundo directorio de almacenamiento.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+`ServicioCargaEvidencia` deja de escribir en `AlmacenLocal`. Guarda el binario con `AlmacenR2` y persiste la clave en la evidencia. Descargar una evidencia recién cargada lee desde R2 por SP-152. No queda una carpeta local como almacén de producción. Las evidencias viejas que solo tengan ruta local se documentan como pendientes de migración manual; las nuevas ya no usan disco.
+
+#### Criterios de aceptación
+- [ ] Una evidencia nueva se descarga y el objeto está en el bucket.
+- [ ] El flujo feliz no llama a `AlmacenLocal`.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — cambiar el puerto de la carga ya existente, sin pantalla nueva.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-285 -->
+
+<!-- SUBTASK:SP-286 -->
+### Subtarea: SP-286 — Crear el listado de archivos de la empresa
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-153. Pantalla para ver, cargar, descargar y eliminar los archivos de la empresa activa, independiente del ítem del diagnóstico. Criterios: el listado muestra nombre, fecha, tamaño y quién cargó; eliminar pide confirmación.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+En `sst-auditor-agent-pro-frontend`, feature `archivos` dentro del shell autenticado. Lista nombre, fecha, tamaño y quién cargó. Cargar y descargar usan el API. El navegador no recibe el token de R2 ni arma la URL del bucket. Eliminar pide confirmación y, al aceptar, el objeto deja de existir.
+
+#### Criterios de aceptación
+- [ ] Recargar la pantalla muestra el archivo que acaba de subirse.
+- [ ] Confirmar el borrado lo quita de la lista.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — pantalla Angular contra el API, sin SDK de Cloudflare en el cliente.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-286 -->
+
+<!-- SUBTASK:SP-287 -->
+### Subtarea: SP-287 — Probar el repositorio sin servicios externos
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-157. Pruebas del puerto de disco, de los límites de tipo y tamaño, y de que la descarga exige autenticación. No levantan S3 ni LocalStack.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+La suite usa un doble en memoria del puerto, no el bucket real. Cubre guardar, leer, borrar, tipo inválido, tope de tamaño y 401 en la descarga. No levanta LocalStack ni llama a Cloudflare. El caso contra `sst-auditor-dev` queda como prueba manual descrita en `docs/cloudflare-r2.md`.
+
+#### Criterios de aceptación
+- [ ] `pytest` pasa sin red y sin token.
+- [ ] La nota manual dice cómo comprobar un objeto en el panel.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — pruebas del puerto con doble, sin servicios externos.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-287 -->

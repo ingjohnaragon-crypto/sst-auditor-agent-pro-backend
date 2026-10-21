@@ -1,0 +1,226 @@
+# Ticket enriquecido: SP-252 — Despliegue web en un servidor único
+
+## Descripción original
+<!-- jira-skip -->
+Replantea la épica SP-134. No hay infraestructura AWS, así que se cierran SP-154 (VPC) y SP-150 (buckets S3). El aplicativo sale a la web en un VPS pequeño con Docker Compose: Caddy con HTTPS, Angular estático, API FastAPI, PostgreSQL y un volumen de disco para los documentos. El CI que ya existe en GitHub Actions se conserva. SP-155 y SP-156 se reemplazan por estas tareas: la imagen Docker sigue siendo útil y el destino deja de ser una red en la nube. Fuera de alcance: Kubernetes, balanceadores, VPC y almacenamiento de objetos.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+El sistema se publica en un VPS pequeño con Docker Compose. No hay VPC, ni balanceador, ni AWS. Los documentos no se guardan en ese servidor: viven en **Cloudflare R2**, con un bucket de producción distinto del bucket `sst-auditor-dev` de SP-249.
+
+Servicios del Compose:
+
+- Caddy publica 80 y 443, obtiene el certificado y redirige HTTP a HTTPS.
+- El frontend es el build estático de Angular.
+- El API es FastAPI. Caddy envía `/api` hacia él.
+- PostgreSQL persiste solo en un volumen de la base.
+
+SP-154 y SP-150 se cierran. SP-155 y SP-156 se reemplazan por estas subtareas. El workflow de validación que ya existe en GitHub Actions se conserva. El despliegue es un job aparte, manual o al publicar una versión, por SSH. Un push a una rama de trabajo no publica solo.
+
+Quien opere el servidor necesita saber cuatro cosas de Cloudflare, y el instructivo las escribe sin asumir experiencia previa: crear el bucket de producción, crear un token solo de ese bucket, copiar el endpoint y pegar las variables en el entorno del VPS. Esos secretos no entran en Git.
+
+Fuera de alcance: Kubernetes, Workers de Cloudflare y un dominio propio para el bucket.
+
+## Criterios de aceptación
+- [ ] `docker compose up` levanta Caddy, frontend, API y PostgreSQL.
+- [ ] Reiniciar el VPS no borra la base. Los archivos de prueba siguen en R2, no en una carpeta del servidor.
+- [ ] Solo los puertos 80 y 443 quedan abiertos a internet.
+- [ ] El bucket de producción es distinto al de desarrollo y el token no está en el repositorio.
+- [ ] El job de despliegue no corre en cada push. Si falla, el contenedor anterior sigue en marcha.
+- [ ] El respaldo es un `pg_dump`. Borrar un objeto en R2 no lo recupera ese dump, y el instructivo lo dice.
+
+## Campos y endpoints
+
+Variables de entorno del API, en un archivo del servidor:
+
+- `DATABASE_URL`
+- `JWT_SECRET`
+- `CORS_ORIGINS`
+- `API_BASE` que consume el build de Angular
+- `R2_ACCOUNT_ID`
+- `R2_ACCESS_KEY_ID`
+- `R2_SECRET_ACCESS_KEY`
+- `R2_BUCKET` (producción)
+- `R2_ENDPOINT`
+
+No hay `ALMACENAMIENTO_LOCAL_RAIZ` en producción.
+
+Caddy enruta el dominio al frontend y `/api` al contenedor del API. PostgreSQL no publica puerto hacia afuera.
+
+## Archivos a crear o modificar
+- `sst-auditor-agent-pro-backend/Dockerfile` — Infrastructure — Create
+- `sst-auditor-agent-pro-frontend/Dockerfile` — Infrastructure — Create
+- `docker-compose.prod.yml` en el backend, referenciando ambas imágenes — Infrastructure — Create
+- `deploy/Caddyfile` — Infrastructure — Create
+- `.env.example` — agregar variables R2 sin valores — Modify
+- `.github/workflows/deploy.yml` — job manual por SSH — Create
+- `deploy/respaldar-base.sh` — `pg_dump` y retención de 7 días — Create
+- `deploy/puesta-en-marcha.md` — VPS, DNS, bucket de producción y primer login — Create
+- `docker-compose.yml` actual (solo Postgres local) se mantiene para desarrollo — Modify solo si hace falta documentar que no es el de producción
+
+## Casos de prueba unitarios
+- El build de cada imagen termina y el proceso arranca sin archivo `.env` dentro de la imagen.
+- Un compose de prueba con variables vacías de R2 no crea un volumen de documentos.
+- El script de respaldo escribe un dump y no copia objetos.
+- El workflow de CI existente sigue validando en pull request y no llama al job de despliegue.
+
+## Requisitos no funcionales
+- Imágenes de producción sin compiladores ni secretos en capas.
+- Certificado renovado por Caddy.
+- Token de R2 con permiso acotado al bucket de producción.
+- El instructivo asume que la persona no ha usado Cloudflare: cada clic del panel va en orden.
+
+## Puntos de historia
+<!-- STORY_POINTS:24 -->
+**24** — imágenes, compose, HTTPS, entorno, despliegue por SSH, dump de la base e instructivo. El volumen de documentos sale del alcance porque los archivos están en R2.
+<!-- /STORY_POINTS -->
+
+## Subtareas
+
+<!-- SUBTASK:SP-302 -->
+### Subtarea: SP-302 — Empaquetar API y Angular en imágenes Docker
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-156. Dockerfile de producción del backend (Python 3.12, sin herramientas de desarrollo) y del frontend (build de Angular servido como archivos estáticos). El compose actual solo levanta PostgreSQL de desarrollo y se mantiene para la máquina local. Criterios: cada imagen arranca con un comando; no incluyen .env ni credenciales.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Dockerfile del backend con Python 3.12, dependencias de producción y `uvicorn` como comando. Dockerfile del frontend: etapa de build de Angular y etapa final que sirve `dist` como archivos estáticos. Ninguna imagen copia `.env` ni el token de R2. El `docker-compose.yml` de desarrollo, que solo levanta PostgreSQL, se queda para la máquina local.
+
+#### Criterios de aceptación
+- [ ] Cada imagen arranca con un comando.
+- [ ] Un `docker history` no muestra secretos.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — dos Dockerfiles de producción.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-302 -->
+
+<!-- SUBTASK:SP-303 -->
+### Subtarea: SP-303 — Definir el Compose de producción
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-156. Un docker-compose de producción con cuatro servicios: Caddy, frontend, API y PostgreSQL. Volúmenes persistentes para la base y para la raíz de documentos del repositorio ligero. Caddy enruta el dominio al frontend y /api al backend. Criterios: docker compose up levanta el sistema completo; reiniciar el servidor no borra la base ni los archivos.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+`docker-compose.prod.yml` con Caddy, frontend, API y PostgreSQL. El único volumen persistente es el de la base. No hay volumen de documentos: el API habla con Cloudflare R2. Caddy enruta el sitio al frontend y `/api` al backend. Reiniciar el servidor conserva la base. Un archivo de prueba se comprueba en el bucket, no en el disco del VPS.
+
+#### Criterios de aceptación
+- [ ] `docker compose up` levanta los cuatro servicios.
+- [ ] No existe un volumen de archivos en el compose.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — compose de producción y Caddyfile de enrutado, sin carpeta de documentos.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-303 -->
+
+<!-- SUBTASK:SP-304 -->
+### Subtarea: SP-304 — Publicar el dominio con HTTPS automático
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-154, que se cierra. Un dominio apunta al VPS. Caddy obtiene y renueva el certificado. Criterios: https:// abre la aplicación; http:// redirige a https; no hay puertos de Postgres ni del API publicados a internet, solo 80 y 443.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+El DNS del dominio apunta a la IP del VPS. Caddy pide y renueva el certificado. HTTP redirige a HTTPS. El compose no publica 5432 ni el puerto interno del API. SP-154 permanece cerrada: no se crea VPC.
+
+#### Criterios de aceptación
+- [ ] `https://` abre el login.
+- [ ] Desde internet solo responden 80 y 443.
+
+#### Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — DNS y certificado automático.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-304 -->
+
+<!-- SUBTASK:SP-305 -->
+### Subtarea: SP-305 — Separar la configuración de producción
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-139. Variables de producción (URL de la base, secreto JWT, raíz de documentos, origen CORS, URL del API) viven en un archivo de entorno en el servidor, fuera del repositorio. Criterios: el mismo compose arranca en local con valores de desarrollo y en el VPS con los de producción; el secreto JWT de producción no está en Git.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+El archivo de entorno del VPS lleva base, JWT, CORS, URL del API y las cinco variables de R2. El bucket y el token son los de producción, distintos de `sst-auditor-dev`. No hay ruta local de documentos. El mismo compose usa el `.env` de la máquina: en local apunta al bucket de desarrollo y en el VPS al de producción. `.env.example` documenta los nombres y no los valores.
+
+#### Criterios de aceptación
+- [ ] Ningún secreto queda en Git.
+- [ ] Producción y desarrollo usan buckets distintos.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — entorno separado y ejemplo sin secretos.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-305 -->
+
+<!-- SUBTASK:SP-306 -->
+### Subtarea: SP-306 — Desplegar desde GitHub Actions por SSH
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-155. El workflow actual de validación se queda. Se agrega un job de despliegue, manual o al publicar una versión, que entra por SSH al VPS, actualiza las imágenes y ejecuta compose up. Criterios: un push a una rama de trabajo no publica solo; un despliegue fallido deja el contenedor anterior en marcha.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Se mantiene el workflow de validación. Un workflow nuevo, `workflow_dispatch` o al publicar un tag, entra por SSH, construye o descarga las imágenes y ejecuta `docker compose up -d`. Si el comando falla, no borra los contenedores que ya respondían. La clave SSH y los secretos de R2 son secrets del repositorio, no archivos versionados.
+
+#### Criterios de aceptación
+- [ ] Un push a una rama de trabajo no despliega.
+- [ ] Un despliegue fallido deja el contenedor anterior en marcha.
+
+#### Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — job de despliegue aparte del CI actual.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-306 -->
+
+<!-- SUBTASK:SP-307 -->
+### Subtarea: SP-307 — Respaldar la base y los documentos
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-141 y el repositorio documental ligero. Una tarea programada en el VPS genera pg_dump y una copia del volumen de documentos, con retención de los últimos siete días. Criterios: el respaldo se puede restaurar en otro directorio sin servicios de AWS; el archivo de respaldo no queda dentro del repositorio Git.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Cron en el VPS ejecuta `pg_dump` y conserva los últimos siete días fuera del repositorio Git. No copia documentos: están en Cloudflare R2. El script y el instructivo advierten que un objeto borrado en R2 no vuelve con el dump de la base. No se usa AWS.
+
+#### Criterios de aceptación
+- [ ] El dump se restaura en otra base vacía.
+- [ ] El script no recorre una carpeta de archivos ni llama a AWS.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — dump de PostgreSQL y retención, sin copia de objetos.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-307 -->
+
+<!-- SUBTASK:SP-308 -->
+### Subtarea: SP-308 — Dejar el instructivo de puesta en marcha
+
+#### Descripción original
+<!-- jira-skip -->
+Historia base: SP-155. Documento corto con los pasos reales: crear el VPS, abrir 80 y 443, copiar el entorno, levantar compose y publicar una versión. Criterios: una persona nueva llega al login de la aplicación siguiendo solo ese instructivo.
+<!-- /jira-skip -->
+
+#### Descripción mejorada
+Una guía corta, en orden, para alguien que no ha usado Cloudflare ni un VPS: crear el VPS, abrir 80 y 443, apuntar el DNS, crear el bucket de producción, crear el token, copiar el endpoint, pegar el entorno, levantar el compose y comprobar el login. Cada paso de R2 dice en qué pantalla del panel se hace. Al final la persona entra al login y ve un objeto de prueba en el bucket de producción.
+
+#### Criterios de aceptación
+- [ ] La guía no pide crear una carpeta de documentos en el servidor.
+- [ ] Siguiéndola, una persona nueva llega al login y el API escribe en R2.
+
+#### Puntos de historia
+<!-- STORY_POINTS:2 -->
+**2** — instructivo que incluye la curva de aprendizaje de R2 en producción.
+<!-- /STORY_POINTS -->
+<!-- /SUBTASK:SP-308 -->
