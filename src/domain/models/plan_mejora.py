@@ -7,6 +7,7 @@ from uuid import UUID
 
 from src.domain.exceptions.plan_mejora import (
     ActividadCronogramaInvalidaError,
+    ActividadNoEncontradaError,
     AutoevaluacionEnBorradorError,
     AutoevaluacionSinPersistirError,
     PlanMejoraNoRequeridoError,
@@ -108,3 +109,29 @@ class PlanMejora:
         actividad = ActividadCronograma.crear(descripcion, responsable, indicador, meses)
         self.actividades.append(actividad)
         return actividad
+
+    def actualizar_actividad(
+        self,
+        actividad_id: UUID,
+        descripcion: str,
+        responsable: str,
+        indicador: str,
+        meses: Iterable[int],
+    ) -> ActividadCronograma:
+        """Reemplaza los datos y conserva el id de la actividad."""
+        indice = self._indice_actividad(actividad_id)
+        actividad = ActividadCronograma.crear(descripcion, responsable, indicador, meses)
+        actividad.id = actividad_id
+        self.actividades[indice] = actividad
+        return actividad
+
+    def quitar_actividad(self, actividad_id: UUID) -> None:
+        """Saca la actividad del cronograma."""
+        indice = self._indice_actividad(actividad_id)
+        del self.actividades[indice]
+
+    def _indice_actividad(self, actividad_id: UUID) -> int:
+        for indice, actividad in enumerate(self.actividades):
+            if actividad.id == actividad_id:
+                return indice
+        raise ActividadNoEncontradaError()

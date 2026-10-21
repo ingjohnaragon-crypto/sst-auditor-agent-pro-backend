@@ -463,6 +463,258 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/autoevaluaciones/{autoevaluacion_id}/plan-mejora:
+    post:
+      summary: Abre el plan de mejora de una autoevaluación finalizada
+      description: >
+        Llama a PlanMejora.crear. No recalcula el umbral de 85.
+        El cuerpo no envía empresa_id ni autoevaluacion_id.
+      tags: [Planes de mejora]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: autoevaluacion_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudAbrirPlanMejora"
+      responses:
+        "201":
+          description: Plan creado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaPlanMejora"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: AUTOEVALUACION_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "409":
+          description: >
+            AUTOEVALUACION_EN_BORRADOR / PLAN_MEJORA_NO_REQUERIDO / PLAN_MEJORA_YA_EXISTE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: ACTIVIDAD_CRONOGRAMA_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    get:
+      summary: Lee el plan de mejora de una autoevaluación
+      tags: [Planes de mejora]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: autoevaluacion_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Plan encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaPlanMejora"
+        "404":
+          description: PLAN_MEJORA_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/planes-mejora/{plan_id}:
+    get:
+      summary: Lee un plan de mejora por id
+      tags: [Planes de mejora]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: plan_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Plan encontrado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaPlanMejora"
+        "404":
+          description: PLAN_MEJORA_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    delete:
+      summary: Elimina el plan de mejora
+      tags: [Planes de mejora]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: plan_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Plan eliminado
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: PLAN_MEJORA_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/planes-mejora/{plan_id}/actividades:
+    post:
+      summary: Agrega una actividad al cronograma
+      tags: [Planes de mejora]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: plan_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudActividadCronograma"
+      responses:
+        "201":
+          description: Plan con la actividad nueva
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaPlanMejora"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: PLAN_MEJORA_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: ACTIVIDAD_CRONOGRAMA_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}:
+    put:
+      summary: Actualiza una actividad del cronograma
+      tags: [Planes de mejora]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: plan_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: actividad_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudActividadCronograma"
+      responses:
+        "200":
+          description: Plan actualizado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaPlanMejora"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: PLAN_MEJORA_NO_ENCONTRADO / ACTIVIDAD_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: ACTIVIDAD_CRONOGRAMA_INVALIDA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    delete:
+      summary: Quita una actividad del cronograma
+      tags: [Planes de mejora]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: plan_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: actividad_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Actividad quitada
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: PLAN_MEJORA_NO_ENCONTRADO / ACTIVIDAD_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
   /api/v1/empresas/{empresa_id}/matriz-riesgos:
     get:
       summary: Vista agregada de la matriz GTC 45
@@ -1499,6 +1751,45 @@ components:
         procesos:
           type: array
           items: {$ref: "#/components/schemas/RespuestaProcesoMatriz"}
+    SolicitudActividadCronograma:
+      type: object
+      required: [descripcion, responsable, indicador, meses]
+      properties:
+        descripcion: {type: string}
+        responsable: {type: string}
+        indicador: {type: string}
+        meses:
+          type: array
+          items: {type: integer}
+    SolicitudAbrirPlanMejora:
+      type: object
+      properties:
+        actividades:
+          type: array
+          items:
+            $ref: "#/components/schemas/SolicitudActividadCronograma"
+    RespuestaActividadCronograma:
+      type: object
+      required: [id, descripcion, responsable, indicador, meses]
+      properties:
+        id: {type: string, format: uuid}
+        descripcion: {type: string}
+        responsable: {type: string}
+        indicador: {type: string}
+        meses:
+          type: array
+          items: {type: integer}
+    RespuestaPlanMejora:
+      type: object
+      required: [id, empresa_id, autoevaluacion_id, actividades]
+      properties:
+        id: {type: string, format: uuid}
+        empresa_id: {type: string, format: uuid}
+        autoevaluacion_id: {type: string, format: uuid}
+        actividades:
+          type: array
+          items:
+            $ref: "#/components/schemas/RespuestaActividadCronograma"
     RespuestaError:
       type: object
       description: >

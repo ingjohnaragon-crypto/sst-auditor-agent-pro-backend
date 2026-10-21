@@ -8,12 +8,14 @@ from src.application.services.cargar_mapa_perfil_estandares import (
 )
 from src.application.services.servicio_autoevaluaciones import ServicioAutoevaluaciones
 from src.application.services.servicio_empresas import ServicioEmpresas
+from src.application.services.servicio_planes_mejora import ServicioPlanesMejora
 from src.domain.exceptions.autoevaluacion import AccesoDenegadoError
 from src.domain.models.perfil_estandares import MapaPerfilEstandares
 from src.domain.models.usuario import RolUsuario, Usuario
 from src.domain.repositories.repositorio_autoevaluacion import RepositorioAutoevaluacion
 from src.domain.repositories.repositorio_empresa import RepositorioEmpresa
 from src.domain.repositories.repositorio_estandar_minimo import RepositorioEstandarMinimo
+from src.domain.repositories.repositorio_plan_mejora import RepositorioPlanMejora
 from src.infrastructure.database.sesion import obtener_sesion
 from src.infrastructure.repositories.repositorio_autoevaluacion_sqlalchemy import (
     RepositorioAutoevaluacionSQLAlchemy,
@@ -23,6 +25,9 @@ from src.infrastructure.repositories.repositorio_empresa_sqlalchemy import (
 )
 from src.infrastructure.repositories.repositorio_estandar_minimo_sqlalchemy import (
     RepositorioEstandarMinimoSQLAlchemy,
+)
+from src.infrastructure.repositories.repositorio_plan_mejora_sqlalchemy import (
+    RepositorioPlanMejoraSQLAlchemy,
 )
 from src.presentation.dependencies.autenticacion import obtener_usuario_actual
 
@@ -76,6 +81,26 @@ def obtener_servicio_autoevaluaciones(
         repositorio_empresa=repositorio_empresa,
         repositorio_estandar_minimo=repositorio_estandar_minimo,
         mapa_perfil=mapa_perfil,
+    )
+
+
+def obtener_repositorio_plan_mejora(
+    sesion: AsyncSession = Depends(obtener_sesion),
+) -> RepositorioPlanMejora:
+    """Ensambla la implementación SQLAlchemy del plan de mejora."""
+    return RepositorioPlanMejoraSQLAlchemy(sesion)
+
+
+def obtener_servicio_planes_mejora(
+    repositorio_plan: RepositorioPlanMejora = Depends(obtener_repositorio_plan_mejora),
+    repositorio_autoevaluacion: RepositorioAutoevaluacion = Depends(
+        obtener_repositorio_autoevaluacion
+    ),
+) -> ServicioPlanesMejora:
+    """Ensambla el servicio del plan con sus puertos."""
+    return ServicioPlanesMejora(
+        repositorio_plan=repositorio_plan,
+        repositorio_autoevaluacion=repositorio_autoevaluacion,
     )
 
 

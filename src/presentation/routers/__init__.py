@@ -35,6 +35,12 @@ from src.presentation.routers.matriz_riesgos_router import (
     router as matriz_riesgos_router,
 )
 from src.presentation.routers.ping_router import router as ping_router
+from src.presentation.routers.planes_mejora_router import (
+    router as planes_mejora_router,
+)
+from src.presentation.routers.planes_mejora_router import (
+    router_por_autoevaluacion as planes_por_autoevaluacion_router,
+)
 from src.presentation.routers.resumen_ejecutivo_router import (
     router as resumen_ejecutivo_router,
 )
@@ -48,6 +54,8 @@ api_router.include_router(auth_router, prefix=settings.api_prefix)
 api_router.include_router(empresas_router, prefix=settings.api_prefix)
 api_router.include_router(resumen_ejecutivo_router, prefix=settings.api_prefix)
 api_router.include_router(autoevaluaciones_router, prefix=settings.api_prefix)
+api_router.include_router(planes_por_autoevaluacion_router, prefix=settings.api_prefix)
+api_router.include_router(planes_mejora_router, prefix=settings.api_prefix)
 api_router.include_router(estandares_router, prefix=settings.api_prefix)
 api_router.include_router(evidencias_por_calificacion_router, prefix=settings.api_prefix)
 api_router.include_router(evidencias_router, prefix=settings.api_prefix)
