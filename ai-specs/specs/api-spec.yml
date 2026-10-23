@@ -715,6 +715,68 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/planes-mejora/{plan_id}/acciones/borrador:
+    post:
+      summary: Genera el borrador de acciones desde los incumplimientos
+      tags: [Planes de mejora]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: plan_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Borrador del plan, con las acciones nuevas y las que ya estaban
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaAccionMejora"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: PLAN_MEJORA_NO_ENCONTRADO / AUTOEVALUACION_NO_ENCONTRADA / ESTANDAR_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/planes-mejora/{plan_id}/acciones:
+    get:
+      summary: Lee el borrador de acciones del plan
+      tags: [Planes de mejora]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: plan_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Acciones ya generadas, ordenadas por numeral
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaAccionMejora"
+        "404":
+          description: PLAN_MEJORA_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
   /api/v1/empresas/{empresa_id}/matriz-riesgos:
     get:
       summary: Vista agregada de la matriz GTC 45
@@ -1790,6 +1852,22 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/RespuestaActividadCronograma"
+    RespuestaAccionMejora:
+      type: object
+      required: [id, plan_id, estandar_id, numeral, descripcion, ciclo_phva]
+      properties:
+        id: {type: string, format: uuid}
+        plan_id: {type: string, format: uuid}
+        estandar_id: {type: string, format: uuid}
+        numeral: {type: string}
+        descripcion: {type: string}
+        ciclo_phva:
+          type: string
+          enum: [PLANEAR, HACER, VERIFICAR, ACTUAR]
+        responsable_sugerido:
+          type: string
+          nullable: true
+          description: Vacío hasta que el auditor lo complete.
     RespuestaError:
       type: object
       description: >

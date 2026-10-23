@@ -16,6 +16,7 @@ from src.infrastructure.database.base import Base
 # paquete e importarse aquí para que Base.metadata lo registre y el
 # autogenerate lo detecte.
 from src.infrastructure.database.modelos import (  # noqa: F401 — registra las tablas
+    AccionMejoraORM,
     ActividadCronogramaORM,
     AutoevaluacionORM,
     CalificacionEstandarORM,

@@ -1,0 +1,84 @@
+# Ticket enriquecido: SP-260 — Generar borrador de acciones desde incumplimientos
+
+## Descripción original
+<!-- jira-skip -->
+Historia base: y . Un caso de uso crea una acción por cada estándar aplicable en NO_CUMPLE, con el ítem, el ciclo PHVA y un responsable sugerido vacío para que el auditor lo complete. No llama a ningún modelo de lenguaje. Criterios: volver a generar no duplica acciones del mismo estándar; los ítems CUMPLE y NO_APLICA no generan acción.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+Un caso de uso arma el borrador de acciones de un plan ya abierto. Por cada calificación `NO_CUMPLE` de la autoevaluación de ese plan crea una `AccionMejora`. La acción guarda el ítem (`estandar_minimo_id`), copia el `ciclo_phva` del estándar y deja `responsable_sugerido` vacío. El auditor lo completa en otra historia.
+
+Esto no es una fila de `actividades_cronograma`. No se pide descripción de cronograma, indicador ni meses. Tampoco se rellena el ER completo de `acciones_mejora`: `origen`, `tipo`, `fecha_limite`, `estado` y `responsable_id` quedan fuera. `responsable_sugerido` es texto vacío, no una FK a `usuarios`, porque esta historia lo entrega en blanco. `evidencias.accion_mejora_id` no se agrega.
+
+El caso de uso no llama a ningún modelo de lenguaje ni a un servicio externo.
+
+Solo entran calificaciones `NO_CUMPLE`. `CUMPLE` y `NO_APLICA` no crean acción. Volver a generar no duplica el mismo estándar en el mismo plan: si la acción ya existe, se deja como está (incluido un responsable que el auditor hubiera cargado después). No se borran acciones de ítems que ya no están en `NO_CUMPLE`.
+
+El plan tiene que existir (SP-258). Esta historia no abre el plan ni recalcula el umbral de 85.
+
+**Precondición:** tablas y API del plan (SP-257 y SP-258). SP-259 no hace falta. Si `develop` no tiene `planes_mejora_router.py`, la rama sale de `feature/SP-258-backend`.
+
+## Criterios de aceptación
+- [ ] `POST /api/v1/planes-mejora/{plan_id}/acciones/borrador` crea una acción por cada calificación `NO_CUMPLE`. Responde 200 con el borrador del plan.
+- [ ] Cada acción trae el ítem (numeral y descripción del estándar), `ciclo_phva` copiado del catálogo y `responsable_sugerido` vacío.
+- [ ] Un segundo POST del mismo plan no agrega otra acción para un estándar que ya tiene una. El número de acciones queda igual.
+- [ ] Las calificaciones `CUMPLE` y `NO_APLICA` no producen acción.
+- [ ] Plan inexistente responde 404 `PLAN_MEJORA_NO_ENCONTRADO`.
+- [ ] `CONSULTA` lee el borrador (200) y recibe 403 `ACCESO_DENEGADO` al generarlo. Sin token, 401.
+- [ ] No hay llamada a un modelo de lenguaje. No se crean filas en `actividades_cronograma`.
+
+## Campos y endpoints
+
+Errores con `RespuestaError`: `exito`, `codigo`, `mensaje`, `detalle`.
+
+Tabla nueva `acciones_mejora`, migración que revisa el head `a7b8c9d0e1f2`:
+
+- `id` UUID, PK.
+- `plan_mejoramiento_id` UUID NOT NULL, FK a `planes_mejoramiento.id`. Sin ON DELETE CASCADE.
+- `estandar_minimo_id` UUID NOT NULL, FK a `estandares_minimos.id`.
+- `ciclo_phva` `PLANEAR | HACER | VERIFICAR | ACTUAR`, NOT NULL, copiado al generar.
+- `responsable_sugerido` VARCHAR(150) NULL.
+- UNIQUE `(plan_mejoramiento_id, estandar_minimo_id)`.
+
+`POST /api/v1/planes-mejora/{plan_id}/acciones/borrador` — 200, rol escritor (`ADMINISTRADOR`, `AUDITOR_SST`). Cuerpo vacío. 404 `PLAN_MEJORA_NO_ENCONTRADO`.
+
+`GET /api/v1/planes-mejora/{plan_id}/acciones` — 200, cualquier rol autenticado. El mismo listado, sin volver a generar.
+
+Respuesta: lista ordenada por numeral del ítem. Cada elemento tiene `id`, `plan_id`, `estandar_id`, `numeral`, `descripcion`, `ciclo_phva`, `responsable_sugerido` (null si sigue vacío).
+
+## Archivos a crear o modificar
+- `alembic/versions/<rev>_crear_tabla_acciones_mejora.py` — Infrastructure — Create. `down_revision = a7b8c9d0e1f2`.
+- `src/domain/models/accion_mejora.py` — Domain — Create. Fábrica que exige ítem y ciclo, y deja el responsable vacío.
+- `src/infrastructure/database/modelos/accion_mejora_orm.py` — Infrastructure — Create. Registrar el modelo en `modelos/__init__.py` y en `alembic/env.py`.
+- `src/domain/repositories/repositorio_accion_mejora.py` — Domain — Create. Listar por plan y guardar las nuevas.
+- `src/infrastructure/repositories/repositorio_accion_mejora_sqlalchemy.py` — Infrastructure — Create. El UNIQUE del estándar se traduce a «ya existe» si hay carrera.
+- `src/application/services/servicio_borrador_acciones.py` — Application — Create. Filtra `NO_CUMPLE` y omite estándares ya presentes.
+- `src/application/dto/respuesta_accion_mejora.py` — Application — Create.
+- `src/application/mappers/mapper_accion_mejora.py` — Application — Create.
+- `src/presentation/routers/acciones_mejora_router.py` — Presentation — Create.
+- `src/presentation/dependencies/autoevaluacion.py` — Presentation — Modify. Proveer el servicio. Reutilizar `requerir_rol_escritor` en el POST y `obtener_usuario_actual` en el GET.
+- `src/presentation/routers/__init__.py` — Presentation — Modify.
+- `tests/unit/application/test_servicio_borrador_acciones.py` — Test — Create.
+- `tests/integration/test_borrador_acciones.py` — Test — Create.
+- `ai-specs/specs/data-model.md` — Documentación — Modify. Sustituir el pendiente por las columnas de esta historia y dejar explícitas las que siguen fuera.
+- `ai-specs/specs/api-spec.yml` — Documentación — Modify.
+
+## Casos de prueba unitarios
+- Tres calificaciones (`NO_CUMPLE`, `CUMPLE`, `NO_APLICA`): se guarda una sola acción, con el `estandar_id` del `NO_CUMPLE`, su `ciclo_phva` y responsable vacío.
+- El estándar ya tiene acción: el servicio no vuelve a guardar esa fila.
+- Plan inexistente: `PlanMejoraNoEncontradoError`.
+- Cero `NO_CUMPLE`: no se guarda nada y la lista vuelve vacía.
+
+Integración: el escritor recibe 200 y un segundo POST no aumenta el total. `CONSULTA` recibe 200 en el GET y 403 en el POST. Sin token, 401. Un ítem `CUMPLE` no aparece en el borrador.
+
+## Requisitos no funcionales
+- Una transacción por generación. El repositorio devuelve dominio, nunca el ORM.
+- El UNIQUE `(plan_mejoramiento_id, estandar_minimo_id)` cubre dos generaciones simultáneas.
+- Sin secretos, sin R2, sin cliente HTTP a un modelo de lenguaje y sin recálculo de la Resolución 0312.
+- Identificadores y mensajes de error en español.
+
+## Puntos de historia
+<!-- STORY_POINTS:5 -->
+**5** — una tabla, un caso de uso idempotente y dos rutas. El plan y las calificaciones ya existen. Sin modelo de lenguaje y sin el resto del ER de la acción.
+<!-- /STORY_POINTS -->

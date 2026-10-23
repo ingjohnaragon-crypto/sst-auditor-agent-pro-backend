@@ -7,16 +7,21 @@ from src.application.services.cargar_mapa_perfil_estandares import (
     cargar_mapa_perfil_estandares,
 )
 from src.application.services.servicio_autoevaluaciones import ServicioAutoevaluaciones
+from src.application.services.servicio_borrador_acciones import ServicioBorradorAcciones
 from src.application.services.servicio_empresas import ServicioEmpresas
 from src.application.services.servicio_planes_mejora import ServicioPlanesMejora
 from src.domain.exceptions.autoevaluacion import AccesoDenegadoError
 from src.domain.models.perfil_estandares import MapaPerfilEstandares
 from src.domain.models.usuario import RolUsuario, Usuario
+from src.domain.repositories.repositorio_accion_mejora import RepositorioAccionMejora
 from src.domain.repositories.repositorio_autoevaluacion import RepositorioAutoevaluacion
 from src.domain.repositories.repositorio_empresa import RepositorioEmpresa
 from src.domain.repositories.repositorio_estandar_minimo import RepositorioEstandarMinimo
 from src.domain.repositories.repositorio_plan_mejora import RepositorioPlanMejora
 from src.infrastructure.database.sesion import obtener_sesion
+from src.infrastructure.repositories.repositorio_accion_mejora_sqlalchemy import (
+    RepositorioAccionMejoraSQLAlchemy,
+)
 from src.infrastructure.repositories.repositorio_autoevaluacion_sqlalchemy import (
     RepositorioAutoevaluacionSQLAlchemy,
 )
@@ -84,11 +89,35 @@ def obtener_servicio_autoevaluaciones(
     )
 
 
+def obtener_repositorio_accion_mejora(
+    sesion: AsyncSession = Depends(obtener_sesion),
+) -> RepositorioAccionMejora:
+    """Ensambla la implementación SQLAlchemy del borrador de acciones."""
+    return RepositorioAccionMejoraSQLAlchemy(sesion)
+
+
 def obtener_repositorio_plan_mejora(
     sesion: AsyncSession = Depends(obtener_sesion),
 ) -> RepositorioPlanMejora:
     """Ensambla la implementación SQLAlchemy del plan de mejora."""
     return RepositorioPlanMejoraSQLAlchemy(sesion)
+
+
+def obtener_servicio_borrador_acciones(
+    repositorio_plan: RepositorioPlanMejora = Depends(obtener_repositorio_plan_mejora),
+    repositorio_autoevaluacion: RepositorioAutoevaluacion = Depends(
+        obtener_repositorio_autoevaluacion
+    ),
+    repositorio_estandar: RepositorioEstandarMinimo = Depends(obtener_repositorio_estandar_minimo),
+    repositorio_accion: RepositorioAccionMejora = Depends(obtener_repositorio_accion_mejora),
+) -> ServicioBorradorAcciones:
+    """Ensambla el caso de uso que genera el borrador."""
+    return ServicioBorradorAcciones(
+        repositorio_plan=repositorio_plan,
+        repositorio_autoevaluacion=repositorio_autoevaluacion,
+        repositorio_estandar=repositorio_estandar,
+        repositorio_accion=repositorio_accion,
+    )
 
 
 def obtener_servicio_planes_mejora(

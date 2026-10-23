@@ -1,6 +1,7 @@
 """Modelos ORM de la infraestructura — nunca se importan desde dominio o aplicación."""
 
 from src.infrastructure.database.modelos.acceso_evidencia_orm import AccesoEvidenciaORM
+from src.infrastructure.database.modelos.accion_mejora_orm import AccionMejoraORM
 from src.infrastructure.database.modelos.actividad_cronograma_orm import ActividadCronogramaORM
 from src.infrastructure.database.modelos.autoevaluacion_orm import AutoevaluacionORM
 from src.infrastructure.database.modelos.calificacion_estandar_orm import (
@@ -20,6 +21,7 @@ from src.infrastructure.database.modelos.usuario_orm import UsuarioORM
 
 __all__ = [
     "AccesoEvidenciaORM",
+    "AccionMejoraORM",
     "ActividadCronogramaORM",
     "AutoevaluacionORM",
     "CalificacionEstandarORM",

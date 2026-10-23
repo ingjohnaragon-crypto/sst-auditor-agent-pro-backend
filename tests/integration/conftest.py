@@ -13,6 +13,7 @@ from src.domain.models.usuario import RolUsuario, Usuario
 from src.infrastructure.database.base import Base
 from src.infrastructure.database.modelos import (  # noqa: F401 — registra tablas
     AccesoEvidenciaORM,
+    AccionMejoraORM,
     AutoevaluacionORM,
     CalificacionEstandarORM,
     CatalogoReferenciaORM,
