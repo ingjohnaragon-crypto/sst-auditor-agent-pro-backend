@@ -332,7 +332,7 @@ Borrador generado desde calificaciones `NO_CUMPLE`. No es el cronograma.
 | Columna | Tipo | Restricciones |
 |---|---|---|
 | `id` | `UUID` | PK |
-| `plan_mejoramiento_id` | `UUID` | NOT NULL, FK → `planes_mejoramiento.id`, índice. Sin ON DELETE CASCADE |
+| `plan_mejoramiento_id` | `UUID` | NOT NULL, FK → `planes_mejoramiento.id`, ON DELETE CASCADE, índice `ix_acciones_mejora_plan_id` |
 | `estandar_minimo_id` | `UUID` | NOT NULL, FK → `estandares_minimos.id` |
 | `ciclo_phva` | `VARCHAR(20)` | NOT NULL. Copiado del estándar al generar |
 | `responsable_sugerido` | `VARCHAR(150)` | NULL. Texto, no FK a `usuarios` |

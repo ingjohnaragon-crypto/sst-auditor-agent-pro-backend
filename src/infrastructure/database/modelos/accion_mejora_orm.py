@@ -2,7 +2,7 @@
 
 from uuid import UUID, uuid4
 
-from sqlalchemy import ForeignKey, String, UniqueConstraint, Uuid
+from sqlalchemy import ForeignKey, Index, String, UniqueConstraint, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
 from src.infrastructure.database.base import Base
@@ -18,14 +18,14 @@ class AccionMejoraORM(Base):
             "estandar_minimo_id",
             name="uq_acciones_mejora_plan_estandar",
         ),
+        Index("ix_acciones_mejora_plan_id", "plan_mejoramiento_id"),
     )
 
     id: Mapped[UUID] = mapped_column(Uuid(), primary_key=True, default=uuid4)
     plan_mejoramiento_id: Mapped[UUID] = mapped_column(
         Uuid(),
-        ForeignKey("planes_mejoramiento.id"),
+        ForeignKey("planes_mejoramiento.id", ondelete="CASCADE"),
         nullable=False,
-        index=True,
     )
     estandar_minimo_id: Mapped[UUID] = mapped_column(
         Uuid(),

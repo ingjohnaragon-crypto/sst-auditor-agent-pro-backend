@@ -186,3 +186,36 @@ async def test_should_responder_404_when_el_plan_no_existe(
     )
     assert respuesta.status_code == 404
     _error(respuesta.json(), "PLAN_MEJORA_NO_ENCONTRADO")
+
+
+async def test_should_borrar_el_borrador_when_se_elimina_el_plan(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+    catalogo_semilla: CatalogoSemilla,
+) -> None:
+    token = await obtener_token(cliente_async, usuarios_semilla)
+    headers = bearer(token)
+    plan_id = await _plan_con_resultados(
+        cliente_async,
+        headers,
+        catalogo_semilla,
+        nit="901260003-1",
+        no_cumple={0},
+        no_aplica=set(),
+    )
+    generado = await cliente_async.post(
+        f"/api/v1/planes-mejora/{plan_id}/acciones/borrador",
+        headers=headers,
+    )
+    assert generado.status_code == 200
+    assert len(generado.json()) == 1
+
+    borrado = await cliente_async.delete(f"/api/v1/planes-mejora/{plan_id}", headers=headers)
+    assert borrado.status_code == 204
+
+    ausente = await cliente_async.get(
+        f"/api/v1/planes-mejora/{plan_id}/acciones",
+        headers=headers,
+    )
+    assert ausente.status_code == 404
+    _error(ausente.json(), "PLAN_MEJORA_NO_ENCONTRADO")
