@@ -5,7 +5,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import attributes, selectinload
 
 from src.domain.exceptions.plan_mejora import PlanMejoraYaExisteError
 from src.domain.models.plan_mejora import ActividadCronograma, PlanMejora
@@ -43,6 +43,7 @@ class RepositorioPlanMejoraSQLAlchemy(RepositorioPlanMejora):
             if "autoevaluacion_id" in str(exc.orig):
                 raise PlanMejoraYaExisteError() from exc
             raise
+        self._expirar_cronograma(fila)
         cargada = await self._cargar(plan.id)
         if cargada is None:
             msg = "El plan no quedó persistido"
@@ -58,6 +59,7 @@ class RepositorioPlanMejoraSQLAlchemy(RepositorioPlanMejora):
             select(PlanMejoramientoORM)
             .where(PlanMejoramientoORM.autoevaluacion_id == autoevaluacion_id)
             .options(_CARGA)
+            .execution_options(populate_existing=True)
         )
         fila = (await self._sesion.execute(consulta)).scalar_one_or_none()
         return self._a_dominio(fila) if fila is not None else None
@@ -69,8 +71,21 @@ class RepositorioPlanMejoraSQLAlchemy(RepositorioPlanMejora):
             await self._sesion.flush()
 
     async def _cargar(self, id: UUID) -> PlanMejoramientoORM | None:
-        consulta = select(PlanMejoramientoORM).where(PlanMejoramientoORM.id == id).options(_CARGA)
+        consulta = (
+            select(PlanMejoramientoORM)
+            .where(PlanMejoramientoORM.id == id)
+            .options(_CARGA)
+            .execution_options(populate_existing=True)
+        )
         return (await self._sesion.execute(consulta)).scalar_one_or_none()
+
+    def _expirar_cronograma(self, fila: PlanMejoramientoORM) -> None:
+        """Suelta la colección cargada para que la recarga aplique el order_by."""
+        if "actividades" in attributes.instance_state(fila).unloaded:
+            return
+        for actividad in list(fila.actividades):
+            self._sesion.expire(actividad, ["meses", "fecha_creacion"])
+        self._sesion.expire(fila, ["actividades"])
 
     @staticmethod
     def _sincronizar_actividades(fila: PlanMejoramientoORM, plan: PlanMejora) -> None:
@@ -112,6 +127,10 @@ class RepositorioPlanMejoraSQLAlchemy(RepositorioPlanMejora):
 
     @staticmethod
     def _a_dominio(fila: PlanMejoramientoORM) -> PlanMejora:
+        ordenadas = sorted(
+            fila.actividades,
+            key=lambda actividad: (actividad.fecha_creacion, actividad.id),
+        )
         actividades = [
             ActividadCronograma(
                 id=actividad.id,
@@ -120,7 +139,7 @@ class RepositorioPlanMejoraSQLAlchemy(RepositorioPlanMejora):
                 indicador=actividad.indicador,
                 meses=tuple(sorted(mes.mes for mes in actividad.meses)),
             )
-            for actividad in fila.actividades
+            for actividad in ordenadas
         ]
         return PlanMejora(
             id=fila.id,

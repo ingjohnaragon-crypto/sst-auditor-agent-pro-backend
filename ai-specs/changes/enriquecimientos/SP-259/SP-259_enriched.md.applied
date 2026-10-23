@@ -1,0 +1,91 @@
+# Ticket enriquecido: SP-259 — Publicar API del cronograma anual
+
+## Descripción original
+<!-- jira-skip -->
+Historia base: . Alta, edición y baja de actividades del plan: texto, responsable y conjunto de meses. Criterios: los meses fuera de 1-12 se rechazan; el orden de respuesta es estable; borrar una actividad no borra el plan.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+Cerrar el contrato del cronograma anual sobre las rutas que SP-258 ya publica. Una actividad es una fila de `actividades_cronograma`: descripción, responsable, indicador y un conjunto de meses. El indicador sigue siendo obligatorio: la columna es `NOT NULL` desde SP-257.
+
+El alta, la edición y la baja ya existen. Esta historia no agrega otro recurso, otra tabla ni una migración. `acciones_mejora`, `estado` y `reportado_arl` quedan fuera.
+
+- `POST /api/v1/planes-mejora/{plan_id}/actividades` — 201, rol escritor. Devuelve el plan completo.
+- `PUT /api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}` — 200, rol escritor. Reemplaza los cuatro campos y conserva el id. La actividad se queda en la misma posición.
+- `DELETE /api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}` — 204, rol escritor. Quita esa fila. El plan sigue existiendo.
+
+Los meses se validan en `ActividadCronograma.crear` (`_meses_validos`). Pydantic no pone `ge`, `le` ni `min_length`: un mes inválido debe llegar al dominio y responder 422 `ACTIVIDAD_CRONOGRAMA_INVALIDA`.
+
+El orden de la respuesta es estable entre lecturas:
+
+- `meses` siempre ascendente, sin repetidos.
+- `actividades` ordenadas por `fecha_creacion` y, si empatan, por `id`.
+
+Hoy la relación ORM no declara `order_by`. PostgreSQL puede devolver las filas en distinto orden en cada GET. Hay que fijarlo en la relación y cubrirlo con una prueba HTTP que lea el plan dos veces.
+
+**Precondición:** SP-257 (tablas y dominio) y SP-258 (rutas, servicio y repositorio). Si `develop` aún no tiene esas rutas, la rama sale de `feature/SP-258-backend`.
+
+## Criterios de aceptación
+- [ ] Un escritor agrega una actividad con `descripcion`, `responsable`, `indicador` y `meses`. El POST responde 201 y el plan incluye esa actividad.
+- [ ] El PUT conserva el `id` de la actividad, reemplaza textos y meses, y no cambia su posición respecto de las demás.
+- [ ] Un mes menor que 1, mayor que 12, repetido, o una lista vacía, responde 422 `ACTIVIDAD_CRONOGRAMA_INVALIDA` y no persiste el cambio.
+- [ ] Los meses de la respuesta salen ordenados de menor a mayor. Enviar `[12, 1]` guarda y devuelve `[1, 12]`.
+- [ ] Dos GET seguidos del mismo plan devuelven las actividades en el mismo orden.
+- [ ] Borrar una actividad responde 204. El GET siguiente del plan responde 200, sin esa actividad y con las demás.
+- [ ] `CONSULTA` lee el plan (200) y recibe 403 `ACCESO_DENEGADO` al crear, editar o borrar una actividad.
+- [ ] No hay migración nueva ni ruta nueva.
+
+## Campos y endpoints
+
+Errores con `RespuestaError`: `exito`, `codigo`, `mensaje`, `detalle`.
+
+Cuerpo de alta y edición (`SolicitudActividadCronograma`, `extra=forbid`):
+
+- `descripcion` — texto obligatorio, se recorta.
+- `responsable` — texto obligatorio, máximo 150.
+- `indicador` — texto obligatorio, máximo 200.
+- `meses` — lista de enteros. Cada uno entre 1 y 12, sin repetidos, al menos uno.
+
+`POST /api/v1/planes-mejora/{plan_id}/actividades` — 201, `ADMINISTRADOR` o `AUDITOR_SST`. 404 `PLAN_MEJORA_NO_ENCONTRADO`.
+
+`PUT /api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}` — 200, rol escritor. 404 `PLAN_MEJORA_NO_ENCONTRADO` o `ACTIVIDAD_NO_ENCONTRADA`.
+
+`DELETE /api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}` — 204, rol escritor. El plan no se borra.
+
+`GET /api/v1/planes-mejora/{plan_id}` — 200, cualquier rol autenticado. Es la lectura que debe repetir el mismo orden.
+
+Respuesta de cada actividad: `id`, `descripcion`, `responsable`, `indicador`, `meses`.
+
+## Archivos a crear o modificar
+- `src/infrastructure/database/modelos/plan_mejoramiento_orm.py` — Infrastructure — Modify. `order_by` de actividades por `fecha_creacion` e `id`.
+- `src/infrastructure/database/modelos/actividad_cronograma_orm.py` — Infrastructure — Modify. `order_by` de meses por `mes`.
+- `src/infrastructure/repositories/repositorio_plan_mejora_sqlalchemy.py` — Infrastructure — Modify. Al mapear, conservar ese orden. Los meses siguen saliendo con `sorted`.
+- `tests/integration/test_planes_mejora.py` — Test — Modify. Dos actividades, dos GET con el mismo orden, mes fuera de rango en 422, y DELETE de una actividad con el plan todavía en 200.
+- `ai-specs/specs/api-spec.yml` — Documentación — Modify, solo si falta decir que `meses` y `actividades` viajan ordenados.
+
+## Casos de prueba unitarios
+- Meses `[12, 1]` quedan `(1, 12)`.
+- Mes 0 y mes 13 lanzan `ActividadCronogramaInvalidaError`.
+- Lista de meses vacía y mes repetido también.
+- `actualizar_actividad` conserva el id y el índice en la lista.
+- `quitar_actividad` saca una fila y deja el resto del plan.
+
+Integración:
+
+- Alta, edición y baja de una actividad sobre un plan ya abierto.
+- Tras el DELETE de la actividad, `GET /api/v1/planes-mejora/{plan_id}` responde 200 y ya no trae ese id.
+- Dos actividades creadas en secuencia se leen en el mismo orden en dos GET.
+- Mes 13 en el POST responde 422 `ACTIVIDAD_CRONOGRAMA_INVALIDA`.
+- `CONSULTA` recibe 403 en POST, PUT y DELETE de actividades.
+
+## Requisitos no funcionales
+- Una transacción por caso de uso. El repositorio devuelve dominio, nunca el ORM.
+- El orden no depende del plan de ejecución de PostgreSQL: va en `order_by` de la relación.
+- Sin secretos, sin R2 y sin recálculo de la Resolución 0312 ni del umbral de 85.
+- Identificadores y mensajes de error en español.
+
+## Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — las rutas y la validación de meses ya están en SP-258. Falta fijar el orden estable de actividades y las pruebas de baja y de mes fuera de rango. Sin migración.
+<!-- /STORY_POINTS -->
