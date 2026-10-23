@@ -3,16 +3,13 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import TYPE_CHECKING
 from uuid import UUID, uuid4
 
 from sqlalchemy import DateTime, ForeignKey, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.infrastructure.database.base import Base
-
-if TYPE_CHECKING:
-    from src.infrastructure.database.modelos.mes_actividad_orm import MesActividadORM
+from src.infrastructure.database.modelos.mes_actividad_orm import MesActividadORM
 
 
 class ActividadCronogramaORM(Base):
@@ -44,4 +41,5 @@ class ActividadCronogramaORM(Base):
         "MesActividadORM",
         cascade="all, delete-orphan",
         lazy="selectin",
+        order_by=MesActividadORM.mes,
     )

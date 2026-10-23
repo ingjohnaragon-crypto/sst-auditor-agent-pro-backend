@@ -1760,6 +1760,7 @@ components:
         indicador: {type: string}
         meses:
           type: array
+          description: Enteros del 1 al 12, sin repetidos. El dominio rechaza los que quedan fuera.
           items: {type: integer}
     SolicitudAbrirPlanMejora:
       type: object
@@ -1778,6 +1779,7 @@ components:
         indicador: {type: string}
         meses:
           type: array
+          description: Orden ascendente.
           items: {type: integer}
     RespuestaPlanMejora:
       type: object
@@ -1788,6 +1790,7 @@ components:
         autoevaluacion_id: {type: string, format: uuid}
         actividades:
           type: array
+          description: Orden estable por fecha de creación y, si empatan, por id.
           items:
             $ref: "#/components/schemas/RespuestaActividadCronograma"
     RespuestaError:

@@ -19,6 +19,15 @@ def _error(body: dict[str, object], codigo: str) -> None:
     assert body["codigo"] == codigo
 
 
+def _actividad(descripcion: str, meses: list[int]) -> dict[str, object]:
+    return {
+        "descripcion": descripcion,
+        "responsable": "Jefe SST",
+        "indicador": "Acta",
+        "meses": meses,
+    }
+
+
 async def _autoevaluacion_finalizada(
     cliente: AsyncClient,
     headers: dict[str, str],
@@ -139,6 +148,14 @@ async def test_should_leer_y_no_escribir_when_consulta(
         json={},
     )
     assert creado.status_code == 201
+    plan_id = creado.json()["id"]
+    agregada = await cliente_async.post(
+        f"/api/v1/planes-mejora/{plan_id}/actividades",
+        headers=headers_admin,
+        json=_actividad("Capacitar", [2]),
+    )
+    assert agregada.status_code == 201
+    actividad_id = agregada.json()["actividades"][0]["id"]
 
     token_consulta = await obtener_token(
         cliente_async,
@@ -159,6 +176,25 @@ async def test_should_leer_y_no_escribir_when_consulta(
     )
     assert denegado.status_code == 403
     _error(denegado.json(), "ACCESO_DENEGADO")
+
+    alta = await cliente_async.post(
+        f"/api/v1/planes-mejora/{plan_id}/actividades",
+        headers=headers_consulta,
+        json=_actividad("Otra", [5]),
+    )
+    assert alta.status_code == 403
+    _error(alta.json(), "ACCESO_DENEGADO")
+    edicion = await cliente_async.put(
+        f"/api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}",
+        headers=headers_consulta,
+        json=_actividad("Otra", [6]),
+    )
+    assert edicion.status_code == 403
+    baja = await cliente_async.delete(
+        f"/api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}",
+        headers=headers_consulta,
+    )
+    assert baja.status_code == 403
 
 
 async def test_should_responder_401_when_no_hay_token(
@@ -263,3 +299,62 @@ async def test_should_editar_actividades_y_borrar_plan(
     )
     assert ausente.status_code == 404
     _error(ausente.json(), "PLAN_MEJORA_NO_ENCONTRADO")
+
+
+async def test_should_conservar_orden_y_plan_when_cambia_el_cronograma(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+    catalogo_semilla: CatalogoSemilla,
+) -> None:
+    token = await obtener_token(cliente_async, usuarios_semilla)
+    headers = bearer(token)
+    auto_id = await _autoevaluacion_finalizada(
+        cliente_async,
+        headers,
+        catalogo_semilla,
+        exige_plan=True,
+        nit="901258006-1",
+    )
+    creado = await cliente_async.post(
+        f"/api/v1/autoevaluaciones/{auto_id}/plan-mejora",
+        headers=headers,
+        json={},
+    )
+    assert creado.status_code == 201
+    plan_id = creado.json()["id"]
+    ruta = f"/api/v1/planes-mejora/{plan_id}/actividades"
+
+    primera = await cliente_async.post(ruta, headers=headers, json=_actividad("Primera", [12, 1]))
+    assert primera.status_code == 201
+    assert primera.json()["actividades"][0]["meses"] == [1, 12]
+    segunda = await cliente_async.post(ruta, headers=headers, json=_actividad("Segunda", [3]))
+    assert segunda.status_code == 201
+
+    lectura = await cliente_async.get(f"/api/v1/planes-mejora/{plan_id}", headers=headers)
+    repetida = await cliente_async.get(f"/api/v1/planes-mejora/{plan_id}", headers=headers)
+    assert lectura.status_code == 200
+    ids = [actividad["id"] for actividad in lectura.json()["actividades"]]
+    assert ids == [actividad["id"] for actividad in repetida.json()["actividades"]]
+    assert len(ids) == 2
+
+    editada = await cliente_async.put(
+        f"{ruta}/{ids[0]}",
+        headers=headers,
+        json=_actividad("Primera ajustada", [4]),
+    )
+    assert editada.status_code == 200
+    assert [actividad["id"] for actividad in editada.json()["actividades"]] == ids
+    assert editada.json()["actividades"][0]["meses"] == [4]
+
+    invalida = await cliente_async.post(ruta, headers=headers, json=_actividad("Fuera", [13]))
+    assert invalida.status_code == 422
+    _error(invalida.json(), "ACTIVIDAD_CRONOGRAMA_INVALIDA")
+    sigue = await cliente_async.get(f"/api/v1/planes-mejora/{plan_id}", headers=headers)
+    assert [actividad["id"] for actividad in sigue.json()["actividades"]] == ids
+
+    quitada = await cliente_async.delete(f"{ruta}/{ids[0]}", headers=headers)
+    assert quitada.status_code == 204
+    restante = await cliente_async.get(f"/api/v1/planes-mejora/{plan_id}", headers=headers)
+    assert restante.status_code == 200
+    assert restante.json()["id"] == plan_id
+    assert [actividad["id"] for actividad in restante.json()["actividades"]] == [ids[1]]
