@@ -323,27 +323,28 @@ persistido.
 | `actividad_id` | `UUID` | NOT NULL, FK → `actividades_cronograma.id`, ON DELETE CASCADE. Parte de la PK |
 | `mes` | `SMALLINT` | NOT NULL, CHECK entre 1 y 12. Parte de la PK |
 
-#### `acciones_mejora` — Referencia §4
+#### `acciones_mejora` — SP-260
 
-Pendiente. SP-257 no la crea. El cronograma no reutiliza esta forma (`origen`,
-`tipo`, `fecha_limite`, `estado`). `evidencias.accion_mejora_id` sigue sin
-columna.
+Borrador generado desde calificaciones `NO_CUMPLE`. No es el cronograma.
+`origen`, `tipo`, `fecha_limite`, `estado` y `responsable_id` siguen fuera.
+`evidencias.accion_mejora_id` no se agrega en esta historia.
 
 | Columna | Tipo | Restricciones |
 |---|---|---|
-| `plan_mejoramiento_id` | `UUID` | NOT NULL, FK → `planes_mejoramiento.id` |
-| `responsable_id` | `UUID` | NOT NULL, FK → `usuarios.id` |
-| `origen` | `origen_accion` | NOT NULL |
-| `tipo` | `tipo_accion` | NOT NULL |
-| `descripcion` | `TEXT` | NOT NULL |
-| `fecha_limite` | `DATE` | NOT NULL |
-| `estado` | `estado_accion_mejora` | NOT NULL, default `PENDIENTE` |
+| `id` | `UUID` | PK |
+| `plan_mejoramiento_id` | `UUID` | NOT NULL, FK → `planes_mejoramiento.id`, ON DELETE CASCADE, índice `ix_acciones_mejora_plan_id` |
+| `estandar_minimo_id` | `UUID` | NOT NULL, FK → `estandares_minimos.id` |
+| `ciclo_phva` | `VARCHAR(20)` | NOT NULL. Copiado del estándar al generar |
+| `responsable_sugerido` | `VARCHAR(150)` | NULL. Texto, no FK a `usuarios` |
+
+UNIQUE `(plan_mejoramiento_id, estandar_minimo_id)` con nombre
+`uq_acciones_mejora_plan_estandar`.
 
 #### `evidencias` — D. 1072, Art. 2.2.4.6.13
 
 Implementada en SP-151 (migración `e5f6a7b8c9d0`). Solo metadatos: el binario
-no se persiste. `accion_mejora_id` sigue pendiente hasta que exista
-`acciones_mejora`; por eso `calificacion_estandar_id` es NOT NULL en esta
+no se persiste. `accion_mejora_id` sigue pendiente aunque SP-260 ya creó `acciones_mejora`;
+por eso `calificacion_estandar_id` es NOT NULL en esta
 historia y el CHECK «al menos una asociación» del ER todavía no se crea.
 
 | Columna | Tipo | Restricciones |
@@ -392,14 +393,14 @@ El archivo solo se lee si `ALMACENAMIENTO_LOCAL_RAIZ` contiene la ruta resuelta.
 | `autoevaluaciones` → `planes_mejoramiento` | 1—0..1 (`autoevaluacion_id` NOT NULL y UNIQUE, SP-257) |
 | `planes_mejoramiento` → `actividades_cronograma` | 1—N |
 | `actividades_cronograma` → `meses_actividad` | 1—N |
-| `planes_mejoramiento` → `acciones_mejora` | 1—N (pendiente; la tabla aún no existe) |
+| `planes_mejoramiento` → `acciones_mejora` | 1—N (SP-260) |
 | `calificaciones_estandar` → `evidencias` | 1—N (`calificacion_estandar_id` NOT NULL en SP-151) |
 | `evidencias` → `accesos_evidencia` | 1—N |
 | `acciones_mejora` → `evidencias` | 1—N (FK opcional) |
 | `usuarios` → `autoevaluaciones` | 1—N (evaluador) |
 | `usuarios` → `evidencias` | 1—N (quien carga) |
 | `usuarios` → `auditorias` | 1—N (auditor) |
-| `usuarios` → `acciones_mejora` | 1—N (responsable) |
+| `usuarios` → `acciones_mejora` | Pendiente. SP-260 guarda `responsable_sugerido` como texto |
 
 `usuarios` participa en el modelo **sin modificarse**: cualquier cambio sobre
 esa entidad sería un ticket aparte.

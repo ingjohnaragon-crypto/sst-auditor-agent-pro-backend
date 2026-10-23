@@ -15,6 +15,9 @@ No es necesario modificar `src/main.py`.
 from fastapi import APIRouter
 
 from src.infrastructure.config.settings import get_settings
+from src.presentation.routers.acciones_mejora_router import (
+    router as acciones_mejora_router,
+)
 from src.presentation.routers.auth_router import router as auth_router
 from src.presentation.routers.autoevaluaciones_router import (
     router as autoevaluaciones_router,
@@ -56,6 +59,7 @@ api_router.include_router(resumen_ejecutivo_router, prefix=settings.api_prefix)
 api_router.include_router(autoevaluaciones_router, prefix=settings.api_prefix)
 api_router.include_router(planes_por_autoevaluacion_router, prefix=settings.api_prefix)
 api_router.include_router(planes_mejora_router, prefix=settings.api_prefix)
+api_router.include_router(acciones_mejora_router, prefix=settings.api_prefix)
 api_router.include_router(estandares_router, prefix=settings.api_prefix)
 api_router.include_router(evidencias_por_calificacion_router, prefix=settings.api_prefix)
 api_router.include_router(evidencias_router, prefix=settings.api_prefix)
