@@ -358,3 +358,166 @@ async def test_should_conservar_orden_y_plan_when_cambia_el_cronograma(
     assert restante.status_code == 200
     assert restante.json()["id"] == plan_id
     assert [actividad["id"] for actividad in restante.json()["actividades"]] == [ids[1]]
+
+
+async def test_should_rechazar_meses_invalidos_when_agrega_actividad(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+    catalogo_semilla: CatalogoSemilla,
+) -> None:
+    token = await obtener_token(cliente_async, usuarios_semilla)
+    headers = bearer(token)
+    auto_id = await _autoevaluacion_finalizada(
+        cliente_async,
+        headers,
+        catalogo_semilla,
+        exige_plan=True,
+        nit="901258007-1",
+    )
+    creado = await cliente_async.post(
+        f"/api/v1/autoevaluaciones/{auto_id}/plan-mejora",
+        headers=headers,
+        json={},
+    )
+    assert creado.status_code == 201
+    plan_id = creado.json()["id"]
+    ruta = f"/api/v1/planes-mejora/{plan_id}/actividades"
+
+    for meses in ([0], [13], [], [1, 1]):
+        respuesta = await cliente_async.post(
+            ruta,
+            headers=headers,
+            json=_actividad("Capacitar brigada", meses),
+        )
+        assert respuesta.status_code == 422
+        _error(respuesta.json(), "ACTIVIDAD_CRONOGRAMA_INVALIDA")
+
+    leido = await cliente_async.get(
+        f"/api/v1/autoevaluaciones/{auto_id}/plan-mejora",
+        headers=headers,
+    )
+    assert leido.status_code == 200
+    assert leido.json()["actividades"] == []
+
+
+async def test_should_conservar_actividad_when_actualiza_con_mes_invalido(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+    catalogo_semilla: CatalogoSemilla,
+) -> None:
+    token = await obtener_token(cliente_async, usuarios_semilla)
+    headers = bearer(token)
+    auto_id = await _autoevaluacion_finalizada(
+        cliente_async,
+        headers,
+        catalogo_semilla,
+        exige_plan=True,
+        nit="901258008-1",
+    )
+    creado = await cliente_async.post(
+        f"/api/v1/autoevaluaciones/{auto_id}/plan-mejora",
+        headers=headers,
+        json={},
+    )
+    assert creado.status_code == 201
+    plan_id = creado.json()["id"]
+    agregada = await cliente_async.post(
+        f"/api/v1/planes-mejora/{plan_id}/actividades",
+        headers=headers,
+        json=_actividad("Capacitar", [3]),
+    )
+    assert agregada.status_code == 201
+    actividad_id = agregada.json()["actividades"][0]["id"]
+
+    actualizada = await cliente_async.put(
+        f"/api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}",
+        headers=headers,
+        json=_actividad("Capacitar", [13]),
+    )
+    assert actualizada.status_code == 422
+    _error(actualizada.json(), "ACTIVIDAD_CRONOGRAMA_INVALIDA")
+
+    leido = await cliente_async.get(
+        f"/api/v1/autoevaluaciones/{auto_id}/plan-mejora",
+        headers=headers,
+    )
+    assert leido.status_code == 200
+    assert leido.json()["actividades"][0]["id"] == actividad_id
+    assert leido.json()["actividades"][0]["meses"] == [3]
+
+
+async def test_should_negar_cronograma_y_borrado_when_consulta(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+    catalogo_semilla: CatalogoSemilla,
+) -> None:
+    token_admin = await obtener_token(cliente_async, usuarios_semilla)
+    headers_admin = bearer(token_admin)
+    auto_id = await _autoevaluacion_finalizada(
+        cliente_async,
+        headers_admin,
+        catalogo_semilla,
+        exige_plan=True,
+        nit="901258009-1",
+    )
+    creado = await cliente_async.post(
+        f"/api/v1/autoevaluaciones/{auto_id}/plan-mejora",
+        headers=headers_admin,
+        json={},
+    )
+    assert creado.status_code == 201
+    plan_id = creado.json()["id"]
+    agregada = await cliente_async.post(
+        f"/api/v1/planes-mejora/{plan_id}/actividades",
+        headers=headers_admin,
+        json=_actividad("Capacitar", [3]),
+    )
+    assert agregada.status_code == 201
+    actividad_id = agregada.json()["actividades"][0]["id"]
+
+    token_consulta = await obtener_token(
+        cliente_async,
+        usuarios_semilla,
+        correo=usuarios_semilla.correo_consulta,
+    )
+    headers_consulta = bearer(token_consulta)
+    leido = await cliente_async.get(
+        f"/api/v1/autoevaluaciones/{auto_id}/plan-mejora",
+        headers=headers_consulta,
+    )
+    assert leido.status_code == 200
+
+    alta = await cliente_async.post(
+        f"/api/v1/planes-mejora/{plan_id}/actividades",
+        headers=headers_consulta,
+        json=_actividad("Otra", [5]),
+    )
+    assert alta.status_code == 403
+    _error(alta.json(), "ACCESO_DENEGADO")
+    edicion = await cliente_async.put(
+        f"/api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}",
+        headers=headers_consulta,
+        json=_actividad("Otra", [6]),
+    )
+    assert edicion.status_code == 403
+    _error(edicion.json(), "ACCESO_DENEGADO")
+    baja = await cliente_async.delete(
+        f"/api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}",
+        headers=headers_consulta,
+    )
+    assert baja.status_code == 403
+    _error(baja.json(), "ACCESO_DENEGADO")
+    borrado = await cliente_async.delete(
+        f"/api/v1/planes-mejora/{plan_id}",
+        headers=headers_consulta,
+    )
+    assert borrado.status_code == 403
+    _error(borrado.json(), "ACCESO_DENEGADO")
+
+    final = await cliente_async.get(
+        f"/api/v1/autoevaluaciones/{auto_id}/plan-mejora",
+        headers=headers_consulta,
+    )
+    assert final.status_code == 200
+    assert final.json()["actividades"][0]["id"] == actividad_id
+    assert final.json()["actividades"][0]["meses"] == [3]

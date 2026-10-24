@@ -1,0 +1,64 @@
+# Ticket enriquecido: SP-263 — Probar el API del plan de mejora
+
+## Descripción original
+<!-- jira-skip -->
+Historia base: . Suites HTTP del alta, la generación desde NO_CUMPLE, el rechazo cuando no aplica plan, el RBAC de CONSULTA y la validación de meses. No reescriben las pruebas del motor PHVA.
+<!-- /jira-skip -->
+
+## Descripción mejorada
+
+Esta tarea no agrega endpoints ni reglas nuevas. Completa la suite HTTP del plan de mejora y del cronograma. No se reescriben las pruebas del motor PHVA ni las de finalizar la autoevaluación.
+
+Varios casos ya están y se dejan como están:
+
+- `tests/integration/test_planes_mejora.py` abre el plan con actividades, ordena los meses `[12, 1]` a `[1, 12]`, rechaza el segundo plan con `409 PLAN_MEJORA_YA_EXISTE`, deja leer a `CONSULTA` y le niega el `POST` del plan, responde `401` sin token, rechaza el plan cuando la autoevaluación no lo exige (`409 PLAN_MEJORA_NO_REQUERIDO`) y cubre alta, `PUT`, `DELETE` de una actividad y borrado del plan.
+- `tests/integration/test_borrador_acciones.py` genera una acción por cada `NO_CUMPLE`, no duplica al repetir el `POST`, ignora `CUMPLE` y `NO_APLICA`, niega el `POST` a `CONSULTA` y comprueba el `404` y el borrado en cascada.
+
+Lo que falta en HTTP, y es el trabajo de esta historia:
+
+- Validar meses en el alta y en la actualización de una actividad. Lista vacía, `0`, `13` o un mes repetido responden `422` con `ACTIVIDAD_CRONOGRAMA_INVALIDA`. El plan y las actividades que ya estaban no cambian.
+- `CONSULTA` recibe `403 ACCESO_DENEGADO` en `POST`, `PUT` y `DELETE` de actividades y en `DELETE` del plan. El `GET` del plan sigue en `200`.
+
+No se copia la suite del borrador ni la del dominio (`tests/unit/domain/test_plan_mejora.py`). Esas ya cubren el tope de textos y el motor no entra en este ticket.
+
+## Criterios de aceptación
+- [ ] Un `POST` o `PUT` de actividad con meses vacíos, fuera de 1 a 12 o repetidos responde `422` `ACTIVIDAD_CRONOGRAMA_INVALIDA` y no modifica el cronograma.
+- [ ] `CONSULTA` lee el plan y recibe `403` `ACCESO_DENEGADO` al agregar, editar o quitar una actividad y al borrar el plan.
+- [ ] Las pruebas HTTP que ya pasan (alta, plan no requerido, borrador desde `NO_CUMPLE`) no se reescriben.
+- [ ] No se modifican las pruebas del motor PHVA ni de finalización.
+- [ ] `pytest` sigue en verde y la cobertura global de ramas se mantiene en 90 % o más.
+
+## Campos y endpoints
+No hay contrato nuevo. El cuerpo de error sigue siendo `RespuestaError` (`exito`, `codigo`, `mensaje`, `detalle`).
+
+- `POST /api/v1/autoevaluaciones/{autoevaluacion_id}/plan-mejora` — escritor. `201` con el plan. `409` `PLAN_MEJORA_NO_REQUERIDO` si la autoevaluación finalizada no exige plan. Ya cubierto.
+- `POST /api/v1/planes-mejora/{plan_id}/actividades` — escritor. Cuerpo `descripcion`, `responsable`, `indicador`, `meses`. `201` devuelve el plan. `422` `ACTIVIDAD_CRONOGRAMA_INVALIDA` si los meses no son válidos.
+- `PUT /api/v1/planes-mejora/{plan_id}/actividades/{actividad_id}` — el mismo cuerpo y el mismo `422`.
+- `DELETE` de la actividad y `DELETE /api/v1/planes-mejora/{plan_id}` — escritor. `CONSULTA` recibe `403`.
+- `GET` del plan por autoevaluación o por id — cualquier rol autenticado, incluido `CONSULTA`, `200`.
+- `POST /api/v1/planes-mejora/{plan_id}/acciones/borrador` — ya probado en `test_borrador_acciones.py`. No se duplica.
+
+Meses válidos: enteros del 1 al 12, sin repetir, al menos uno. El API los guarda ordenados.
+
+## Archivos a crear o modificar
+- `tests/integration/test_planes_mejora.py` — Presentation — Modify. Casos HTTP de meses inválidos y de `CONSULTA` sobre las actividades y el borrado del plan.
+
+No se tocan routers, servicios, dominio, migraciones, `api-spec.yml` ni `data-model.md`.
+
+## Casos de prueba unitarios
+Son pruebas de integración HTTP, con `cliente_async`, `usuarios_semilla` y `catalogo_semilla`, el mismo arreglo de `test_planes_mejora.py`.
+
+- Alta con meses `[0]`, `[13]`, `[]` y `[1, 1]`: `422` y código `ACTIVIDAD_CRONOGRAMA_INVALIDA`. Un `GET` posterior no muestra esa actividad.
+- `PUT` de una actividad existente con `[13]`: `422`. El mes que ya tenía la actividad sigue en el `GET`.
+- `CONSULTA`, con un plan y una actividad creados por un escritor: `GET` `200`; `POST`, `PUT` y `DELETE` de la actividad `403` `ACCESO_DENEGADO`; `DELETE` del plan `403`. Después el `GET` todavía devuelve el plan.
+- No agregar otra prueba de generación `NO_CUMPLE` ni del umbral de 85.
+
+## Requisitos no funcionales
+- Sin token el `401` ya está cubierto. No hace falta repetirlo.
+- El rol se exige en el servidor con `requerir_rol_escritor`. La prueba usa el usuario de consulta de la semilla, no un rol falso en el cuerpo.
+- No se baja el umbral de cobertura para hacer pasar la suite.
+
+## Puntos de historia
+<!-- STORY_POINTS:3 -->
+**3** — solo faltan los HTTP de meses inválidos y el `403` de `CONSULTA` en el cronograma. El alta, el rechazo del plan y el borrador desde `NO_CUMPLE` ya existen.
+<!-- /STORY_POINTS -->
