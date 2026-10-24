@@ -58,6 +58,9 @@ swagger.json
 Thumbs.db
 .env
 
+# Salida de iniciar-aplicacion.bat
+logs/
+
 # Python
 __pycache__/
 *.pyc
