@@ -216,3 +216,31 @@ async def test_should_responder_503_when_r2_no_configurado(
         assert almacen.objetos == {}
     finally:
         app.dependency_overrides.pop(obtener_servicio_archivos_documentales, None)
+
+
+async def test_should_responder_404_when_empresa_inexistente(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+) -> None:
+    _override_servicio(AlmacenMemoria())
+    try:
+        token = await obtener_token(cliente_async, usuarios_semilla)
+        headers = bearer(token)
+        empresa_id = uuid4()
+
+        listado = await cliente_async.get(
+            f"/api/v1/empresas/{empresa_id}/archivos",
+            headers=headers,
+        )
+        assert listado.status_code == 404
+        assert listado.json()["codigo"] == "EMPRESA_NO_ENCONTRADA"
+
+        carga = await cliente_async.post(
+            f"/api/v1/empresas/{empresa_id}/archivos",
+            headers=headers,
+            files={"archivo": ("acta.pdf", PDF, "application/pdf")},
+        )
+        assert carga.status_code == 404
+        assert carga.json()["codigo"] == "EMPRESA_NO_ENCONTRADA"
+    finally:
+        app.dependency_overrides.pop(obtener_servicio_archivos_documentales, None)

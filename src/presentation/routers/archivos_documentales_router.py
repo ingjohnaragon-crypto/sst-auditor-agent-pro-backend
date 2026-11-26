@@ -118,10 +118,11 @@ async def descargar_archivo(
 ) -> Response:
     """Transmite el archivo con la sesión Bearer. No expone URL de R2."""
     descarga = await servicio.descargar(empresa_id, archivo_id)
+    nombre_seguro = descarga.nombre_original.replace('"', "").replace("\r", "").replace("\n", "")
     return Response(
         content=descarga.contenido,
         media_type=descarga.tipo_mime,
-        headers={"Content-Disposition": f'attachment; filename="{descarga.nombre_original}"'},
+        headers={"Content-Disposition": f'attachment; filename="{nombre_seguro}"'},
     )
 
 

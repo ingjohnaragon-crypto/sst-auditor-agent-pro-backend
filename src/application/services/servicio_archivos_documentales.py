@@ -11,7 +11,6 @@ from src.application.mappers.mapper_archivo_documental import MapperArchivoDocum
 from src.application.services.servicio_carga_evidencia import (
     MAGIC,
     AlmacenEvidencias,
-    leer_con_tope,
 )
 from src.domain.exceptions.archivo_documental import (
     ArchivoInvalidoError,
@@ -112,6 +111,8 @@ class ServicioArchivosDocumentales:
 
     async def eliminar(self, empresa_id: UUID, archivo_id: UUID) -> None:
         """Borra el objeto en el almacén y la fila (físico)."""
+        if not self._r2_configurado:
+            raise AlmacenamientoNoConfiguradoError()
         archivo = await self._obtener_de_empresa(empresa_id, archivo_id)
         self._almacen.eliminar(archivo.clave_objeto)
         if archivo.id is not None:
@@ -145,9 +146,7 @@ def _exigir_contenido(tipo_mime: str, contenido: bytes) -> None:
         raise ArchivoInvalidoError("El contenido no coincide con el tipo de archivo")
 
 
-# Reexport para el router (misma lectura por bloques que evidencias).
 __all__ = [
     "DescargaArchivoDocumental",
     "ServicioArchivosDocumentales",
-    "leer_con_tope",
 ]

@@ -104,6 +104,10 @@ async def test_should_lanzar_503_when_r2_no_configurado() -> None:
     assert memoria.objetos == {}
     repo.guardar.assert_not_awaited()
 
+    with pytest.raises(AlmacenamientoNoConfiguradoError):
+        await servicio.eliminar(uuid4(), uuid4())
+    repo.eliminar.assert_not_awaited()
+
 
 @pytest.mark.asyncio
 async def test_should_lanzar_404_when_empresa_no_existe() -> None:
