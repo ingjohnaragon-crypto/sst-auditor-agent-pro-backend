@@ -3,6 +3,7 @@
 from src.infrastructure.database.modelos.acceso_evidencia_orm import AccesoEvidenciaORM
 from src.infrastructure.database.modelos.accion_mejora_orm import AccionMejoraORM
 from src.infrastructure.database.modelos.actividad_cronograma_orm import ActividadCronogramaORM
+from src.infrastructure.database.modelos.archivo_documental_orm import ArchivoDocumentalORM
 from src.infrastructure.database.modelos.autoevaluacion_orm import AutoevaluacionORM
 from src.infrastructure.database.modelos.calificacion_estandar_orm import (
     CalificacionEstandarORM,
@@ -23,6 +24,7 @@ __all__ = [
     "AccesoEvidenciaORM",
     "AccionMejoraORM",
     "ActividadCronogramaORM",
+    "ArchivoDocumentalORM",
     "AutoevaluacionORM",
     "CalificacionEstandarORM",
     "CatalogoReferenciaORM",
