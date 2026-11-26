@@ -57,6 +57,7 @@ swagger.json
 .DS_Store
 Thumbs.db
 .env
+*.lnk
 
 # Salida de iniciar-aplicacion.bat
 logs/

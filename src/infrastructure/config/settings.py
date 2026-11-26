@@ -43,6 +43,27 @@ class Settings(BaseSettings):
     almacenamiento_local_raiz: str | None = None
     descarga_segundos_expiracion: int = 300
 
+    # Cloudflare R2 — opcionales; si falta alguna, no se construye AlmacenR2.
+    r2_account_id: str | None = None
+    r2_access_key_id: str | None = None
+    r2_secret_access_key: str | None = None
+    r2_bucket: str | None = None
+    r2_endpoint: str | None = None
+
+    @property
+    def r2_configurado(self) -> bool:
+        """True solo si las cinco variables R2 tienen texto no vacío."""
+        return all(
+            valor is not None and valor.strip()
+            for valor in (
+                self.r2_account_id,
+                self.r2_access_key_id,
+                self.r2_secret_access_key,
+                self.r2_bucket,
+                self.r2_endpoint,
+            )
+        )
+
     @field_validator("bd_pool_tamano", "bd_pool_reciclar_segundos")
     @classmethod
     def validar_pool_positivo(cls, valor: int, info: ValidationInfo) -> int:
@@ -80,10 +101,17 @@ class Settings(BaseSettings):
             )
         return valor
 
-    @field_validator("almacenamiento_local_raiz")
+    @field_validator(
+        "almacenamiento_local_raiz",
+        "r2_account_id",
+        "r2_access_key_id",
+        "r2_secret_access_key",
+        "r2_bucket",
+        "r2_endpoint",
+    )
     @classmethod
-    def vacio_es_sin_raiz(cls, valor: str | None) -> str | None:
-        """Cadena vacía equivale a no tener directorio de binarios."""
+    def vacio_es_ausente(cls, valor: str | None) -> str | None:
+        """Cadena vacía equivale a variable ausente (disco o R2)."""
         if valor is None or not valor.strip():
             return None
         return valor

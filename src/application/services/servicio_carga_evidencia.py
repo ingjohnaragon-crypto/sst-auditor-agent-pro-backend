@@ -28,10 +28,13 @@ EXTENSION_POR_MIME = {
 
 
 class AlmacenEvidencias(Protocol):
-    """Puerto de escritura. La implementación vive en infraestructura."""
+    """Puerto de almacenamiento. La implementación vive en infraestructura."""
 
     def guardar(self, relativa: str, contenido: bytes) -> None:
-        """Publica el binario en la ruta relativa."""
+        """Publica el binario en la ruta relativa / clave de objeto."""
+
+    def leer(self, relativa: str) -> bytes:
+        """Devuelve el binario. Si no existe, lanza FileNotFoundError."""
 
     def eliminar(self, relativa: str) -> None:
         """Quita un archivo que no llegó a confirmarse."""

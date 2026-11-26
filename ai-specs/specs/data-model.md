@@ -355,7 +355,7 @@ historia y el CHECK «al menos una asociación» del ER todavía no se crea.
 | `nombre_archivo` | `VARCHAR(255)` | NOT NULL |
 | `tipo_mime` | `VARCHAR(100)` | NOT NULL. Permitidos: `application/pdf`, `image/jpeg`, `image/png` |
 | `tamano_bytes` | `INTEGER` | NOT NULL, > 0 y ≤ 10 MiB |
-| `ruta_almacenamiento` | `VARCHAR(500)` | NOT NULL, relativa, sin `..` ni esquema. En la carga multipart (SP-214) la genera el servidor |
+| `ruta_almacenamiento` | `VARCHAR(500)` | NOT NULL, relativa, sin `..` ni esquema. En la carga multipart (SP-214) la genera el servidor. En producción los binarios viven en Cloudflare R2 (clave de objeto); `ALMACENAMIENTO_LOCAL_RAIZ` no es el destino de producción (SP-282) |
 | `fecha_carga` | `TIMESTAMPTZ` | NOT NULL |
 | `activo` | `BOOLEAN` | NOT NULL, default `true` (borrado lógico) |
 | `fecha_eliminacion` | `TIMESTAMPTZ` | NULL mientras esté activa |

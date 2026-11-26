@@ -15,6 +15,13 @@ class AlmacenLocal:
         destino.parent.mkdir(parents=True, exist_ok=True)
         destino.write_bytes(contenido)
 
+    def leer(self, relativa: str) -> bytes:
+        """Devuelve el binario contenido en la raíz. Si no es archivo, FileNotFoundError."""
+        destino = self._destino(relativa)
+        if not destino.is_file():
+            raise FileNotFoundError(relativa)
+        return destino.read_bytes()
+
     def eliminar(self, relativa: str) -> None:
         """Borra el archivo si existe. No falla si ya no está."""
         destino = self._destino(relativa)
