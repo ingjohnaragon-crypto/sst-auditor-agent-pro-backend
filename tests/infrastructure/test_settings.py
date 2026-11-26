@@ -137,3 +137,12 @@ def test_should_aceptar_bd_pool_max_extra_cero(
     settings = Settings(_env_file=None)
 
     assert settings.bd_pool_max_extra == 0
+
+
+def test_should_no_activar_r2_en_suite_offline() -> None:
+    """SP-287: conftest anula R2_* para que pytest no use Cloudflare."""
+    get_settings.cache_clear()
+    try:
+        assert get_settings().r2_configurado is False
+    finally:
+        get_settings.cache_clear()
