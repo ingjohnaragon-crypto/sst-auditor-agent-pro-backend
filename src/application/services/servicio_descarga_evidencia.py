@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import UUID
 
 from src.application.dto.respuesta_enlace_descarga import RespuestaEnlaceDescarga
+from src.application.services.servicio_carga_evidencia import AlmacenEvidencias
 from src.domain.exceptions.autenticacion import TokenInvalidoException
 from src.domain.exceptions.autoevaluacion import AccesoDenegadoError
 from src.domain.exceptions.evidencia import ArchivoNoDisponibleError, EvidenciaNoEncontradaError
@@ -19,15 +20,15 @@ from src.domain.repositories.servicio_tokens import TIPO_TOKEN_DESCARGA, Servici
 
 @dataclass(frozen=True)
 class ArchivoAutorizado:
-    """Ruta ya contenida en la raíz, lista para que el router la sirva."""
+    """Binario autorizado para que el router lo transmita."""
 
-    ruta: Path
+    contenido: bytes
     tipo_mime: str
     nombre_archivo: str
 
 
 class ServicioDescargaEvidencia:
-    """Autoriza la descarga. No escribe el binario ni abre rutas fuera de la raíz."""
+    """Autoriza la descarga. Lee el binario del almacén (R2), no del disco local."""
 
     def __init__(
         self,
@@ -35,18 +36,18 @@ class ServicioDescargaEvidencia:
         repositorio_usuario: RepositorioUsuario,
         repositorio_acceso: RepositorioAccesoEvidencia,
         servicio_tokens: ServicioTokens,
+        almacen: AlmacenEvidencias,
         *,
         segundos_expiracion: int,
         prefijo_api: str,
-        raiz_almacenamiento: Path | None,
     ) -> None:
         self._evidencias = repositorio_evidencia
         self._usuarios = repositorio_usuario
         self._accesos = repositorio_acceso
         self._tokens = servicio_tokens
+        self._almacen = almacen
         self._segundos = segundos_expiracion
         self._prefijo = prefijo_api.rstrip("/")
-        self._raiz = raiz_almacenamiento
 
     async def emitir_enlace(self, evidencia_id: UUID, usuario: Usuario) -> RespuestaEnlaceDescarga:
         """Firma un JWT `tipo=descarga` si el rol puede escribir y la evidencia está activa."""
@@ -61,7 +62,7 @@ class ServicioDescargaEvidencia:
         )
 
     async def canjear(self, token: str) -> ArchivoAutorizado:
-        """Revalida rol y evidencia, audita y solo entonces resuelve el archivo."""
+        """Revalida rol y evidencia, audita y solo entonces lee el objeto."""
         claims = self._tokens.decodificar(token)
         if claims.get("tipo") != TIPO_TOKEN_DESCARGA:
             raise TokenInvalidoException()
@@ -75,14 +76,19 @@ class ServicioDescargaEvidencia:
         evidencia = await self._evidencias.buscar_por_id(evidencia_id)
         if evidencia is None or not evidencia.activo:
             raise EvidenciaNoEncontradaError()
-        archivo = _resolver_archivo(self._raiz, evidencia)
-        if archivo is None:
+        try:
+            contenido = self._almacen.leer(evidencia.ruta_almacenamiento)
+        except FileNotFoundError:
             await self._auditar(
                 evidencia_id, usuario_id, ResultadoAccesoEvidencia.ARCHIVO_NO_DISPONIBLE
             )
-            raise ArchivoNoDisponibleError()
+            raise ArchivoNoDisponibleError() from None
         await self._auditar(evidencia_id, usuario_id, ResultadoAccesoEvidencia.AUTORIZADO)
-        return archivo
+        return ArchivoAutorizado(
+            contenido=contenido,
+            tipo_mime=evidencia.tipo_mime,
+            nombre_archivo=Path(evidencia.nombre_archivo).name,
+        )
 
     def _exigir_escritor(self, usuario: Usuario) -> None:
         if not _es_escritor(usuario):
@@ -114,21 +120,3 @@ def _uuid_claim(valor: object) -> UUID:
         return UUID(valor)
     except ValueError as error:
         raise TokenInvalidoException() from error
-
-
-def _resolver_archivo(raiz: Path | None, evidencia: Evidencia) -> ArchivoAutorizado | None:
-    if raiz is None:
-        return None
-    raiz_resuelta = raiz.resolve()
-    candidata = (raiz_resuelta / evidencia.ruta_almacenamiento).resolve()
-    try:
-        candidata.relative_to(raiz_resuelta)
-    except ValueError:
-        return None
-    if not candidata.is_file():
-        return None
-    return ArchivoAutorizado(
-        ruta=candidata,
-        tipo_mime=evidencia.tipo_mime,
-        nombre_archivo=Path(evidencia.nombre_archivo).name,
-    )

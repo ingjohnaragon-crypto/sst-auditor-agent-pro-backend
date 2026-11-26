@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.models.evidencia import Evidencia
 from src.domain.repositories.repositorio_evidencia import RepositorioEvidencia
+from src.infrastructure.database.modelos.autoevaluacion_orm import AutoevaluacionORM
 from src.infrastructure.database.modelos.calificacion_estandar_orm import (
     CalificacionEstandarORM,
 )
@@ -66,6 +67,19 @@ class RepositorioEvidenciaSQLAlchemy(RepositorioEvidencia):
             CalificacionEstandarORM.id == calificacion_estandar_id
         )
         return (await self._sesion.execute(consulta)).scalar_one_or_none() is not None
+
+    async def obtener_empresa_id_por_calificacion(
+        self, calificacion_estandar_id: UUID
+    ) -> UUID | None:
+        consulta = (
+            select(AutoevaluacionORM.empresa_id)
+            .join(
+                CalificacionEstandarORM,
+                CalificacionEstandarORM.autoevaluacion_id == AutoevaluacionORM.id,
+            )
+            .where(CalificacionEstandarORM.id == calificacion_estandar_id)
+        )
+        return (await self._sesion.execute(consulta)).scalar_one_or_none()
 
     async def _obtener_fila(self, id: UUID) -> EvidenciaORM | None:
         consulta = select(EvidenciaORM).where(EvidenciaORM.id == id)
