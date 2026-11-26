@@ -340,6 +340,28 @@ Borrador generado desde calificaciones `NO_CUMPLE`. No es el cronograma.
 UNIQUE `(plan_mejoramiento_id, estandar_minimo_id)` con nombre
 `uq_acciones_mejora_plan_estandar`.
 
+#### `archivos_documentales` — SP-283 (repositorio documental de empresa)
+
+Implementada en SP-283 (migración `c9d0e1f2a3b4`). Solo metadatos: el binario
+vive en Cloudflare R2. La columna `clave_objeto` es la clave del objeto en el
+bucket, **no** una ruta de disco. Borrado **físico** de la fila (a diferencia de
+`evidencias`). Dos cargas con el mismo `nombre_original` generan dos
+`clave_objeto` distintas. La orquestación «borrar fila + `eliminar` en R2» se
+cablea en SP-284.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| `id` | `UUID` | PK |
+| `empresa_id` | `UUID` | NOT NULL, FK → `empresas.id`, índice |
+| `nombre_original` | `VARCHAR(255)` | NOT NULL |
+| `tipo_mime` | `VARCHAR(100)` | NOT NULL. Permitidos: `application/pdf`, `image/jpeg`, `image/png` |
+| `tamano_bytes` | `INTEGER` | NOT NULL, > 0 y ≤ 10 MiB |
+| `hash` | `CHAR(64)` / `VARCHAR(64)` | NOT NULL, SHA-256 hexadecimal del contenido |
+| `clave_objeto` | `VARCHAR(500)` | NOT NULL, UNIQUE. Convención: `evidencias/{empresa_id}/{uuid}{ext}` |
+| `usuario_id` | `UUID` | NOT NULL, FK → `usuarios.id` (quien cargó) |
+| `fecha_carga` | `TIMESTAMPTZ` | NOT NULL |
+| `fecha_creacion` / `fecha_actualizacion` | `TIMESTAMPTZ` | NOT NULL |
+
 #### `evidencias` — D. 1072, Art. 2.2.4.6.13
 
 Implementada en SP-151 (migración `e5f6a7b8c9d0`). Solo metadatos: el binario
@@ -382,6 +404,7 @@ El archivo solo se lee si `ALMACENAMIENTO_LOCAL_RAIZ` contiene la ruta resuelta.
 | Relación | Cardinalidad |
 |---|---|
 | `empresas` → `autoevaluaciones` | 1—N |
+| `empresas` → `archivos_documentales` | 1—N |
 | `empresas` → `procesos_actividades` | 1—N |
 | `empresas` → `auditorias` | 1—N |
 | `empresas` → `planes_mejoramiento` | 1—N |
