@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from src.application.services.servicio_archivos_documentales import (
     ServicioArchivosDocumentales,
 )
+from src.domain.models.evidencia import TAMANO_MAXIMO_BYTES
 from src.domain.repositories.repositorio_archivo_documental import (
     RepositorioArchivoDocumental,
 )
@@ -24,6 +25,7 @@ from tests.integration.helpers_auth import bearer, obtener_token
 
 PDF = b"%PDF-1.4 documental"
 PNG_INVALIDO_COMO_PDF = b"\x89PNG\r\n\x1a\n"
+PDF_DEMASIADO_GRANDE = b"%PDF-1.4 " + (b"a" * TAMANO_MAXIMO_BYTES)
 
 
 def _override_servicio(
@@ -113,12 +115,47 @@ async def test_should_responder_401_when_anonimo(
     cliente_async: AsyncClient,
     usuarios_semilla: UsuariosSemilla,
 ) -> None:
-    _override_servicio(AlmacenMemoria())
+    almacen = AlmacenMemoria()
+    _override_servicio(almacen)
     try:
         token = await obtener_token(cliente_async, usuarios_semilla)
-        empresa_id = await _crear_empresa(cliente_async, bearer(token))
-        respuesta = await cliente_async.get(f"/api/v1/empresas/{empresa_id}/archivos")
-        assert respuesta.status_code == 401
+        headers = bearer(token)
+        empresa_id = await _crear_empresa(cliente_async, headers)
+        alta = await cliente_async.post(
+            f"/api/v1/empresas/{empresa_id}/archivos",
+            headers=headers,
+            files={"archivo": ("acta.pdf", PDF, "application/pdf")},
+        )
+        assert alta.status_code == 201
+        archivo_id = alta.json()["id"]
+
+        listado = await cliente_async.get(f"/api/v1/empresas/{empresa_id}/archivos")
+        assert listado.status_code == 401
+
+        descarga = await cliente_async.get(f"/api/v1/empresas/{empresa_id}/archivos/{archivo_id}")
+        assert descarga.status_code == 401
+    finally:
+        app.dependency_overrides.pop(obtener_servicio_archivos_documentales, None)
+
+
+async def test_should_rechazar_when_supera_tope_de_tamano(
+    cliente_async: AsyncClient,
+    usuarios_semilla: UsuariosSemilla,
+) -> None:
+    almacen = AlmacenMemoria()
+    _override_servicio(almacen)
+    try:
+        token = await obtener_token(cliente_async, usuarios_semilla)
+        headers = bearer(token)
+        empresa_id = await _crear_empresa(cliente_async, headers)
+        respuesta = await cliente_async.post(
+            f"/api/v1/empresas/{empresa_id}/archivos",
+            headers=headers,
+            files={"archivo": ("grande.pdf", PDF_DEMASIADO_GRANDE, "application/pdf")},
+        )
+        assert respuesta.status_code == 422
+        assert respuesta.json()["codigo"] == "ARCHIVO_INVALIDO"
+        assert almacen.objetos == {}
     finally:
         app.dependency_overrides.pop(obtener_servicio_archivos_documentales, None)
 

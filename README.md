@@ -193,6 +193,10 @@ poetry run mypy                      # tipado estricto
 poetry run pre-commit run --all-files  # todos los hooks sobre el repo
 ```
 
+La suite de almacenamiento es **offline** (`AlmacenMemoria` + mocks): no requiere
+`R2_*` ni red a Cloudflare. La prueba manual del bucket está en
+[`docs/cloudflare-r2.md`](./docs/cloudflare-r2.md).
+
 ### Hooks de pre-commit
 
 [`.pre-commit-config.yaml`](./.pre-commit-config.yaml) ejecuta en cada commit:

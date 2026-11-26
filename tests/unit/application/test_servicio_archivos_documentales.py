@@ -15,10 +15,12 @@ from src.domain.exceptions.archivo_documental import (
 from src.domain.exceptions.autoevaluacion import EmpresaNoEncontradaError
 from src.domain.exceptions.evidencia import AlmacenamientoNoConfiguradoError
 from src.domain.models.archivo_documental import ArchivoDocumental
+from src.domain.models.evidencia import TAMANO_MAXIMO_BYTES
 from src.domain.models.usuario import RolUsuario, Usuario
 from src.infrastructure.almacenamiento.almacen_memoria import AlmacenMemoria
 
 PDF = b"%PDF-1.4 contenido"
+PDF_DEMASIADO_GRANDE = b"%PDF-1.4 " + (b"a" * TAMANO_MAXIMO_BYTES)
 
 
 def _usuario(usuario_id=None) -> Usuario:
@@ -78,6 +80,23 @@ async def test_should_no_guardar_en_almacen_when_magic_invalido() -> None:
 
     with pytest.raises(ArchivoInvalidoError):
         await servicio.cargar(uuid4(), "acta.pdf", "application/pdf", b"no-es-pdf", uuid4())
+
+    assert memoria.objetos == {}
+    repo.guardar.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_should_rechazar_when_supera_tope_de_tamano() -> None:
+    servicio, memoria, repo = _servicio()
+
+    with pytest.raises(ArchivoInvalidoError):
+        await servicio.cargar(
+            uuid4(),
+            "grande.pdf",
+            "application/pdf",
+            PDF_DEMASIADO_GRANDE,
+            uuid4(),
+        )
 
     assert memoria.objetos == {}
     repo.guardar.assert_not_awaited()

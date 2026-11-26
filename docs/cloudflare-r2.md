@@ -47,24 +47,32 @@ autoriza la sesión y entrega o firma el acceso.
 1. Entra al panel de Cloudflare → R2.
 2. Crea el bucket `sst-auditor-dev` (no mezclar con producción).
 3. Crea un token de API con permiso **solo** sobre ese bucket (lectura y escritura de objetos).
-4. Sube un PDF desde el panel y verifica que aparece en el listado del bucket.
-5. Anota account id, access key, secret, bucket y endpoint en tu `.env`.
+4. En el panel del bucket, pulsa **Upload** y sube un PDF de prueba (p. ej. `prueba-manual.pdf`).
+5. Confirma que el objeto aparece en el listado del panel (nombre, tamaño, fecha).
+6. Anota account id, access key, secret, bucket y endpoint en tu `.env`.
+7. (Opcional) Borra el PDF de prueba desde el panel para no dejar basura.
 
 Hay dos buckets distintos (desarrollo y producción). Nunca se mezclan.
 
 ## Comprobar un objeto subido por `AlmacenR2`
 
-Con las cinco variables en `.env`, desde un REPL o script local (fuera de CI):
+Con las cinco variables en `.env`, desde un REPL o script local (**fuera de CI / pytest**):
 
 1. Construye el almacén con la fábrica (`crear_almacen_r2`).
 2. Llama `guardar` con una clave de prueba, p. ej.
    `evidencias/00000000-0000-0000-0000-000000000001/prueba.pdf`.
-3. Abre el panel de `sst-auditor-dev` y confirma que el objeto aparece.
+3. Abre el panel de `sst-auditor-dev` y confirma que el objeto aparece con esa clave.
 4. Llama `leer` y comprueba los bytes.
 5. Llama `eliminar` y confirma que el panel ya no muestra el objeto.
 
-La suite de pytest usa un doble en memoria o mocks de boto3: **no** llama a
-Cloudflare.
+## Pytest sin red ni token R2 (SP-287)
+
+`poetry run pytest` **no** necesita `R2_*` válidos ni acceso a Cloudflare.
+La suite usa `AlmacenMemoria` (doble del puerto) y mocks de boto3 para
+`AlmacenR2`. `tests/conftest.py` anula las variables R2 del entorno para que un
+`.env` local no active el cliente real. No se usa LocalStack.
+
+La comprobación contra `sst-auditor-dev` es solo manual (secciones anteriores).
 
 ## Evidencias del diagnóstico (SP-285)
 
