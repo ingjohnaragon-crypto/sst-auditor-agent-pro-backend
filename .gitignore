@@ -84,3 +84,4 @@ venv/
 .openspec-cli/.last-simulation.json
 .openspec-cli/.fix-prompt.md
 .openspec-cli/.fix-report.md
+.openspec-cli/.tmp-review-apply.sh
