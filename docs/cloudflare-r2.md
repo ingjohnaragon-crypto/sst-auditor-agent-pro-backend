@@ -65,3 +65,14 @@ Con las cinco variables en `.env`, desde un REPL o script local (fuera de CI):
 
 La suite de pytest usa un doble en memoria o mocks de boto3: **no** llama a
 Cloudflare.
+
+## Evidencias del diagnóstico (SP-285)
+
+Las evidencias **nuevas** se cargan con `AlmacenR2` y la clave
+`evidencias/{empresa_id}/{uuid}{ext}` queda en `ruta_almacenamiento`.
+La descarga (JWT corto de SP-152) lee el objeto con `almacen.leer`.
+Producción **no** usa `ALMACENAMIENTO_LOCAL_RAIZ` ni `AlmacenLocal`.
+
+Las evidencias **históricas** que solo tengan un path de disco local quedan
+**pendientes de migración manual** al bucket. Hasta migrarlas, el canje
+responde `ARCHIVO_NO_DISPONIBLE` (404).

@@ -41,18 +41,18 @@ class AlmacenEvidencias(Protocol):
 
 
 class ServicioCargaEvidencia:
-    """Valida contenido, escribe en la raíz y crea la fila. Limpia si la fila falla."""
+    """Valida contenido, escribe en R2 y crea la fila. Limpia si la fila falla."""
 
     def __init__(
         self,
         repositorio: RepositorioEvidencia,
         almacen: AlmacenEvidencias,
         *,
-        raiz_configurada: bool,
+        r2_configurado: bool,
     ) -> None:
         self._repositorio = repositorio
         self._almacen = almacen
-        self._raiz_configurada = raiz_configurada
+        self._r2_configurado = r2_configurado
 
     async def cargar(
         self,
@@ -62,29 +62,30 @@ class ServicioCargaEvidencia:
         contenido: bytes,
         usuario_id: UUID,
     ) -> RespuestaEvidencia:
-        """Persiste metadatos medidos por el servidor y el binario bajo la raíz."""
-        if not self._raiz_configurada:
+        """Persiste metadatos medidos por el servidor y el binario en R2."""
+        if not self._r2_configurado:
             raise AlmacenamientoNoConfiguradoError()
-        if not await self._repositorio.existe_calificacion(calificacion_id):
+        empresa_id = await self._repositorio.obtener_empresa_id_por_calificacion(calificacion_id)
+        if empresa_id is None:
             raise CalificacionNoEncontradaError()
         _exigir_tope(contenido)
         mime = tipo_mime.strip().lower()
         _exigir_magic(mime, contenido)
         extension = EXTENSION_POR_MIME.get(mime, "")
-        ruta = f"evidencias/{calificacion_id}/{uuid4()}{extension}"
+        clave = f"evidencias/{empresa_id}/{uuid4()}{extension}"
         evidencia = Evidencia.crear(
             calificacion_estandar_id=calificacion_id,
             usuario_id=usuario_id,
             nombre_archivo=nombre,
             tipo_mime=mime,
             tamano_bytes=len(contenido),
-            ruta_almacenamiento=ruta,
+            ruta_almacenamiento=clave,
         )
-        self._almacen.guardar(ruta, contenido)
+        self._almacen.guardar(clave, contenido)
         try:
             guardada = await self._repositorio.guardar(evidencia)
         except Exception:
-            self._almacen.eliminar(ruta)
+            self._almacen.eliminar(clave)
             raise
         return MapperEvidencia.a_respuesta(guardada)
 

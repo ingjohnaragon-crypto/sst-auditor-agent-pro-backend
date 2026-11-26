@@ -1373,7 +1373,7 @@ paths:
           schema: {type: string}
       responses:
         "200":
-          description: Binario, si existe bajo ALMACENAMIENTO_LOCAL_RAIZ
+          description: Binario leído del almacén R2 (clave en ruta_almacenamiento)
         "401":
           description: TOKEN_INVALIDO o TOKEN_EXPIRADO
           content:

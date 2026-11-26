@@ -26,3 +26,9 @@ class RepositorioEvidencia(ABC):
     @abstractmethod
     async def existe_calificacion(self, calificacion_estandar_id: UUID) -> bool:
         """Indica si la calificación del estándar existe."""
+
+    @abstractmethod
+    async def obtener_empresa_id_por_calificacion(
+        self, calificacion_estandar_id: UUID
+    ) -> UUID | None:
+        """Devuelve la empresa dueña de la autoevaluación de la calificación."""

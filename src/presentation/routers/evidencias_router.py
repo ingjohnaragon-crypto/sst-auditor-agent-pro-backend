@@ -4,7 +4,6 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, Query, Response, UploadFile
 from fastapi import status as http_status
-from fastapi.responses import FileResponse
 
 from src.application.dto.respuesta_enlace_descarga import RespuestaEnlaceDescarga
 from src.application.dto.respuesta_error import RespuestaError
@@ -204,11 +203,12 @@ async def emitir_enlace_descarga(
 async def canjear_descarga(
     token: str = Query(...),
     servicio: ServicioDescargaEvidencia = Depends(obtener_servicio_descarga_evidencia),
-) -> FileResponse:
-    """Sirve el archivo si el token y la ruta contenida lo permiten."""
+) -> Response:
+    """Sirve el binario desde R2 si el token lo autoriza. No expone URL del bucket."""
     archivo = await servicio.canjear(token)
-    return FileResponse(
-        path=archivo.ruta,
+    nombre_seguro = archivo.nombre_archivo.replace('"', "").replace("\r", "").replace("\n", "")
+    return Response(
+        content=archivo.contenido,
         media_type=archivo.tipo_mime,
-        filename=archivo.nombre_archivo,
+        headers={"Content-Disposition": f'attachment; filename="{nombre_seguro}"'},
     )

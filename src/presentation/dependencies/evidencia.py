@@ -1,18 +1,20 @@
 """Dependencias FastAPI de evidencias."""
 
-from pathlib import Path
-
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.application.services.servicio_carga_evidencia import ServicioCargaEvidencia
+from src.application.services.servicio_carga_evidencia import (
+    AlmacenEvidencias,
+    ServicioCargaEvidencia,
+)
 from src.application.services.servicio_descarga_evidencia import ServicioDescargaEvidencia
 from src.application.services.servicio_evidencias import ServicioEvidencias
 from src.domain.repositories.repositorio_acceso_evidencia import RepositorioAccesoEvidencia
 from src.domain.repositories.repositorio_evidencia import RepositorioEvidencia
 from src.domain.repositories.repositorio_usuario import RepositorioUsuario
 from src.domain.repositories.servicio_tokens import ServicioTokens
-from src.infrastructure.almacenamiento.almacen_local import AlmacenLocal
+from src.infrastructure.almacenamiento.almacen_memoria import AlmacenMemoria
+from src.infrastructure.almacenamiento.almacen_r2 import crear_almacen_r2
 from src.infrastructure.config.settings import get_settings
 from src.infrastructure.database.sesion import obtener_sesion
 from src.infrastructure.repositories.repositorio_acceso_evidencia_sqlalchemy import (
@@ -48,12 +50,12 @@ def obtener_repositorio_acceso_evidencia(
     return RepositorioAccesoEvidenciaSQLAlchemy(sesion)
 
 
-def obtener_raiz_almacenamiento() -> Path | None:
-    """Directorio de binarios. Vacío si la variable no está definida."""
-    valor = get_settings().almacenamiento_local_raiz
-    if not valor:
-        return None
-    return Path(valor)
+def obtener_almacen_evidencias() -> AlmacenEvidencias:
+    """Almacén de producción (R2) o doble vacío si R2 no está configurado."""
+    settings = get_settings()
+    if settings.r2_configurado:
+        return crear_almacen_r2(settings)
+    return AlmacenMemoria()
 
 
 def obtener_servicio_descarga_evidencia(
@@ -61,7 +63,7 @@ def obtener_servicio_descarga_evidencia(
     repositorio_usuario: RepositorioUsuario = Depends(obtener_repositorio_usuario),
     repositorio_acceso: RepositorioAccesoEvidencia = Depends(obtener_repositorio_acceso_evidencia),
     servicio_tokens: ServicioTokens = Depends(obtener_servicio_tokens),
-    raiz: Path | None = Depends(obtener_raiz_almacenamiento),
+    almacen: AlmacenEvidencias = Depends(obtener_almacen_evidencias),
 ) -> ServicioDescargaEvidencia:
     """Ensambla el caso de uso de enlace y canje de descarga."""
     settings = get_settings()
@@ -70,19 +72,20 @@ def obtener_servicio_descarga_evidencia(
         repositorio_usuario=repositorio_usuario,
         repositorio_acceso=repositorio_acceso,
         servicio_tokens=servicio_tokens,
+        almacen=almacen,
         segundos_expiracion=settings.descarga_segundos_expiracion,
         prefijo_api=settings.api_prefix,
-        raiz_almacenamiento=raiz,
     )
 
 
 def obtener_servicio_carga_evidencia(
     repositorio: RepositorioEvidencia = Depends(obtener_repositorio_evidencia),
-    raiz: Path | None = Depends(obtener_raiz_almacenamiento),
+    almacen: AlmacenEvidencias = Depends(obtener_almacen_evidencias),
 ) -> ServicioCargaEvidencia:
-    """Ensambla la carga multipart con el almacén de la raíz configurada."""
+    """Ensambla la carga multipart con el almacén R2 configurado."""
+    settings = get_settings()
     return ServicioCargaEvidencia(
         repositorio=repositorio,
-        almacen=AlmacenLocal(raiz),
-        raiz_configurada=raiz is not None,
+        almacen=almacen,
+        r2_configurado=settings.r2_configurado,
     )

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 from unittest.mock import AsyncMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from src.application.services.servicio_carga_evidencia import (
@@ -15,37 +15,24 @@ from src.domain.exceptions.evidencia import (
     EvidenciaInvalidaError,
 )
 from src.domain.models.evidencia import TAMANO_MAXIMO_BYTES, Evidencia
+from src.infrastructure.almacenamiento.almacen_local import AlmacenLocal
+from src.infrastructure.almacenamiento.almacen_memoria import AlmacenMemoria
 
 PDF = b"%PDF-1.4"
 PNG = b"\x89PNG\r\n\x1a\n"
 JPEG = b"\xff\xd8\xff\xe0"
 
 
-class _Almacen:
-    def __init__(self) -> None:
-        self.guardados: dict[str, bytes] = {}
-
-    def guardar(self, relativa: str, contenido: bytes) -> None:
-        self.guardados[relativa] = contenido
-
-    def leer(self, relativa: str) -> bytes:
-        try:
-            return self.guardados[relativa]
-        except KeyError as exc:
-            raise FileNotFoundError(relativa) from exc
-
-    def eliminar(self, relativa: str) -> None:
-        self.guardados.pop(relativa, None)
-
-
 def _servicio(
     *,
-    existe: bool = True,
-    raiz: bool = True,
+    empresa_id=None,
+    r2: bool = True,
     falla_guardar: bool = False,
-) -> tuple[ServicioCargaEvidencia, _Almacen, AsyncMock]:
+    almacen: AlmacenMemoria | None = None,
+) -> tuple[ServicioCargaEvidencia, AlmacenMemoria, AsyncMock, UUID]:
     repositorio = AsyncMock()
-    repositorio.existe_calificacion.return_value = existe
+    empresa = empresa_id if empresa_id is not None else uuid4()
+    repositorio.obtener_empresa_id_por_calificacion.return_value = empresa
 
     async def _guardar(evidencia: Evidencia) -> Evidencia:
         if falla_guardar:
@@ -54,20 +41,20 @@ def _servicio(
         return evidencia
 
     repositorio.guardar.side_effect = _guardar
-    almacen = _Almacen()
+    memoria = almacen or AlmacenMemoria()
     servicio = ServicioCargaEvidencia(
         repositorio=repositorio,
-        almacen=almacen,
-        raiz_configurada=raiz,
+        almacen=memoria,
+        r2_configurado=r2,
     )
-    return servicio, almacen, repositorio
+    return servicio, memoria, repositorio, empresa
 
 
 @pytest.mark.asyncio
-async def test_should_guardar_pdf_bajo_la_calificacion() -> None:
+async def test_should_guardar_pdf_bajo_la_empresa() -> None:
     calificacion_id = uuid4()
     usuario_id = uuid4()
-    servicio, almacen, _repo = _servicio()
+    servicio, almacen, _repo, empresa_id = _servicio()
 
     respuesta = await servicio.cargar(
         calificacion_id, "acta.pdf", "application/pdf", PDF, usuario_id
@@ -75,8 +62,9 @@ async def test_should_guardar_pdf_bajo_la_calificacion() -> None:
 
     assert respuesta.usuario_id == usuario_id
     assert respuesta.tamano_bytes == len(PDF)
-    assert str(respuesta.ruta_almacenamiento).startswith(f"evidencias/{calificacion_id}/")
-    assert len(almacen.guardados) == 1
+    assert str(respuesta.ruta_almacenamiento).startswith(f"evidencias/{empresa_id}/")
+    assert f"evidencias/{calificacion_id}/" not in str(respuesta.ruta_almacenamiento)
+    assert len(almacen.objetos) == 1
 
 
 @pytest.mark.asyncio
@@ -89,9 +77,9 @@ async def test_should_guardar_pdf_bajo_la_calificacion() -> None:
     ],
 )
 async def test_should_aceptar_imagen_valida(nombre: str, mime: str, contenido: bytes) -> None:
-    servicio, almacen, _repo = _servicio()
+    servicio, almacen, _repo, _empresa = _servicio()
     await servicio.cargar(uuid4(), nombre, mime, contenido, uuid4())
-    assert len(almacen.guardados) == 1
+    assert len(almacen.objetos) == 1
 
 
 @pytest.mark.asyncio
@@ -104,19 +92,19 @@ async def test_should_aceptar_imagen_valida(nombre: str, mime: str, contenido: b
     ],
 )
 async def test_should_rechazar_magic_o_tipo(nombre: str, mime: str, contenido: bytes) -> None:
-    servicio, almacen, _repo = _servicio()
+    servicio, almacen, _repo, _empresa = _servicio()
     with pytest.raises(EvidenciaInvalidaError):
         await servicio.cargar(uuid4(), nombre, mime, contenido, uuid4())
-    assert almacen.guardados == {}
+    assert almacen.objetos == {}
 
 
 @pytest.mark.asyncio
 async def test_should_rechazar_when_supera_10_mib() -> None:
-    servicio, almacen, _repo = _servicio()
+    servicio, almacen, _repo, _empresa = _servicio()
     grande = b"%PDF" + b"a" * TAMANO_MAXIMO_BYTES
     with pytest.raises(EvidenciaInvalidaError):
         await servicio.cargar(uuid4(), "acta.pdf", "application/pdf", grande, uuid4())
-    assert almacen.guardados == {}
+    assert almacen.objetos == {}
 
 
 def test_should_cortar_lectura_when_bloques_superan_el_tope() -> None:
@@ -127,31 +115,32 @@ def test_should_cortar_lectura_when_bloques_superan_el_tope() -> None:
 
 @pytest.mark.asyncio
 async def test_should_no_escribir_when_calificacion_no_existe() -> None:
-    servicio, almacen, _repo = _servicio(existe=False)
+    servicio, almacen, repo, _empresa = _servicio()
+    repo.obtener_empresa_id_por_calificacion.return_value = None
     with pytest.raises(CalificacionNoEncontradaError):
         await servicio.cargar(uuid4(), "acta.pdf", "application/pdf", PDF, uuid4())
-    assert almacen.guardados == {}
+    assert almacen.objetos == {}
 
 
 @pytest.mark.asyncio
-async def test_should_responder_503_when_no_hay_raiz() -> None:
-    servicio, almacen, _repo = _servicio(raiz=False)
+async def test_should_responder_503_when_r2_no_configurado() -> None:
+    servicio, almacen, _repo, _empresa = _servicio(r2=False)
     with pytest.raises(AlmacenamientoNoConfiguradoError):
         await servicio.cargar(uuid4(), "acta.pdf", "application/pdf", PDF, uuid4())
-    assert almacen.guardados == {}
+    assert almacen.objetos == {}
+    _repo.guardar.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_should_borrar_archivo_when_persistir_falla() -> None:
-    servicio, almacen, _repo = _servicio(falla_guardar=True)
+async def test_should_borrar_objeto_when_persistir_falla() -> None:
+    servicio, almacen, _repo, _empresa = _servicio(falla_guardar=True)
     with pytest.raises(RuntimeError):
         await servicio.cargar(uuid4(), "acta.pdf", "application/pdf", PDF, uuid4())
-    assert almacen.guardados == {}
+    assert almacen.objetos == {}
 
 
 def test_should_contener_la_ruta_en_la_raiz(tmp_path: Path) -> None:
-    from src.infrastructure.almacenamiento.almacen_local import AlmacenLocal
-
+    """AlmacenLocal sigue disponible como adaptador de laboratorio, no como DI de carga."""
     almacen = AlmacenLocal(tmp_path)
     almacen.guardar("evidencias/a/acta.pdf", PDF)
     assert (tmp_path / "evidencias" / "a" / "acta.pdf").read_bytes() == PDF
