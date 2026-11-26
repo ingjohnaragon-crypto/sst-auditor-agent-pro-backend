@@ -28,6 +28,12 @@ class _Almacen:
     def guardar(self, relativa: str, contenido: bytes) -> None:
         self.guardados[relativa] = contenido
 
+    def leer(self, relativa: str) -> bytes:
+        try:
+            return self.guardados[relativa]
+        except KeyError as exc:
+            raise FileNotFoundError(relativa) from exc
+
     def eliminar(self, relativa: str) -> None:
         self.guardados.pop(relativa, None)
 
