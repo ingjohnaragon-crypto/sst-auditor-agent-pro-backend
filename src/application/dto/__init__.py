@@ -1,5 +1,6 @@
 """DTOs de la capa de aplicación."""
 
+from src.application.dto.respuesta_archivo_documental import RespuestaArchivoDocumental
 from src.application.dto.respuesta_autoevaluacion import RespuestaAutoevaluacion
 from src.application.dto.respuesta_calificacion_estandar import (
     RespuestaCalificacionEstandar,
@@ -19,6 +20,7 @@ from src.application.dto.solicitud_login import SolicitudLogin
 from src.application.dto.solicitud_refresh import SolicitudRefresh
 
 __all__ = [
+    "RespuestaArchivoDocumental",
     "RespuestaAutoevaluacion",
     "RespuestaCalificacionEstandar",
     "RespuestaEmpresa",

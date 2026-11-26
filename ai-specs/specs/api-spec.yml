@@ -1395,6 +1395,177 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/empresas/{empresa_id}/archivos:
+    get:
+      summary: Lista los archivos documentales de una empresa
+      tags: [Archivos documentales]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Metadatos sin clave_objeto ni URL de R2
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaArchivoDocumental"
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    post:
+      summary: Sube un archivo documental de la empresa a R2
+      tags: [Archivos documentales]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Metadatos persistidos; binario en R2
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaArchivoDocumental"
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: ARCHIVO_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "503":
+          description: ALMACENAMIENTO_NO_CONFIGURADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/empresas/{empresa_id}/archivos/{archivo_id}:
+    get:
+      summary: Descarga el binario con la sesión Bearer
+      tags: [Archivos documentales]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: archivo_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Binario; Content-Disposition attachment
+          content:
+            application/pdf: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: ARCHIVO_NO_ENCONTRADO o ARCHIVO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    delete:
+      summary: Elimina el objeto en R2 y la fila de metadatos
+      tags: [Archivos documentales]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: archivo_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "204":
+          description: Eliminado
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: ARCHIVO_NO_ENCONTRADO o EMPRESA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "503":
+          description: ALMACENAMIENTO_NO_CONFIGURADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1600,6 +1771,26 @@ components:
         ruta_almacenamiento: {type: string}
         fecha_carga: {type: string, format: date-time}
         activo: {type: boolean}
+    RespuestaArchivoDocumental:
+      type: object
+      description: Metadatos públicos de un documento de empresa (sin clave_objeto ni hash).
+      required:
+        - id
+        - empresa_id
+        - nombre_original
+        - tipo_mime
+        - tamano_bytes
+        - fecha_carga
+        - usuario_id
+      properties:
+        id: {type: string, format: uuid}
+        empresa_id: {type: string, format: uuid}
+        nombre_original: {type: string}
+        tipo_mime: {type: string}
+        tamano_bytes: {type: integer}
+        fecha_carga: {type: string, format: date-time}
+        usuario_id: {type: string, format: uuid}
+        usuario_nombre: {type: string, nullable: true}
     RespuestaEnlaceDescarga:
       type: object
       required: [url, expira_en_segundos]

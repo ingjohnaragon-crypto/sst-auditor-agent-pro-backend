@@ -18,6 +18,9 @@ from src.infrastructure.config.settings import get_settings
 from src.presentation.routers.acciones_mejora_router import (
     router as acciones_mejora_router,
 )
+from src.presentation.routers.archivos_documentales_router import (
+    router as archivos_documentales_router,
+)
 from src.presentation.routers.auth_router import router as auth_router
 from src.presentation.routers.autoevaluaciones_router import (
     router as autoevaluaciones_router,
@@ -55,6 +58,7 @@ api_router.include_router(health_router)
 api_router.include_router(ping_router, prefix=settings.api_prefix)
 api_router.include_router(auth_router, prefix=settings.api_prefix)
 api_router.include_router(empresas_router, prefix=settings.api_prefix)
+api_router.include_router(archivos_documentales_router, prefix=settings.api_prefix)
 api_router.include_router(resumen_ejecutivo_router, prefix=settings.api_prefix)
 api_router.include_router(autoevaluaciones_router, prefix=settings.api_prefix)
 api_router.include_router(planes_por_autoevaluacion_router, prefix=settings.api_prefix)

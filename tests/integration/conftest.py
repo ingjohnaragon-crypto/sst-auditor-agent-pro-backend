@@ -14,6 +14,7 @@ from src.infrastructure.database.base import Base
 from src.infrastructure.database.modelos import (  # noqa: F401 — registra tablas
     AccesoEvidenciaORM,
     AccionMejoraORM,
+    ArchivoDocumentalORM,
     AutoevaluacionORM,
     CalificacionEstandarORM,
     CatalogoReferenciaORM,
