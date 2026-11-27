@@ -27,6 +27,9 @@ os_require_jira_env
 os_jira_fetch_ticket "$TICKET_ID"
 os_jira_print_ticket
 
+# ── Move ticket to En curso ──────────────────────────────────
+os_jira_transition "$TICKET_ID" "En curso" || true
+
 # ── Create feature branch from develop ───────────────────────
 BRANCH="feature/${TICKET_ID}-backend"
 os_step "Setting up branch: $BRANCH"

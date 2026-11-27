@@ -7,6 +7,7 @@ CLI_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 . "$CLI_DIR/lib/colors.sh"
 . "$CLI_DIR/lib/config.sh"
+. "$CLI_DIR/lib/jira.sh"
 . "$CLI_DIR/lib/agent.sh"
 . "$CLI_DIR/lib/language.sh"
 
@@ -78,6 +79,9 @@ TICKET_ID=$(echo "$PR_BRANCH" | grep -oE '[A-Z]+-[0-9]+' | head -1 || true)
 if [ -n "$TICKET_ID" ]; then
   PLAN_FILE="$OS_REPO_ROOT/ai-specs/changes/planes/${TICKET_ID}/${TICKET_ID}_backend.md"
   [ -f "$PLAN_FILE" ] && PLAN_CONTENT=$(cat "$PLAN_FILE")
+  # ── Move ticket to En revisión ─────────────────────────────
+  os_require_jira_env
+  os_jira_transition "$TICKET_ID" "En revisión" || true
 fi
 
 # ── Load review task template ─────────────────────────────────

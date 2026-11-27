@@ -7,7 +7,7 @@ If the source file contains <!-- SUBTASK:<KEY> --> ... <!-- /SUBTASK:<KEY> --> b
 its own subtask issue and stripped out of the content applied to <ticket_id>.
 
 Blocks wrapped in <!-- jira-skip --> ... <!-- /jira-skip --> are removed before upload
-(local archive only — e.g. original description).
+(local/internal notes only). Original description sections are uploaded to Jira.
 
 <!-- STORY_POINTS:<N> --> markers set the Story Points field when JIRA_STORY_POINTS_FIELD
 is configured (default: customfield_10016 — override via env).
