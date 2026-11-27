@@ -12,6 +12,7 @@ CLI_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
 . "$CLI_DIR/lib/colors.sh"
 . "$CLI_DIR/lib/config.sh"
+. "$CLI_DIR/lib/jira.sh"
 
 if [ -z "$PR_NUMBER" ]; then
   os_error "Usage: os-review-apply <PR-NUMBER> [review-file]"
@@ -25,6 +26,7 @@ if ! command -v gh > /dev/null 2>&1; then
 fi
 
 os_load_config
+os_load_env
 
 # ── Resolve review file (temp working file only) ──────────────
 REVIEW_FILE="$OS_REPO_ROOT/.openspec-cli/.review-output.md"
@@ -99,6 +101,13 @@ case "$VERDICT" in
     gh pr review "$PR_NUMBER" --approve \
       --body "Approved by OpenSpec AI review. See comment above for details." \
       2>/dev/null && os_success "PR approved!" || os_warn "Could not approve (may need maintainer role)"
+    # ── Move ticket to Listo on APPROVE ──────────────────────
+    TICKET_ID=$(gh pr view "$PR_NUMBER" --json headRefName -q .headRefName 2>/dev/null \
+      | grep -oE '[A-Z]+-[0-9]+' | head -1 || true)
+    if [ -n "$TICKET_ID" ]; then
+      os_require_jira_env
+      os_jira_transition "$TICKET_ID" "Listo" || true
+    fi
     ;;
   *REQUEST*)
     os_step "Requesting changes..."

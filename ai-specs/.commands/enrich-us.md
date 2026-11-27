@@ -59,14 +59,13 @@ using this structure (headers in Active Language — Spanish example below):
 # Ticket enriquecido: <TICKET-ID> — <Summary>
 
 ## Descripción original
-<!-- jira-skip -->
-(copy of the original ticket description — kept for local archive only;
-`os-enrich-apply` strips this block before uploading to Jira)
-<!-- /jira-skip -->
+Paste the **verbatim** original ticket description from the prompt
+(`## Jira Ticket` → Description). This section **is uploaded to Jira** — do not
+wrap it in `jira-skip`. If the ticket had no description, write `(sin descripción)`.
 
 ## Descripción mejorada
 Full description of the functionality as refined. Prefer short paragraphs and
-bullet lists — this section is what developers read in Jira.
+bullet lists — this section is what developers read in Jira alongside the original.
 
 ## Criterios de aceptación
 - [ ] Criterion 1
@@ -103,9 +102,7 @@ markers so `os-enrich-apply` can upload each one to its own Jira issue:
 ### Subtarea: <SUBTASK-KEY> — <Summary>
 
 #### Descripción original
-<!-- jira-skip -->
-(copy)
-<!-- /jira-skip -->
+Verbatim copy of the subtask's original description (uploaded to Jira).
 
 #### Descripción mejorada
 Refined, technically detailed description.
@@ -128,8 +125,10 @@ sufficiently detailed are omitted from this section entirely.
 - Keep paragraphs short; prefer bullets over long walls of text.
 - Avoid markdown tables when a bullet list conveys the same information.
 - Put fenced code blocks only when an exact snippet/API shape is needed.
-- Wrap archive-only content (original description, internal notes) in
-  `<!-- jira-skip -->` … `<!-- /jira-skip -->` so it is **not** uploaded to Jira.
+- Do **not** wrap `Descripción original` / `Original Description` in `jira-skip`
+  — that section must appear in Jira.
+- Wrap only truly local/internal notes in
+  `<!-- jira-skip -->` … `<!-- /jira-skip -->` so they are **not** uploaded.
 
 ---
 

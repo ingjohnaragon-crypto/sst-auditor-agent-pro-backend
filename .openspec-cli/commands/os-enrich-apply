@@ -39,13 +39,62 @@ os_step "Reading content from: $SOURCE_FILE"
 CHAR_COUNT=$(wc -c < "$SOURCE_FILE")
 os_info "Content size: $CHAR_COUNT characters"
 
+# ── Ensure Descripción original is present before upload ─────
+# Only inject when Jira still has the pre-enrich description (not already enriched).
+os_jira_fetch_ticket "$TICKET_ID"
+UPLOAD_FILE="$SOURCE_FILE"
+INJECT_RESULT="ok"
+INJECTED_FILE="$OS_REPO_ROOT/.openspec-cli/.enriched-upload-tmp.md"
+if [ -n "$JIRA_DESCRIPTION" ] && [ "$JIRA_DESCRIPTION" != "No description provided." ]; then
+  case "$JIRA_DESCRIPTION" in
+    *"Descripción mejorada"*|*"Enhanced Description"*|*"Descripcion mejorada"*)
+      os_info "Jira ya tiene contenido enriquecido — no se inyecta la original automáticamente"
+      ;;
+    *)
+      INJECT_RESULT=$(JIRA_DESCRIPTION="$JIRA_DESCRIPTION" py -X utf8 -c '
+import os, re, sys
+path = sys.argv[1]
+out = sys.argv[2]
+text = open(path, encoding="utf-8").read()
+desc = os.environ.get("JIRA_DESCRIPTION", "").strip()
+headers = (
+    r"##\s+Descripci[oó]n original",
+    r"##\s+Original Description",
+)
+next_h = r"(?=\n##\s+|\n#\s+|\Z)"
+changed = False
+for h in headers:
+    m = re.search(rf"({h}\s*\n)(.*?){next_h}", text, re.IGNORECASE | re.DOTALL)
+    if not m:
+        continue
+    body = m.group(2)
+    cleaned = re.sub(r"<!--\s*jira-skip\s*-->.*?<!--\s*/jira-skip\s*-->", "", body, flags=re.I|re.S)
+    cleaned = re.sub(r"\(copy[^)]*\)", "", cleaned, flags=re.I)
+    cleaned = re.sub(r"`os-enrich-apply`[^\n]*", "", cleaned)
+    cleaned = cleaned.strip()
+    if cleaned and cleaned.lower() not in ("(sin descripción)", "(sin descripcion)"):
+        break
+    text = text[:m.start(2)] + desc + "\n\n" + text[m.end(2):]
+    changed = True
+    break
+open(out, "w", encoding="utf-8").write(text)
+print("injected" if changed else "ok")
+' "$SOURCE_FILE" "$INJECTED_FILE" 2>/dev/null || echo "ok")
+      if [ "$INJECT_RESULT" = "injected" ]; then
+        os_warn "Descripción original vacía — se inyectó la descripción actual de Jira"
+        UPLOAD_FILE="$INJECTED_FILE"
+      fi
+      ;;
+  esac
+fi
+
 os_divider
 os_label "  Preview (first 10 lines):"
 os_divider
-head -10 "$SOURCE_FILE"
+head -10 "$UPLOAD_FILE"
 os_divider
 
-SUBTASK_COUNT=$(grep -c '<!-- *SUBTASK:' "$SOURCE_FILE" 2>/dev/null || echo 0)
+SUBTASK_COUNT=$(grep -c '<!-- *SUBTASK:' "$UPLOAD_FILE" 2>/dev/null || echo 0)
 if [ "$SUBTASK_COUNT" -gt 0 ] 2>/dev/null; then
   printf "%bUpdate Jira ticket %s? (will also update %s subtask(s)) [y/N]: %b" "$COLOR_WARN" "$TICKET_ID" "$SUBTASK_COUNT" "$RESET"
 else
@@ -54,20 +103,41 @@ fi
 read -r confirm
 case "$confirm" in
   y|Y|yes|YES) ;;
-  *) os_warn "Aborted."; exit 0 ;;
+  *) os_warn "Aborted."; rm -f "$INJECTED_FILE" 2>/dev/null || true; exit 0 ;;
 esac
 
 os_step "Uploading to Jira $TICKET_ID..."
 os_info "ADF converter strips <!-- jira-skip --> blocks and uploads story points from <!-- STORY_POINTS:N -->"
 os_info "Override field with JIRA_STORY_POINTS_FIELD (default: customfield_10016)"
 
-py "$HOME/.openspec/lib/jira_upload.py"   "$TICKET_ID" "$SOURCE_FILE"   "$JIRA_BASE_URL" "$JIRA_EMAIL" "$JIRA_TOKEN"
+UPLOAD_PY="$CLI_DIR/lib/jira_upload.py"
+[ -f "$UPLOAD_PY" ] || UPLOAD_PY="$HOME/.openspec/lib/jira_upload.py"
+py "$UPLOAD_PY" "$TICKET_ID" "$UPLOAD_FILE" "$JIRA_BASE_URL" "$JIRA_EMAIL" "$JIRA_TOKEN"
 
 EXIT_CODE=$?
+rm -f "$INJECTED_FILE" 2>/dev/null || true
 if [ "$EXIT_CODE" = "0" ]; then
   os_divider
   os_info    "View: $JIRA_BASE_URL/browse/$TICKET_ID"
   os_divider
+  # Persist injected original back into the source archive when we filled it
+  if [ "$INJECT_RESULT" = "injected" ] && [ -f "$SOURCE_FILE" ]; then
+    JIRA_DESCRIPTION="$JIRA_DESCRIPTION" py -X utf8 -c '
+import os, re, sys
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+desc = os.environ.get("JIRA_DESCRIPTION", "").strip()
+for h in (r"##\s+Descripci[oó]n original", r"##\s+Original Description"):
+    m = re.search(rf"({h}\s*\n)(.*?)(?=\n##\s+|\n#\s+|\Z)", text, re.I|re.S)
+    if not m:
+        continue
+    body = re.sub(r"<!--\s*jira-skip\s*-->.*?<!--\s*/jira-skip\s*-->", "", m.group(2), flags=re.I|re.S).strip()
+    if not body or body.lower().startswith("(copy"):
+        text = text[:m.start(2)] + desc + "\n\n" + text[m.end(2):]
+        open(path, "w", encoding="utf-8").write(text)
+    break
+' "$SOURCE_FILE" 2>/dev/null || true
+  fi
   mv "$SOURCE_FILE" "${SOURCE_FILE}.applied" 2>/dev/null || true
   os_info "Content archived to: ${SOURCE_FILE}.applied"
 else
