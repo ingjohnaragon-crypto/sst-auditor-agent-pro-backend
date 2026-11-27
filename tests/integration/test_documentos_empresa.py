@@ -53,12 +53,11 @@ def _override_servicio(
     app.dependency_overrides[obtener_servicio_documentos_empresa] = override
 
 
-async def _sembrar_tipos(cliente: AsyncClient) -> list[dict]:
+async def _sembrar_tipos(cliente: AsyncClient) -> None:
     fabrica: async_sessionmaker[AsyncSession] = cliente.fabrica_sesion  # type: ignore[attr-defined]
     async with fabrica() as sesion:
         await sembrar_tipos_documento_sst(sesion)
         await sesion.commit()
-    return []
 
 
 async def _crear_empresa(cliente: AsyncClient, headers: dict[str, str]) -> UUID:
@@ -140,6 +139,14 @@ async def test_should_catalogo_cargar_descargar_revisar_y_reemplazar(
         )
         assert patch_ok.status_code == 200
         assert patch_ok.json()["estado"] == "REVISADO"
+
+        patch_duplicado = await cliente_async.patch(
+            f"/api/v1/empresas/{empresa_id}/documentos/{tipo_id}",
+            headers=headers,
+            json={"estado": "REVISADO"},
+        )
+        assert patch_duplicado.status_code == 409
+        assert patch_duplicado.json()["codigo"] == "CONFLICTO_ESTADO_DOCUMENTO"
     finally:
         app.dependency_overrides.pop(obtener_servicio_documentos_empresa, None)
 

@@ -97,3 +97,38 @@ def test_should_rechazar_clave_invalida() -> None:
             tamano_bytes=1,
             clave_objeto="evidencias/x/y.pdf",
         )
+
+
+def test_should_rechazar_extension_mime_tamano_y_comillas() -> None:
+    empresa_id = uuid4()
+    clave = construir_clave_documento(empresa_id, "POLITICA_SST", ".pdf")
+    with pytest.raises(DocumentoInvalidoError, match="extensión"):
+        DocumentoEmpresa.crear_cargado(
+            empresa_id=empresa_id,
+            tipo_id=uuid4(),
+            usuario_id=uuid4(),
+            nombre_original="acta.png",
+            tipo_mime="application/pdf",
+            tamano_bytes=10,
+            clave_objeto=clave,
+        )
+    with pytest.raises(DocumentoInvalidoError, match="10 MiB"):
+        DocumentoEmpresa.crear_cargado(
+            empresa_id=empresa_id,
+            tipo_id=uuid4(),
+            usuario_id=uuid4(),
+            nombre_original="acta.pdf",
+            tipo_mime="application/pdf",
+            tamano_bytes=10 * 1024 * 1024 + 1,
+            clave_objeto=clave,
+        )
+    with pytest.raises(DocumentoInvalidoError, match="comillas"):
+        DocumentoEmpresa.crear_cargado(
+            empresa_id=empresa_id,
+            tipo_id=uuid4(),
+            usuario_id=uuid4(),
+            nombre_original='evil".pdf',
+            tipo_mime="application/pdf",
+            tamano_bytes=10,
+            clave_objeto=clave,
+        )

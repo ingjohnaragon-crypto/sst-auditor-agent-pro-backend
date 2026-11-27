@@ -22,3 +22,7 @@ class RepositorioTipoDocumentoSst(ABC):
     @abstractmethod
     async def listar_estandares_por_tipo(self, tipo_id: UUID) -> list[UUID]:
         """Ids de estándares 0312 vinculados al tipo (puede ser vacío)."""
+
+    @abstractmethod
+    async def mapear_estandares_por_tipos(self, tipo_ids: list[UUID]) -> dict[UUID, list[UUID]]:
+        """Mapa tipo_id → estandares_ids en una sola consulta (vacío si no hay ids)."""

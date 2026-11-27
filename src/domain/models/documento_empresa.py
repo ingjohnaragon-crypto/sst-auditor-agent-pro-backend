@@ -11,7 +11,7 @@ from src.domain.exceptions.documento_empresa import (
     DocumentoEstadoInvalidoError,
     DocumentoInvalidoError,
 )
-from src.domain.models.evidencia import MIME_EXTENSIONES
+from src.domain.models.evidencia import MIME_EXTENSIONES, TAMANO_MAXIMO_BYTES
 
 
 class EstadoDocumentoEmpresa(StrEnum):
@@ -81,9 +81,8 @@ class DocumentoEmpresa:
     ) -> DocumentoEmpresa:
         """Alta o reemplazo tras una carga válida."""
         nombre = _validar_nombre(nombre_original)
-        mime = _validar_mime(tipo_mime)
-        if tamano_bytes <= 0:
-            raise DocumentoInvalidoError("El tamaño del archivo debe ser mayor que 0")
+        mime = _validar_mime_y_extension(nombre, tipo_mime)
+        _validar_tamano(tamano_bytes)
         clave = _validar_clave_objeto(clave_objeto)
         return cls(
             id=None,
@@ -161,14 +160,27 @@ def _validar_nombre(nombre_original: str) -> str:
         )
     if "/" in nombre or "\\" in nombre:
         raise DocumentoInvalidoError("El nombre del archivo no puede incluir una ruta")
+    if '"' in nombre or "\r" in nombre or "\n" in nombre:
+        raise DocumentoInvalidoError(
+            "El nombre del archivo no puede incluir comillas ni saltos de línea"
+        )
     return nombre
 
 
-def _validar_mime(tipo_mime: str) -> str:
+def _validar_mime_y_extension(nombre: str, tipo_mime: str) -> str:
     mime = tipo_mime.strip().lower()
-    if mime not in MIME_EXTENSIONES:
+    extensiones = MIME_EXTENSIONES.get(mime)
+    if extensiones is None:
         raise DocumentoInvalidoError("El tipo de archivo no está permitido")
+    sufijo = PurePosixPath(nombre.lower()).suffix
+    if sufijo not in extensiones:
+        raise DocumentoInvalidoError("La extensión no coincide con el tipo MIME")
     return mime
+
+
+def _validar_tamano(tamano_bytes: int) -> None:
+    if tamano_bytes <= 0 or tamano_bytes > TAMANO_MAXIMO_BYTES:
+        raise DocumentoInvalidoError("El tamaño debe ser mayor que 0 y no superar 10 MiB")
 
 
 def _validar_clave_objeto(clave_objeto: str) -> str:

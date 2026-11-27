@@ -45,6 +45,18 @@ class RepositorioTipoDocumentoSstSQLAlchemy(RepositorioTipoDocumentoSst):
         )
         return list((await self._sesion.execute(consulta)).scalars().all())
 
+    async def mapear_estandares_por_tipos(self, tipo_ids: list[UUID]) -> dict[UUID, list[UUID]]:
+        resultado: dict[UUID, list[UUID]] = {tipo_id: [] for tipo_id in tipo_ids}
+        if not tipo_ids:
+            return resultado
+        consulta = select(
+            TipoDocumentoEstandarORM.tipo_id,
+            TipoDocumentoEstandarORM.estandar_id,
+        ).where(TipoDocumentoEstandarORM.tipo_id.in_(tipo_ids))
+        for tipo_id, estandar_id in (await self._sesion.execute(consulta)).all():
+            resultado.setdefault(tipo_id, []).append(estandar_id)
+        return resultado
+
     @staticmethod
     def _a_dominio(fila: TipoDocumentoSstORM) -> TipoDocumentoSst:
         return TipoDocumentoSst(

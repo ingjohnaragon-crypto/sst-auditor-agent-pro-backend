@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 from uuid import UUID
 
@@ -38,6 +39,8 @@ from src.domain.repositories.repositorio_tipo_documento_sst import (
 )
 from src.domain.repositories.repositorio_usuario import RepositorioUsuario
 
+logger = logging.getLogger(__name__)
+
 
 @dataclass(frozen=True)
 class DescargaDocumentoEmpresa:
@@ -69,12 +72,15 @@ class ServicioDocumentosEmpresa:
     async def listar_catalogo(self) -> list[RespuestaTipoDocumentoSst]:
         """Tipos del catálogo con ids de estándares vinculados (puede ser vacío)."""
         tipos = await self._tipos.listar()
+        ids = [tipo.id for tipo in tipos if tipo.id is not None]
+        vinculos = await self._tipos.mapear_estandares_por_tipos(ids)
         respuestas: list[RespuestaTipoDocumentoSst] = []
         for tipo in tipos:
             if tipo.id is None:
                 continue
-            estandares = await self._tipos.listar_estandares_por_tipo(tipo.id)
-            respuestas.append(MapperDocumentoEmpresa.tipo_a_respuesta(tipo, estandares))
+            respuestas.append(
+                MapperDocumentoEmpresa.tipo_a_respuesta(tipo, vinculos.get(tipo.id, []))
+            )
         return respuestas
 
     async def listar_por_empresa(self, empresa_id: UUID) -> list[RespuestaDocumentoEmpresa]:
@@ -143,7 +149,11 @@ class ServicioDocumentosEmpresa:
             try:
                 self._almacen.eliminar(clave_anterior)
             except Exception:
-                pass
+                logger.warning(
+                    "No se pudo eliminar la clave anterior %s tras reemplazo de documento",
+                    clave_anterior,
+                    exc_info=True,
+                )
         return await self._a_respuesta(guardado, tipo)
 
     async def descargar(self, empresa_id: UUID, tipo_id: UUID) -> DescargaDocumentoEmpresa:
