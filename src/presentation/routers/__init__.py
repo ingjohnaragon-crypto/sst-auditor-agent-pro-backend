@@ -25,6 +25,12 @@ from src.presentation.routers.auth_router import router as auth_router
 from src.presentation.routers.autoevaluaciones_router import (
     router as autoevaluaciones_router,
 )
+from src.presentation.routers.catalogo_documentos_router import (
+    router as catalogo_documentos_router,
+)
+from src.presentation.routers.documentos_empresa_router import (
+    router as documentos_empresa_router,
+)
 from src.presentation.routers.empresas_router import router as empresas_router
 from src.presentation.routers.estandares_router import router as estandares_router
 from src.presentation.routers.evidencias_router import (
@@ -59,6 +65,8 @@ api_router.include_router(ping_router, prefix=settings.api_prefix)
 api_router.include_router(auth_router, prefix=settings.api_prefix)
 api_router.include_router(empresas_router, prefix=settings.api_prefix)
 api_router.include_router(archivos_documentales_router, prefix=settings.api_prefix)
+api_router.include_router(catalogo_documentos_router, prefix=settings.api_prefix)
+api_router.include_router(documentos_empresa_router, prefix=settings.api_prefix)
 api_router.include_router(resumen_ejecutivo_router, prefix=settings.api_prefix)
 api_router.include_router(autoevaluaciones_router, prefix=settings.api_prefix)
 api_router.include_router(planes_por_autoevaluacion_router, prefix=settings.api_prefix)

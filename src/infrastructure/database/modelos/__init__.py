@@ -10,6 +10,7 @@ from src.infrastructure.database.modelos.calificacion_estandar_orm import (
 )
 from src.infrastructure.database.modelos.catalogo_referencia_orm import CatalogoReferenciaORM
 from src.infrastructure.database.modelos.control_riesgo_orm import ControlRiesgoORM
+from src.infrastructure.database.modelos.documento_empresa_orm import DocumentoEmpresaORM
 from src.infrastructure.database.modelos.empresa_orm import EmpresaORM
 from src.infrastructure.database.modelos.estandar_minimo_orm import EstandarMinimoORM
 from src.infrastructure.database.modelos.evaluacion_riesgo_orm import EvaluacionRiesgoORM
@@ -18,6 +19,10 @@ from src.infrastructure.database.modelos.mes_actividad_orm import MesActividadOR
 from src.infrastructure.database.modelos.peligro_orm import PeligroORM
 from src.infrastructure.database.modelos.plan_mejoramiento_orm import PlanMejoramientoORM
 from src.infrastructure.database.modelos.proceso_actividad_orm import ProcesoActividadORM
+from src.infrastructure.database.modelos.tipo_documento_estandar_orm import (
+    TipoDocumentoEstandarORM,
+)
+from src.infrastructure.database.modelos.tipo_documento_sst_orm import TipoDocumentoSstORM
 from src.infrastructure.database.modelos.usuario_orm import UsuarioORM
 
 __all__ = [
@@ -29,6 +34,7 @@ __all__ = [
     "CalificacionEstandarORM",
     "CatalogoReferenciaORM",
     "ControlRiesgoORM",
+    "DocumentoEmpresaORM",
     "EmpresaORM",
     "EstandarMinimoORM",
     "EvaluacionRiesgoORM",
@@ -37,5 +43,7 @@ __all__ = [
     "PeligroORM",
     "PlanMejoramientoORM",
     "ProcesoActividadORM",
+    "TipoDocumentoEstandarORM",
+    "TipoDocumentoSstORM",
     "UsuarioORM",
 ]

@@ -1566,6 +1566,216 @@ paths:
         default:
           $ref: "#/components/responses/ErrorPorDefecto"
 
+  /api/v1/catalogo-documentos:
+    get:
+      summary: Lista los tipos de documento del ciclo PHVA
+      tags: [Catálogo documental PHVA]
+      security: [{bearerAuth: []}]
+      responses:
+        "200":
+          description: Catálogo de tipos (incluye estandares_ids si hay vínculo 0312)
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaTipoDocumentoSst"
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/empresas/{empresa_id}/documentos:
+    get:
+      summary: Lista el estado documental PHVA de una empresa
+      tags: [Documentos empresa PHVA]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Un ítem por tipo; sin fila se presenta como PENDIENTE; sin clave_objeto
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RespuestaDocumentoEmpresa"
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/empresas/{empresa_id}/documentos/{tipo_id}/archivo:
+    post:
+      summary: Carga o reemplaza el archivo de un tipo documental
+      tags: [Documentos empresa PHVA]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: tipo_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [archivo]
+              properties:
+                archivo:
+                  type: string
+                  format: binary
+      responses:
+        "201":
+          description: Documento en estado CARGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaDocumentoEmpresa"
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA o TIPO_DOCUMENTO_NO_ENCONTRADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: DOCUMENTO_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "503":
+          description: ALMACENAMIENTO_NO_CONFIGURADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+    get:
+      summary: Descarga el binario del documento por tipo (Bearer)
+      tags: [Documentos empresa PHVA]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: tipo_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      responses:
+        "200":
+          description: Binario; Content-Disposition attachment
+          content:
+            application/pdf: {schema: {type: string, format: binary}}
+            image/png: {schema: {type: string, format: binary}}
+            image/jpeg: {schema: {type: string, format: binary}}
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "404":
+          description: DOCUMENTO_NO_ENCONTRADO o DOCUMENTO_NO_DISPONIBLE
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
+  /api/v1/empresas/{empresa_id}/documentos/{tipo_id}:
+    patch:
+      summary: Marca el documento como REVISADO
+      tags: [Documentos empresa PHVA]
+      security: [{bearerAuth: []}]
+      parameters:
+        - name: empresa_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+        - name: tipo_id
+          in: path
+          required: true
+          schema: {type: string, format: uuid}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SolicitudMarcarDocumento"
+      responses:
+        "200":
+          description: Documento en estado REVISADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaDocumentoEmpresa"
+        "401":
+          description: TOKEN_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "403":
+          description: ACCESO_DENEGADO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "409":
+          description: CONFLICTO_ESTADO_DOCUMENTO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        "422":
+          description: DOCUMENTO_INVALIDO
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RespuestaError"
+        default:
+          $ref: "#/components/responses/ErrorPorDefecto"
+
 components:
   securitySchemes:
     bearerAuth:
@@ -1791,6 +2001,50 @@ components:
         fecha_carga: {type: string, format: date-time}
         usuario_id: {type: string, format: uuid}
         usuario_nombre: {type: string, nullable: true}
+    RespuestaTipoDocumentoSst:
+      type: object
+      description: Tipo del catálogo PHVA (SP-245)
+      required: [id, codigo, nombre, fase, descripcion, obligatorio, estandares_ids]
+      properties:
+        id: {type: string, format: uuid}
+        codigo: {type: string}
+        nombre: {type: string}
+        fase: {type: string, enum: [PLANEAR, HACER, VERIFICAR, ACTUAR]}
+        descripcion: {type: string}
+        obligatorio: {type: boolean}
+        estandares_ids:
+          type: array
+          items: {type: string, format: uuid}
+    RespuestaDocumentoEmpresa:
+      type: object
+      description: Estado del documento por tipo; nunca incluye clave_objeto
+      required:
+        - empresa_id
+        - tipo_id
+        - tipo_codigo
+        - tipo_nombre
+        - fase
+        - estado
+      properties:
+        id: {type: string, format: uuid, nullable: true}
+        empresa_id: {type: string, format: uuid}
+        tipo_id: {type: string, format: uuid}
+        tipo_codigo: {type: string}
+        tipo_nombre: {type: string}
+        fase: {type: string}
+        estado: {type: string, enum: [PENDIENTE, CARGADO, REVISADO]}
+        fecha_carga: {type: string, format: date-time, nullable: true}
+        nombre_original: {type: string, nullable: true}
+        tipo_mime: {type: string, nullable: true}
+        tamano_bytes: {type: integer, nullable: true}
+        usuario_nombre: {type: string, nullable: true}
+    SolicitudMarcarDocumento:
+      type: object
+      required: [estado]
+      properties:
+        estado:
+          type: string
+          enum: [REVISADO]
     RespuestaEnlaceDescarga:
       type: object
       required: [url, expira_en_segundos]
