@@ -22,6 +22,7 @@ from src.infrastructure.database.sesion import obtener_fabrica_sesiones
 from scripts.crear_usuario_admin import crear_usuario_admin
 from scripts.sembrar_catalogos_gtc45 import sembrar_catalogos_gtc45
 from scripts.sembrar_estandares_minimos import sembrar_estandares_minimos
+from scripts.sembrar_tipos_documento_sst import sembrar_tipos_documento_sst
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,12 @@ async def sembrar_datos() -> None:
                 "Catálogos GTC 45: creados=%s omitidos=%s",
                 creados_c,
                 omitidos_c,
+            )
+            creados_t, omitidos_t = await sembrar_tipos_documento_sst(sesion)
+            logger.info(
+                "Tipos documento PHVA: creados=%s omitidos=%s",
+                creados_t,
+                omitidos_t,
             )
             if hay_credenciales_admin():
                 creado_admin = await crear_usuario_admin(sesion)

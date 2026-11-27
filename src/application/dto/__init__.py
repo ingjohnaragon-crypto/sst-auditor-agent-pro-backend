@@ -5,6 +5,11 @@ from src.application.dto.respuesta_autoevaluacion import RespuestaAutoevaluacion
 from src.application.dto.respuesta_calificacion_estandar import (
     RespuestaCalificacionEstandar,
 )
+from src.application.dto.respuesta_documento_empresa import (
+    RespuestaDocumentoEmpresa,
+    RespuestaTipoDocumentoSst,
+    SolicitudMarcarDocumento,
+)
 from src.application.dto.respuesta_empresa import RespuestaEmpresa
 from src.application.dto.respuesta_error import RespuestaError
 from src.application.dto.respuesta_estandar_minimo import RespuestaEstandarMinimo
@@ -23,10 +28,12 @@ __all__ = [
     "RespuestaArchivoDocumental",
     "RespuestaAutoevaluacion",
     "RespuestaCalificacionEstandar",
+    "RespuestaDocumentoEmpresa",
     "RespuestaEmpresa",
     "RespuestaError",
     "RespuestaEstandarMinimo",
     "RespuestaPing",
+    "RespuestaTipoDocumentoSst",
     "RespuestaTokenAcceso",
     "RespuestaTokens",
     "RespuestaUsuario",
@@ -34,5 +41,6 @@ __all__ = [
     "SolicitudCrearAutoevaluacion",
     "SolicitudCrearEmpresa",
     "SolicitudLogin",
+    "SolicitudMarcarDocumento",
     "SolicitudRefresh",
 ]

@@ -1,0 +1,74 @@
+{
+  "items": [
+    {
+      "codigo": "POLITICA_SST",
+      "nombre": "Política de SST",
+      "fase": "PLANEAR",
+      "descripcion": "Política del Sistema de Gestión de la Seguridad y Salud en el Trabajo.",
+      "obligatorio": true
+    },
+    {
+      "codigo": "MATRIZ_RIESGOS_GTC45",
+      "nombre": "Matriz de riesgos (GTC 45)",
+      "fase": "PLANEAR",
+      "descripcion": "Identificación y valoración de peligros según GTC 45.",
+      "obligatorio": true
+    },
+    {
+      "codigo": "PLAN_TRABAJO_ANUAL",
+      "nombre": "Plan de trabajo anual",
+      "fase": "PLANEAR",
+      "descripcion": "Plan anual de actividades del SG-SST.",
+      "obligatorio": true
+    },
+    {
+      "codigo": "PROGRAMA_CAPACITACION",
+      "nombre": "Programa de capacitación",
+      "fase": "PLANEAR",
+      "descripcion": "Programa de formación y capacitación en SST.",
+      "obligatorio": true
+    },
+    {
+      "codigo": "REGISTRO_EPP",
+      "nombre": "Registros de entrega de EPP",
+      "fase": "HACER",
+      "descripcion": "Evidencia de entrega de elementos de protección personal.",
+      "obligatorio": true
+    },
+    {
+      "codigo": "ACTAS_COPASST",
+      "nombre": "Actas de COPASST o Vigía",
+      "fase": "HACER",
+      "descripcion": "Actas del comité o vigía de seguridad y salud en el trabajo.",
+      "obligatorio": true
+    },
+    {
+      "codigo": "FURAT",
+      "nombre": "Reportes de accidentes (FURAT)",
+      "fase": "HACER",
+      "descripcion": "Reportes de accidentes de trabajo (FURAT).",
+      "obligatorio": true
+    },
+    {
+      "codigo": "INDICADORES_GESTION",
+      "nombre": "Indicadores de gestión",
+      "fase": "VERIFICAR",
+      "descripcion": "Indicadores de gestión del SG-SST.",
+      "obligatorio": true
+    },
+    {
+      "codigo": "AUDITORIA_INTERNA",
+      "nombre": "Informe de auditoría interna",
+      "fase": "VERIFICAR",
+      "descripcion": "Informe de auditoría interna del SG-SST.",
+      "obligatorio": true
+    },
+    {
+      "codigo": "PLAN_MEJORA",
+      "nombre": "Plan de mejora",
+      "fase": "ACTUAR",
+      "descripcion": "Plan de mejoramiento derivado del ciclo PHVA.",
+      "obligatorio": true
+    }
+  ]
+}

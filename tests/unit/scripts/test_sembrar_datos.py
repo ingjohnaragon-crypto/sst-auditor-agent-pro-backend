@@ -42,6 +42,10 @@ async def test_should_llamar_seeds_en_orden_when_sembrar_datos(
         orden.append("catalogos")
         return 1, 0
 
+    async def mock_tipos(sesion: object, **_: object) -> tuple[int, int]:
+        orden.append("tipos")
+        return 1, 0
+
     sesion = AsyncMock()
     sesion.commit = AsyncMock()
     fabrica = MagicMock()
@@ -58,8 +62,12 @@ async def test_should_llamar_seeds_en_orden_when_sembrar_datos(
             "scripts.sembrar_datos.sembrar_catalogos_gtc45",
             side_effect=mock_catalogos,
         ),
+        patch(
+            "scripts.sembrar_datos.sembrar_tipos_documento_sst",
+            side_effect=mock_tipos,
+        ),
     ):
         await sembrar_datos()
 
-    assert orden == ["estandares", "catalogos"]
+    assert orden == ["estandares", "catalogos", "tipos"]
     sesion.commit.assert_awaited_once()

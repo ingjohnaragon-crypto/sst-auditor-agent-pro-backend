@@ -362,6 +362,47 @@ cablea en SP-284.
 | `fecha_carga` | `TIMESTAMPTZ` | NOT NULL |
 | `fecha_creacion` / `fecha_actualizacion` | `TIMESTAMPTZ` | NOT NULL |
 
+#### `tipos_documento_sst` — SP-245 / SP-264 (catálogo PHVA)
+
+Semilla idempotente de 10 tipos obligatorios por fase. Distinto del repositorio
+libre `archivos_documentales`.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| `id` | `UUID` | PK |
+| `codigo` | `VARCHAR(64)` | NOT NULL, UNIQUE (p. ej. `POLITICA_SST`) |
+| `nombre` | `VARCHAR(255)` | NOT NULL |
+| `fase` | `VARCHAR(20)` | NOT NULL: `PLANEAR`, `HACER`, `VERIFICAR`, `ACTUAR` |
+| `descripcion` | `TEXT` | NOT NULL |
+| `obligatorio` | `BOOLEAN` | NOT NULL, default `true` |
+| `fecha_creacion` / `fecha_actualizacion` | `TIMESTAMPTZ` | NOT NULL |
+
+#### `documentos_empresa` — SP-245 / SP-265
+
+Un vigente por `(empresa_id, tipo_id)`. Binario en R2 con clave
+`documentos/{empresa_id}/{tipo_codigo}/{uuid}{ext}`. Estados:
+`PENDIENTE` (vista sin fila), `CARGADO`, `REVISADO`.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| `id` | `UUID` | PK |
+| `empresa_id` | `UUID` | NOT NULL, FK → `empresas.id` |
+| `tipo_id` | `UUID` | NOT NULL, FK → `tipos_documento_sst.id` |
+| `estado` | `VARCHAR(20)` | NOT NULL |
+| `fecha_carga` | `TIMESTAMPTZ` | NULL mientras PENDIENTE |
+| `nombre_original` / `tipo_mime` / `tamano_bytes` / `clave_objeto` | … | NULL mientras PENDIENTE |
+| `usuario_id` | `UUID` | NULL, FK → `usuarios.id` |
+| UNIQUE | `(empresa_id, tipo_id)` | `uq_documentos_empresa_empresa_tipo` |
+
+#### `tipos_documento_estandar` — SP-245 / SP-268
+
+Vínculo opcional tipo ↔ estándar mínimo Res. 0312. No copia el objeto R2.
+
+| Columna | Tipo | Restricciones |
+|---|---|---|
+| `tipo_id` | `UUID` | PK compuesto, FK → `tipos_documento_sst.id` |
+| `estandar_id` | `UUID` | PK compuesto, FK → `estandares_minimos.id` |
+
 #### `evidencias` — D. 1072, Art. 2.2.4.6.13
 
 Implementada en SP-151 (migración `e5f6a7b8c9d0`). Solo metadatos: el binario
@@ -405,6 +446,9 @@ El archivo solo se lee si `ALMACENAMIENTO_LOCAL_RAIZ` contiene la ruta resuelta.
 |---|---|
 | `empresas` → `autoevaluaciones` | 1—N |
 | `empresas` → `archivos_documentales` | 1—N |
+| `empresas` → `documentos_empresa` | 1—N (SP-245) |
+| `tipos_documento_sst` → `documentos_empresa` | 1—N |
+| `tipos_documento_sst` ↔ `estandares_minimos` | N—N vía `tipos_documento_estandar` |
 | `empresas` → `procesos_actividades` | 1—N |
 | `empresas` → `auditorias` | 1—N |
 | `empresas` → `planes_mejoramiento` | 1—N |

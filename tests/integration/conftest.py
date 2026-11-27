@@ -19,12 +19,15 @@ from src.infrastructure.database.modelos import (  # noqa: F401 — registra tab
     CalificacionEstandarORM,
     CatalogoReferenciaORM,
     ControlRiesgoORM,
+    DocumentoEmpresaORM,
     EmpresaORM,
     EstandarMinimoORM,
     EvaluacionRiesgoORM,
     EvidenciaORM,
     PeligroORM,
     ProcesoActividadORM,
+    TipoDocumentoEstandarORM,
+    TipoDocumentoSstORM,
     UsuarioORM,
 )
 from src.infrastructure.database.sesion import obtener_sesion
